@@ -1,4 +1,4 @@
-const GOWA_BASE_URL = process.env.WHATSAPP_API_URL || 'https://wa-gowa.samrifa.com';
+const GOWA_BASE_URL = process.env.WHATSAPP_API_URL || 'https://107.23.128.93';
 const DEVICE_ID = process.env.WHATSAPP_DEVICE_ID || 'portal-pegawai';
 
 async function gowaFetch(path: string, options: RequestInit = {}) {

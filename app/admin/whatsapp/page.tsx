@@ -301,7 +301,7 @@ export default function WhatsAppGatewayPage() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '8px 0' }}>
               <span style={{ color: '#94a3b8' }}>Gateway Endpoint:</span>
-              <span style={{ color: '#cbd5e1' }}>https://wa-gowa.samrifa.com</span>
+              <span style={{ color: '#cbd5e1' }}>https://107.23.128.93</span>
             </div>
           </div>
 
