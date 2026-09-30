@@ -8,8 +8,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Form Data Karyawan',
-  description: 'Portal Pengkinian Data Pegawai — Divisi Human Capital',
+  title: 'Konfirmasi Jabatan & Unit Kerja — Bank SulutGo',
+  description: 'Portal Pemutakhiran Data Jabatan Pegawai — Divisi SDM / Human Capital Bank SulutGo',
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='11' height='11' fill='%23f25022'/><rect x='13' width='11' height='11' fill='%237fba00'/><rect y='13' width='11' height='11' fill='%2300a4ef'/><rect x='13' y='13' width='11' height='11' fill='%23ffb900'/></svg>",
   },
