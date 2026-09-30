@@ -1,0 +1,28 @@
+# Dependencies & build
+node_modules
+.next
+out
+build
+
+# Environment & secrets
+.env
+.env*.local
+secret.key
+attendance.db
+tls_cert.pem
+tls_key.pem
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Binaries & logs
+cloudflared
+tunnel.log
+
+# Agent & tool artifacts
+.agents
+.claude
+skills-lock.json
+
