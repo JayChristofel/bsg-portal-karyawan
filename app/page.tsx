@@ -262,7 +262,7 @@ function PortalFormContent() {
                   type="text"
                   id="input-jabatan-sk"
                   className={`text-input ${errors.jabatanSk ? 'error' : ''}`}
-                  placeholder="Contoh: Staf Operasional / Kepala Bagian"
+                  placeholder="Contoh: Mgr / Realtion Officer"
                   value={jabatanSk}
                   onChange={(e) => {
                     setJabatanSk(e.target.value);
@@ -281,7 +281,7 @@ function PortalFormContent() {
                   type="text"
                   id="input-jabatan-sekarang"
                   className={`text-input ${errors.jabatanSekarang ? 'error' : ''}`}
-                  placeholder="Contoh: Plt. Pemimpin Cabang / Staf TI"
+                  placeholder="Contoh: Customer Service / Teller"
                   value={jabatanSekarang}
                   onChange={(e) => {
                     setJabatanSekarang(e.target.value);

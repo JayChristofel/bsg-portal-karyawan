@@ -1,7 +1,7 @@
 export const CABANG_GROUPS: Record<string, string[]> = {
   "Kantor Pusat & Wilayah": [
     "Kantor Pusat BSG",
-    "Kantor Wilayah BSG Gorontalo"
+    "Kantor Wilayah Gorontalo"
   ],
   "Kantor Cabang (KC)": [
     "Cabang Utama",
@@ -26,10 +26,10 @@ export const CABANG_GROUPS: Record<string, string[]> = {
     "Cabang Tomohon",
     "Cabang Tondano",
     "Cabang Tutuyan",
-    "KC Kwandang",
-    "KC Molibagu",
-    "KC Siau",
-    "KC Suwawa"
+    "Cabang Kwandang",
+    "Cabang Molibagu",
+    "Cabang Siau",
+    "Cabang Suwawa"
   ],
   "Kantor Cabang Pembantu (KCP)": [
     "KCP Bahu",
@@ -58,7 +58,4 @@ export const CABANG_GROUPS: Record<string, string[]> = {
     "KCP Tolangohula",
     "KCP Tuminting"
   ],
-  "Lainnya": [
-    "Other"
-  ]
 };
