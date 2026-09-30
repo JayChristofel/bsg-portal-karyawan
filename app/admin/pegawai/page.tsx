@@ -247,7 +247,7 @@ export default function PegawaiPage() {
           <div style={{ fontWeight: 600, fontSize: '15px', color: '#f8fafc', marginBottom: '16px' }}>
             Tambah Data Pegawai Baru
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '12px', marginBottom: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '4px' }}>Nama Lengkap</label>
               <input
@@ -288,7 +288,7 @@ export default function PegawaiPage() {
                 style={{ width: '100%', padding: '8px 10px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
               />
             </div>
-            <div style={{ gridColumn: 'span 2' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '4px' }}>Kantor Cabang</label>
               <CabangSelect
                 id="addCabangSelect"
@@ -316,7 +316,7 @@ export default function PegawaiPage() {
 
       {/* Filter & Search Bar */}
       <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '16px', marginBottom: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '12px', flex: 1, flexWrap: 'wrap', minWidth: '280px' }}>
+        <div style={{ display: 'flex', gap: '12px', flex: 1, flexWrap: 'wrap', minWidth: 'min(100%, 260px)' }}>
           <input
             type="text"
             placeholder="🔍 Cari nama, NIP, jabatan..."

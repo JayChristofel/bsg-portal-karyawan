@@ -4,14 +4,6 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-interface DeviceStatus {
-  state?: string;
-  connected?: boolean;
-  name?: string;
-  device?: string;
-  error?: string;
-}
-
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [waStatus, setWaStatus] = useState<string>('checking');
@@ -38,6 +30,18 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return () => clearInterval(interval);
   }, []);
 
+  // Prevent background scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
+
   const handleLogout = async () => {
     try {
       await fetch('/api/logout', { method: 'POST' });
@@ -57,6 +61,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0f172a', color: '#e2e8f0', fontFamily: '"Segoe UI", system-ui, sans-serif' }}>
       <style>{`
         * { box-sizing: border-box; }
+        
         .sidebar {
           width: 260px;
           background: #1e293b;
@@ -67,15 +72,35 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           top: 0;
           bottom: 0;
           left: 0;
-          z-index: 50;
-          transition: transform 0.2s ease-in-out;
+          z-index: 60;
+          transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        .sidebar-backdrop {
+          display: none;
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.75);
+          backdrop-filter: blur(3px);
+          -webkit-backdrop-filter: blur(3px);
+          z-index: 55;
+          opacity: 0;
+          transition: opacity 0.25s ease;
+          pointer-events: none;
+        }
+
         @media (max-width: 900px) {
           .sidebar {
             transform: translateX(-100%);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
           }
           .sidebar.open {
             transform: translateX(0);
+          }
+          .sidebar-backdrop.active {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
           }
           .main-content {
             margin-left: 0 !important;
@@ -84,6 +109,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             display: flex !important;
           }
         }
+
         .main-content {
           flex: 1;
           margin-left: 260px;
@@ -91,12 +117,34 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           display: flex;
           flex-direction: column;
           background: #0f172a;
+          width: 100%;
+          max-width: 100%;
+          overflow-x: hidden;
         }
+
+        .admin-page-container {
+          padding: 16px 14px;
+          flex: 1;
+          width: 100%;
+          max-width: 100%;
+          overflow-x: hidden;
+        }
+        @media (min-width: 640px) {
+          .admin-page-container {
+            padding: 22px 20px;
+          }
+        }
+        @media (min-width: 1024px) {
+          .admin-page-container {
+            padding: 28px 32px;
+          }
+        }
+
         .nav-link {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 10px 16px;
+          padding: 11px 16px;
           border-radius: 8px;
           color: #94a3b8;
           text-decoration: none;
@@ -104,6 +152,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           font-weight: 500;
           transition: all 0.15s;
           margin-bottom: 4px;
+          min-height: 42px;
         }
         .nav-link:hover {
           background: #334155;
@@ -115,6 +164,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           font-weight: 600;
           box-shadow: 0 4px 12px rgba(0,120,212,0.3);
         }
+
         .wa-badge {
           display: inline-flex;
           align-items: center;
@@ -139,6 +189,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           color: #facc15;
           border: 1px solid rgba(234, 179, 8, 0.3);
         }
+
         .top-bar-mobile {
           display: none;
           height: 60px;
@@ -151,25 +202,37 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           top: 0;
           z-index: 40;
         }
-        .btn-ghost {
-          background: transparent;
+        .btn-hamburger {
+          background: #334155;
           border: 1px solid #475569;
-          color: #e2e8f0;
-          padding: 6px 12px;
+          color: #f8fafc;
+          padding: 8px 14px;
           border-radius: 6px;
           font-size: 13px;
+          font-weight: 600;
           cursor: pointer;
           font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 38px;
         }
-        .btn-ghost:hover {
-          background: #334155;
+        .btn-hamburger:hover {
+          background: #475569;
         }
       `}</style>
+
+      {/* Backdrop overlay for mobile drawer */}
+      <div
+        className={`sidebar-backdrop ${sidebarOpen ? 'active' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
 
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         {/* Brand */}
-        <div style={{ padding: '24px 20px', borderBottom: '1px solid #334155' }}>
+        <div style={{ padding: '22px 20px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'linear-gradient(135deg, #0078d4, #004578)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', boxShadow: '0 2px 8px rgba(0,120,212,0.4)' }}>
               🏢
@@ -179,6 +242,24 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <div style={{ fontSize: '11px', color: '#94a3b8', letterSpacing: '0.5px' }}>ADMIN CONSOLE</div>
             </div>
           </div>
+          {/* Close button on mobile */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Tutup Menu"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: '20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '6px',
+            }}
+          >
+            ✕
+          </button>
         </div>
 
         {/* Navigation */}
@@ -248,7 +329,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         {/* User Info & Logout */}
         <div style={{ padding: '16px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>
               👤
             </div>
             <div>
@@ -259,7 +340,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <button
             onClick={handleLogout}
             title="Logout"
-            style={{ background: '#334155', border: 'none', color: '#ef4444', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+            style={{ background: '#334155', border: 'none', color: '#ef4444', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', minHeight: '36px' }}
           >
             🚪
           </button>
@@ -272,18 +353,19 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <div className="top-bar-mobile">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '20px' }}>🏢</span>
-            <span style={{ fontWeight: 'bold', fontSize: '15px' }}>Portal Pegawai</span>
+            <span style={{ fontWeight: 'bold', fontSize: '15px', color: '#f8fafc' }}>Portal Pegawai</span>
           </div>
           <button
-            className="btn-ghost"
+            className="btn-hamburger"
             onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle Navigation"
           >
             {sidebarOpen ? '✕ Tutup' : '☰ Menu'}
           </button>
         </div>
 
         {/* Page Content */}
-        <main style={{ padding: '28px 32px', flex: 1, overflowX: 'auto' }}>
+        <main className="admin-page-container">
           {children}
         </main>
       </div>

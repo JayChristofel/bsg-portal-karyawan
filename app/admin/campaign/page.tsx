@@ -345,7 +345,7 @@ export default function BroadcastPage() {
       )}
 
       {/* Metrics Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '14px', marginBottom: '24px' }}>
         <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '16px' }}>
           <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>Total Target Broadcast</div>
           <div style={{ fontSize: '26px', fontWeight: 700, color: '#f8fafc' }}>{total}</div>
@@ -438,7 +438,7 @@ export default function BroadcastPage() {
 
       {/* Filter Tabs and Search Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', gap: '6px', background: '#1e293b', padding: '4px', borderRadius: '8px', border: '1px solid #334155' }}>
+        <div style={{ display: 'flex', gap: '6px', background: '#1e293b', padding: '4px', borderRadius: '8px', border: '1px solid #334155', flexWrap: 'wrap', maxWidth: '100%' }}>
           <button
             onClick={() => setActiveTab('all')}
             style={{
