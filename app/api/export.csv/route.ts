@@ -4,7 +4,7 @@ import { pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 
-function escapeCsvCell(cell: string | null | undefined): string {
+function escapeCsvCell(cell: string | number | null | undefined): string {
   if (cell == null) return '""';
   const str = String(cell);
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
@@ -23,19 +23,36 @@ export async function GET(req: NextRequest) {
     const rows = await db.select().from(pegawai).orderBy(desc(pegawai.createdAt));
 
     const headers = [
-      'Timestamp',
+      'Timestamp (WITA)',
       'Nama Pegawai',
       'Nomor Induk Kepegawaian',
       'Jabatan sesuai SK',
       'Jabatan saat ini',
       'Kantor Cabang',
       'IP Address',
+      'Device Type',
+      'Operating System',
+      'Browser',
+      'Screen Resolution',
+      'Language/Locale',
+      'Referrer',
+      'Session ID',
+      'Event',
+      'Time on Page (detik)',
+      'Page Path',
+      'ASN / ISP',
+      'Approx. Location',
+      'Connection Type',
+      'Raw User-Agent',
     ];
 
     const lines: string[] = [headers.map(escapeCsvCell).join(',')];
 
     for (const r of rows) {
-      const timeStr = r.createdAt ? new Date(r.createdAt).toLocaleString('id-ID') : '-';
+      const timeStr = r.createdAt
+        ? new Date(r.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) + ' WITA'
+        : '-';
+
       lines.push(
         [
           timeStr,
@@ -45,6 +62,20 @@ export async function GET(req: NextRequest) {
           r.jabatanSekarang,
           r.cabang,
           r.ipAddress || '-',
+          r.deviceType || 'Desktop',
+          r.os || '-',
+          r.browser || '-',
+          r.screenResolution || '-',
+          r.language || 'id-ID',
+          r.referrer || 'Direct',
+          r.sessionId || '-',
+          r.event || 'submit',
+          r.timeOnPage ?? 0,
+          r.pagePath || '/',
+          r.asnIsp || '-',
+          r.approxLocation || '-',
+          r.connectionType || '-',
+          r.userAgent || '-',
         ]
           .map(escapeCsvCell)
           .join(',')
@@ -58,7 +89,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename=pengkinian_data_pegawai.csv',
+        'Content-Disposition': 'attachment; filename=rekap_data_pegawai_telemetri.csv',
       },
     });
   } catch (error: any) {

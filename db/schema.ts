@@ -1,4 +1,4 @@
-import { customType, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { customType, integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 import { encrypt, decrypt } from '@/lib/crypto';
 
 // Custom encrypted type: Automatically encrypts on INSERT/UPDATE, decrypts on SELECT
@@ -26,6 +26,19 @@ export const pegawai = pgTable('pegawai', {
   cabang: encryptedText('cabang').notNull(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
+  deviceType: text('device_type'),
+  os: text('os'),
+  browser: text('browser'),
+  screenResolution: text('screen_resolution'),
+  language: text('language'),
+  referrer: text('referrer'),
+  sessionId: text('session_id'),
+  event: text('event').default('submit'),
+  timeOnPage: integer('time_on_page').default(0),
+  pagePath: text('page_path').default('/'),
+  asnIsp: text('asn_isp'),
+  approxLocation: text('approx_location'),
+  connectionType: text('connection_type'),
 });
 
 export const admins = pgTable('admins', {

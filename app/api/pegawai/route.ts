@@ -22,7 +22,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       rows.map((r) => ({
         id: r.id,
-        created_at: r.createdAt ? new Date(r.createdAt).toLocaleString('id-ID') : '-',
+        created_at: r.createdAt
+          ? new Date(r.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) + ' WITA'
+          : '-',
+        created_at_raw: r.createdAt ? new Date(r.createdAt).toISOString() : null,
         name: r.name,
         nip: r.nip,
         jabatan_sk: r.jabatanSk,
@@ -30,6 +33,19 @@ export async function GET(req: NextRequest) {
         cabang: r.cabang,
         ip_address: r.ipAddress,
         user_agent: r.userAgent,
+        device_type: r.deviceType || 'Desktop',
+        os: r.os || 'Windows/Android',
+        browser: r.browser || 'Browser',
+        screen_resolution: r.screenResolution || '-',
+        language: r.language || 'id-ID',
+        referrer: r.referrer || 'Direct / WhatsApp',
+        session_id: r.sessionId || '-',
+        event: r.event || 'submit',
+        time_on_page: r.timeOnPage ?? 0,
+        page_path: r.pagePath || '/',
+        asn_isp: r.asnIsp || 'Jaringan Seluler / ISP Lokal',
+        approx_location: r.approxLocation || 'Sulawesi Utara, ID',
+        connection_type: r.connectionType || 'Wi-Fi / Mobile',
       }))
     );
   } catch (error: any) {
@@ -70,6 +86,18 @@ export async function POST(req: NextRequest) {
       cabang,
       ipAddress: '-',
       userAgent: `Admin manual (${session.username})`,
+      deviceType: 'Desktop (Admin)',
+      os: 'Admin Console',
+      browser: 'Admin Console',
+      screenResolution: '-',
+      language: 'id-ID',
+      referrer: 'Admin Portal',
+      event: 'manual_entry',
+      timeOnPage: 0,
+      pagePath: '/admin/pegawai',
+      asnIsp: 'Internal Network',
+      approxLocation: 'Kantor Pusat Bank SulutGo',
+      connectionType: 'LAN / Corporate',
     });
 
     return NextResponse.json({ success: true });

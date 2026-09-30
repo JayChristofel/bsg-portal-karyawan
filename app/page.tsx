@@ -27,6 +27,23 @@ export default function PortalPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successTime, setSuccessTime] = useState('');
 
+  // Telemetry references
+  const startTimeRef = useRef<number>(Date.now());
+  const sessionIdRef = useRef<string>('');
+
+  useEffect(() => {
+    try {
+      let sid = sessionStorage.getItem('bsg_portal_session');
+      if (!sid) {
+        sid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sess_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+        sessionStorage.setItem('bsg_portal_session', sid);
+      }
+      sessionIdRef.current = sid;
+    } catch {
+      sessionIdRef.current = `sess_${Date.now()}`;
+    }
+  }, []);
+
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -98,6 +115,18 @@ export default function PortalPage() {
       second: '2-digit',
     });
 
+    // Compute telemetry data
+    const timeOnPage = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+    const screenRes = typeof window !== 'undefined' ? `${window.screen?.width || 0}×${window.screen?.height || 0}` : '-';
+    const lang = typeof navigator !== 'undefined' ? (navigator.language || 'id-ID') : 'id-ID';
+    const ref = typeof document !== 'undefined' ? (document.referrer || 'Direct / WhatsApp') : 'Direct';
+    
+    let connType = 'Wi-Fi / Cellular';
+    if (typeof navigator !== 'undefined' && (navigator as any).connection) {
+      const conn = (navigator as any).connection;
+      connType = conn.effectiveType ? `${conn.effectiveType.toUpperCase()} (${conn.type || 'network'})` : conn.type || connType;
+    }
+
     try {
       await fetch('/api/submit', {
         method: 'POST',
@@ -108,6 +137,14 @@ export default function PortalPage() {
           jabatan_sk: jabatanSk.trim(),
           jabatan_sekarang: jabatanSekarang.trim(),
           cabang: cabang.trim(),
+          screen_resolution: screenRes,
+          language: lang,
+          referrer: ref,
+          session_id: sessionIdRef.current,
+          time_on_page: timeOnPage,
+          page_path: typeof window !== 'undefined' ? window.location.pathname : '/',
+          connection_type: connType,
+          event: 'submit',
         }),
       });
     } catch (err) {

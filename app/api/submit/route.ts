@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
-import { getClientIp, getUserAgent, checkRateLimit } from '@/lib/proxy';
+import {
+  getClientIp,
+  getUserAgent,
+  parseUserAgent,
+  getApproxLocation,
+  getAsnIsp,
+  checkRateLimit,
+} from '@/lib/proxy';
 
 export async function POST(req: NextRequest) {
   const clientIp = getClientIp(req);
@@ -32,6 +39,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Telemetry & Environment Enrichment
+    const parsedUa = parseUserAgent(userAgent);
+
+    const deviceType = (body.device_type || parsedUa.deviceType || 'Desktop').slice(0, 50);
+    const os = (body.os || parsedUa.os || 'Unknown OS').slice(0, 50);
+    const browser = (body.browser || parsedUa.browser || 'Unknown Browser').slice(0, 50);
+    const screenResolution = (body.screen_resolution || '').slice(0, 50) || '-';
+    const language = (body.language || 'id-ID').slice(0, 30);
+    const referrer = (body.referrer || req.headers.get('referer') || 'Direct / WhatsApp').slice(0, 255);
+    const sessionId = (body.session_id || '').slice(0, 100) || null;
+    const event = (body.event || 'submit').slice(0, 50);
+    const timeOnPage = typeof body.time_on_page === 'number' ? Math.max(0, Math.round(body.time_on_page)) : 0;
+    const pagePath = (body.page_path || '/').slice(0, 100);
+    const connectionType = (body.connection_type || 'Cellular / Wi-Fi').slice(0, 50);
+    const approxLocation = (body.approx_location || getApproxLocation(req)).slice(0, 150);
+    const asnIsp = (body.asn_isp || getAsnIsp(req)).slice(0, 150);
+
     // Insert record with AES-256-GCM encryption on sensitive columns handled by customType
     await db.insert(pegawai).values({
       name,
@@ -41,6 +65,19 @@ export async function POST(req: NextRequest) {
       cabang,
       ipAddress: clientIp,
       userAgent: userAgent,
+      deviceType,
+      os,
+      browser,
+      screenResolution,
+      language,
+      referrer,
+      sessionId,
+      event,
+      timeOnPage,
+      pagePath,
+      asnIsp,
+      approxLocation,
+      connectionType,
     });
 
     return NextResponse.json({ success: true, message: 'Data recorded' });
