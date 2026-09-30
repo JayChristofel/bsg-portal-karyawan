@@ -224,7 +224,7 @@ export default function PegawaiPage() {
             👥 Data Pegawai &amp; Audit Lingkungan
           </h1>
           <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Daftar pengkinian data mandiri pegawai internal. Kolom sensitif (NIP, Jabatan, Cabang) terenkripsi AES-256-GCM. Dilengkapi audit perangkat, jaringan, dan waktu pengisian.
+            Daftar pengkinian data jabatan pegawai internal. Kolom sensitif (NIK, Jabatan, Cabang) terenkripsi AES-256-GCM. Dilengkapi audit perangkat, jaringan, dan waktu pengisian.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -244,7 +244,7 @@ export default function PegawaiPage() {
               cursor: 'pointer',
             }}
           >
-            ➕ Tambah Pegawai
+            ➕ Tambah Data
           </button>
           <a
             href="/api/export.csv"
@@ -345,7 +345,7 @@ export default function PegawaiPage() {
         <div style={{ display: 'flex', gap: '12px', flex: 1, flexWrap: 'wrap', minWidth: 'min(100%, 260px)' }}>
           <input
             type="text"
-            placeholder="🔍 Cari nama, NIP, jabatan, IP, perangkat..."
+            placeholder="🔍 Cari nama, NIK, jabatan, IP, perangkat..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ flex: 1, minWidth: '200px', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
@@ -375,7 +375,7 @@ export default function PegawaiPage() {
                 <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>#</th>
                 <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>Waktu</th>
                 <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>Nama Lengkap</th>
-                <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>NIP</th>
+                <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>NIK</th>
                 <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>Jabatan SK / Sekarang</th>
                 <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>Kantor Cabang</th>
                 <th style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 600 }}>Perangkat &amp; OS</th>
@@ -512,7 +512,7 @@ export default function PegawaiPage() {
                               style={{ background: '#0284c7', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
                               title="Lihat Rincian Audit Lengkap"
                             >
-                              🔍 Audit
+                              🔍
                             </button>
                             <button
                               onClick={() => handleStartEdit(row)}
@@ -576,7 +576,7 @@ export default function PegawaiPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '14px' }}>
               <div>
                 <div style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Audit Trail &bull; Record ID #{detailModalRow.id}
+                  View Data &bull; Record ID #{detailModalRow.id}
                 </div>
                 <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>
                   {detailModalRow.name}
@@ -611,7 +611,7 @@ export default function PegawaiPage() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', fontSize: '13px' }}>
                   <div>
-                    <div style={{ color: '#94a3b8', fontSize: '11px' }}>NIP</div>
+                    <div style={{ color: '#94a3b8', fontSize: '11px' }}>NIK</div>
                     <code style={{ color: '#38bdf8' }}>{detailModalRow.nip}</code>
                   </div>
                   <div>

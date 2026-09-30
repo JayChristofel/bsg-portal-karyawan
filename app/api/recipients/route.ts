@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { recipients } from '@/db/schema';
+import { recipients, pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { sendMessage } from '@/lib/whatsapp';
@@ -18,8 +18,32 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rows = await db.select().from(recipients).orderBy(desc(recipients.createdAt));
-    return NextResponse.json(rows);
+    const [recList, pegList] = await Promise.all([
+      db.select().from(recipients).orderBy(desc(recipients.createdAt)),
+      db.select({ name: pegawai.name, createdAt: pegawai.createdAt, cabang: pegawai.cabang }).from(pegawai),
+    ]);
+
+    // Build map of submitted employees by lowercase name
+    const submittedMap = new Map<string, { createdAt: Date; cabang: string }>();
+    for (const p of pegList) {
+      const key = p.name.trim().toLowerCase();
+      if (!submittedMap.has(key)) {
+        submittedMap.set(key, { createdAt: p.createdAt, cabang: p.cabang });
+      }
+    }
+
+    const rowsWithSubmission = recList.map((r) => {
+      const subInfo = submittedMap.get(r.label.trim().toLowerCase());
+      const isSubmitted = Boolean(subInfo);
+      return {
+        ...r,
+        cabang: r.cabang || subInfo?.cabang || null,
+        isSubmitted,
+        formSubmittedAt: subInfo ? subInfo.createdAt.toISOString() : null,
+      };
+    });
+
+    return NextResponse.json(rowsWithSubmission);
   } catch (error: any) {
     console.error('Fetch recipients error:', error);
     return NextResponse.json(
@@ -37,31 +61,67 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Batch create without sending
+    // Action 1: Pull from existing data pegawai
+    if (body.action === 'pull_from_pegawai') {
+      const [allPegawai, existingRecipients] = await Promise.all([
+        db.select().from(pegawai),
+        db.select({ label: recipients.label }).from(recipients),
+      ]);
+
+      const existingNames = new Set(existingRecipients.map((r) => r.label.trim().toLowerCase()));
+
+      const toInsert = allPegawai
+        .filter((p) => !existingNames.has(p.name.trim().toLowerCase()))
+        .map((p) => ({
+          label: p.name.trim(),
+          phone: null,
+          cabang: p.cabang || null,
+          waStatus: 'pending',
+        }));
+
+      if (toInsert.length === 0) {
+        return NextResponse.json({
+          success: true,
+          count: 0,
+          message: 'Semua data pegawai sudah terdaftar di daftar broadcast.',
+        });
+      }
+
+      const created = await db.insert(recipients).values(toInsert).returning();
+      return NextResponse.json({
+        success: true,
+        count: created.length,
+        message: `Berhasil menambahkan ${created.length} pegawai ke daftar broadcast.`,
+      });
+    }
+
+    // Action 2: Batch import (from Excel/CSV or multi-line text)
     if (Array.isArray(body.items)) {
       const items = body.items
-        .map((it: { label?: string; phone?: string }) => ({
+        .map((it: { label?: string; phone?: string; cabang?: string }) => ({
           label: (it.label || '').trim().slice(0, 200),
           phone: (it.phone || '').trim().slice(0, 30) || null,
+          cabang: (it.cabang || '').trim().slice(0, 100) || null,
           waStatus: 'pending',
         }))
         .filter((it: { label: string }) => Boolean(it.label));
 
-      if (items.length === 0 || items.length > 500) {
+      if (items.length === 0 || items.length > 2000) {
         return NextResponse.json(
-          { success: false, error: 'Jumlah data tidak valid (1 - 500 baris).' },
+          { success: false, error: 'Jumlah data tidak valid (1 - 2000 baris).' },
           { status: 400 }
         );
       }
 
       const created = await db.insert(recipients).values(items).returning();
-      return NextResponse.json({ success: true, recipients: created });
+      return NextResponse.json({ success: true, count: created.length, recipients: created });
     }
 
-    // Single send: create + immediately send WA
+    // Action 3: Single create + send
     const label = (body.label || '').trim();
     const phone = (body.phone || '').trim();
     const message = (body.message || '').trim();
+    const cabang = (body.cabang || '').trim() || null;
 
     if (!label || !phone || !message) {
       return NextResponse.json(
@@ -73,7 +133,7 @@ export async function POST(req: NextRequest) {
     // Insert as pending first
     const [newRecipient] = await db
       .insert(recipients)
-      .values({ label, phone, message, waStatus: 'pending' })
+      .values({ label, phone, message, cabang, waStatus: 'pending' })
       .returning();
 
     // Send via GOWA
@@ -86,7 +146,6 @@ export async function POST(req: NextRequest) {
 
     const sent = waResult?.code === 'SUCCESS' || waResult?.code === 'OK' || Boolean(messageId);
 
-    // Update status to 'sent' if successful
     if (sent) {
       const { eq } = await import('drizzle-orm');
       await db

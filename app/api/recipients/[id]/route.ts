@@ -30,6 +30,7 @@ export async function PATCH(
     const updateData: Partial<typeof recipients.$inferInsert> = {};
 
     if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.cabang !== undefined) updateData.cabang = body.cabang;
     if (body.message !== undefined) updateData.message = body.message;
     if (body.waMessageId !== undefined) updateData.waMessageId = body.waMessageId;
     if (body.waStatus !== undefined) updateData.waStatus = body.waStatus;

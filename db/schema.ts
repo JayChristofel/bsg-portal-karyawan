@@ -53,6 +53,7 @@ export const recipients = pgTable('recipients', {
   id: serial('id').primaryKey(),
   label: text('label').notNull(),                                         // Nama / label pegawai
   phone: text('phone'),                                                   // Nomor WhatsApp
+  cabang: text('cabang'),                                                 // Kantor Cabang / Unit Kerja
   message: text('message'),                                               // Pesan yang dikirim
   waMessageId: text('wa_message_id'),                                     // ID pesan dari GOWA
   waStatus: text('wa_status').default('pending'),                        // 'pending' | 'sent' | 'delivered' | 'read'
