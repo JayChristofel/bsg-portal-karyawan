@@ -1,13 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useRef } from 'react';
 import { CABANG_GROUPS } from '@/lib/cabang';
 
-function PortalFormContent() {
-  const searchParams = useSearchParams();
-  const campaignToken = searchParams.get('t') || '';
-
+export default function PortalPage() {
   // View state: 'cover' | 'form' | 'success'
   const [currentView, setCurrentView] = useState<'cover' | 'form' | 'success'>('cover');
 
@@ -30,16 +26,6 @@ function PortalFormContent() {
   // Submit status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successTime, setSuccessTime] = useState('');
-
-  // 1. Track 'open' event once on load if campaign token is present
-  useEffect(() => {
-    if (!campaignToken) return;
-    fetch('/api/track', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: campaignToken, type: 'open' }),
-    }).catch(() => {});
-  }, [campaignToken]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -70,15 +56,8 @@ function PortalFormContent() {
     }
   }, [isDropdownOpen]);
 
-  // Transition to form view and track 'start'
+  // Transition to form view
   const handleStart = () => {
-    if (campaignToken) {
-      fetch('/api/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: campaignToken, type: 'start' }),
-      }).catch(() => {});
-    }
     setCurrentView('form');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -129,7 +108,6 @@ function PortalFormContent() {
           jabatan_sk: jabatanSk.trim(),
           jabatan_sekarang: jabatanSekarang.trim(),
           cabang: cabang.trim(),
-          token: campaignToken || null,
         }),
       });
     } catch (err) {
@@ -434,13 +412,5 @@ function PortalFormContent() {
       </footer>
     </div>
   </div>
-  );
-}
-
-export default function PortalPage() {
-  return (
-    <Suspense fallback={<div style={{ color: '#fff', textAlign: 'center', marginTop: '40px' }}>Memuat Formulir...</div>}>
-      <PortalFormContent />
-    </Suspense>
   );
 }

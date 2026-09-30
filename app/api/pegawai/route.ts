@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
         cabang: r.cabang,
         ip_address: r.ipAddress,
         user_agent: r.userAgent,
-        token: r.token,
       }))
     );
   } catch (error: any) {
@@ -71,7 +70,6 @@ export async function POST(req: NextRequest) {
       cabang,
       ipAddress: '-',
       userAgent: `Admin manual (${session.username})`,
-      token: null,
     });
 
     return NextResponse.json({ success: true });

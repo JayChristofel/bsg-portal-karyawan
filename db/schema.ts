@@ -26,7 +26,6 @@ export const pegawai = pgTable('pegawai', {
   cabang: encryptedText('cabang').notNull(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  token: text('token'),
 });
 
 export const admins = pgTable('admins', {
@@ -36,22 +35,16 @@ export const admins = pgTable('admins', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Broadcast recipients — no token, tracks WA delivery via message.ack webhook
 export const recipients = pgTable('recipients', {
   id: serial('id').primaryKey(),
-  token: text('token').unique().notNull(),
-  label: text('label').notNull(),
-  phone: text('phone'),                                                         // Nomor WhatsApp penerima
-  waSentAt: timestamp('wa_sent_at', { withTimezone: true }),                    // Waktu terakhir WA dikirim
+  label: text('label').notNull(),                                         // Nama / label pegawai
+  phone: text('phone'),                                                   // Nomor WhatsApp
+  message: text('message'),                                               // Pesan yang dikirim
+  waMessageId: text('wa_message_id'),                                     // ID pesan dari GOWA
+  waStatus: text('wa_status').default('pending'),                        // 'pending' | 'sent' | 'delivered' | 'read'
+  waSentAt: timestamp('wa_sent_at', { withTimezone: true }),             // Waktu kirim
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-export const events = pgTable('events', {
-  id: serial('id').primaryKey(),
-  token: text('token').notNull(),
-  eventType: text('event_type').notNull(), // 'open' | 'start'
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
 });
 
 export const webhookLogs = pgTable('webhook_logs', {
@@ -61,4 +54,3 @@ export const webhookLogs = pgTable('webhook_logs', {
   payload: text('payload').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
-

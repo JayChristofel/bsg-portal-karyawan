@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { sendMessage } from '@/lib/whatsapp';
-import { reconnectDevice, logoutDevice } from '@/lib/whatsapp';
+import { sendMessage, reconnectDevice, logoutDevice } from '@/lib/whatsapp';
+import { db } from '@/db';
+import { recipients } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -26,15 +28,46 @@ export async function POST(req: NextRequest) {
     // Default: send message
     const phone = (body.phone || '').trim();
     const message = (body.message || '').trim();
+    const recipientId = body.recipientId || body.id;
 
     if (!phone || !message) {
       return NextResponse.json({ success: false, error: 'phone dan message wajib diisi.' }, { status: 400 });
     }
 
     const result = await sendMessage(phone, message);
-    return NextResponse.json(result);
-  } catch (err) {
+
+    const messageId =
+      result?.results?.message_id ||
+      result?.results?.id ||
+      result?.message_id ||
+      null;
+
+    const isSuccess =
+      result?.code === 'SUCCESS' ||
+      result?.code === 'OK' ||
+      Boolean(messageId) ||
+      result?.message?.toLowerCase().includes('success');
+
+    // If recipient ID was provided and send succeeded, update the recipient record
+    if (recipientId && isSuccess) {
+      await db
+        .update(recipients)
+        .set({
+          waMessageId: messageId,
+          waStatus: 'sent',
+          waSentAt: new Date(),
+          message,
+        })
+        .where(eq(recipients.id, Number(recipientId)));
+    }
+
+    return NextResponse.json({
+      ...result,
+      message_id: messageId,
+      isSuccess,
+    });
+  } catch (err: any) {
     console.error('WA action error:', err);
-    return NextResponse.json({ code: 'ERROR', message: 'Gagal mengirim ke WhatsApp Gateway.' }, { status: 500 });
+    return NextResponse.json({ code: 'ERROR', message: err?.message || 'Gagal mengirim ke WhatsApp Gateway.' }, { status: 500 });
   }
 }

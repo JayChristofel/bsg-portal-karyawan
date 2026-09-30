@@ -49,7 +49,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const navItems = [
     { label: 'Overview', href: '/admin', icon: '📊', exact: true },
     { label: 'Data Pegawai', href: '/admin/pegawai', icon: '👥' },
-    { label: 'Kampanye Awareness', href: '/admin/campaign', icon: '🎯' },
+    { label: 'Broadcast WhatsApp', href: '/admin/campaign', icon: '📢' },
     { label: 'WhatsApp Gateway', href: '/admin/whatsapp', icon: '📱' },
   ];
 

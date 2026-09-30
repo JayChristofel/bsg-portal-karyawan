@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
     const jabatanSk = (body.jabatan_sk || body.jabatanSk || '').trim().slice(0, 200);
     const jabatanSekarang = (body.jabatan_sekarang || body.jabatanSekarang || '').trim().slice(0, 200);
     const cabang = (body.cabang || '').trim().slice(0, 200);
-    const token = (body.token || '').trim().slice(0, 64) || null;
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
@@ -42,7 +41,6 @@ export async function POST(req: NextRequest) {
       cabang,
       ipAddress: clientIp,
       userAgent: userAgent,
-      token,
     });
 
     return NextResponse.json({ success: true, message: 'Data recorded' });

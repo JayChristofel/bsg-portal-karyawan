@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'node:crypto';
 import { db } from '@/db';
-import { recipients, events, pegawai } from '@/db/schema';
+import { recipients } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+import { sendMessage } from '@/lib/whatsapp';
 
 async function checkAuth(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -18,62 +18,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [allRecipients, allEvents, allSubmissions] = await Promise.all([
-      db.select().from(recipients).orderBy(desc(recipients.createdAt)),
-      db.select().from(events),
-      db.select().from(pegawai),
-    ]);
-
-    // Group events and submissions by token
-    const openMap = new Map<string, string>();
-    const startMap = new Map<string, string>();
-    const submitMap = new Map<string, string>();
-
-    for (const ev of allEvents) {
-      const timeStr = ev.createdAt ? new Date(ev.createdAt).toLocaleString('id-ID') : '-';
-      if (ev.eventType === 'open' && !openMap.has(ev.token)) {
-        openMap.set(ev.token, timeStr);
-      } else if (ev.eventType === 'start' && !startMap.has(ev.token)) {
-        startMap.set(ev.token, timeStr);
-      }
-    }
-
-    for (const sub of allSubmissions) {
-      if (sub.token && !submitMap.has(sub.token)) {
-        const timeStr = sub.createdAt ? new Date(sub.createdAt).toLocaleString('id-ID') : '-';
-        submitMap.set(sub.token, timeStr);
-      }
-    }
-
-    const data = allRecipients.map((r) => {
-      const hasSubmitted = submitMap.has(r.token);
-      const hasStarted = startMap.has(r.token);
-      const hasOpened = openMap.has(r.token);
-
-      let status = 'Belum Buka';
-      if (hasSubmitted) status = 'Selesai Submit';
-      else if (hasStarted) status = 'Mulai Isi Form';
-      else if (hasOpened) status = 'Link Dibuka';
-
-      return {
-        id: r.id,
-        token: r.token,
-        label: r.label,
-        phone: r.phone || null,
-        waSentAt: r.waSentAt ? new Date(r.waSentAt).toLocaleString('id-ID') : null,
-        createdAt: r.createdAt ? new Date(r.createdAt).toLocaleString('id-ID') : '-',
-        status,
-        openedAt: openMap.get(r.token) || null,
-        startedAt: startMap.get(r.token) || null,
-        submittedAt: submitMap.get(r.token) || null,
-      };
-    });
-
-    return NextResponse.json(data);
+    const rows = await db.select().from(recipients).orderBy(desc(recipients.createdAt));
+    return NextResponse.json(rows);
   } catch (error: any) {
-    console.error('Fetch campaign error:', error);
+    console.error('Fetch recipients error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal mengambil data kampanye dari database.' },
+      { success: false, error: 'Gagal mengambil data dari database.' },
       { status: 500 }
     );
   }
@@ -87,43 +37,77 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    let items: { label: string; phone?: string }[] = [];
-
+    // Batch create without sending
     if (Array.isArray(body.items)) {
-      items = body.items
+      const items = body.items
         .map((it: { label?: string; phone?: string }) => ({
           label: (it.label || '').trim().slice(0, 200),
-          phone: (it.phone || '').trim().slice(0, 30),
+          phone: (it.phone || '').trim().slice(0, 30) || null,
+          waStatus: 'pending',
         }))
         .filter((it: { label: string }) => Boolean(it.label));
-    } else if (Array.isArray(body.labels)) {
-      items = body.labels
-        .map((l: string) => ({
-          label: (l || '').trim().slice(0, 200),
-          phone: '',
-        }))
-        .filter((it: { label: string }) => Boolean(it.label));
+
+      if (items.length === 0 || items.length > 500) {
+        return NextResponse.json(
+          { success: false, error: 'Jumlah data tidak valid (1 - 500 baris).' },
+          { status: 400 }
+        );
+      }
+
+      const created = await db.insert(recipients).values(items).returning();
+      return NextResponse.json({ success: true, recipients: created });
     }
 
-    if (items.length === 0 || items.length > 500) {
+    // Single send: create + immediately send WA
+    const label = (body.label || '').trim();
+    const phone = (body.phone || '').trim();
+    const message = (body.message || '').trim();
+
+    if (!label || !phone || !message) {
       return NextResponse.json(
-        { success: false, error: 'Jumlah data tidak valid (1 - 500 baris).' },
+        { success: false, error: 'label, phone, dan message wajib diisi.' },
         { status: 400 }
       );
     }
 
-    const payload = items.map((it) => ({
-      token: crypto.randomBytes(9).toString('base64url'),
-      label: it.label,
-      phone: it.phone || null,
-    }));
+    // Insert as pending first
+    const [newRecipient] = await db
+      .insert(recipients)
+      .values({ label, phone, message, waStatus: 'pending' })
+      .returning();
 
-    const created = await db.insert(recipients).values(payload).returning();
-    return NextResponse.json({ success: true, recipients: created });
+    // Send via GOWA
+    const waResult = await sendMessage(phone, message);
+    const messageId =
+      waResult?.results?.message_id ||
+      waResult?.results?.id ||
+      waResult?.message_id ||
+      null;
+
+    const sent = waResult?.code === 'SUCCESS' || waResult?.code === 'OK' || Boolean(messageId);
+
+    // Update status to 'sent' if successful
+    if (sent) {
+      const { eq } = await import('drizzle-orm');
+      await db
+        .update(recipients)
+        .set({
+          waMessageId: messageId,
+          waStatus: 'sent',
+          waSentAt: new Date(),
+        })
+        .where(eq(recipients.id, newRecipient.id));
+    }
+
+    return NextResponse.json({
+      success: sent,
+      recipient: { ...newRecipient, waStatus: sent ? 'sent' : 'pending' },
+      waResult,
+    });
   } catch (error: any) {
-    console.error('Create recipients error:', error);
+    console.error('Create recipient/send error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal membuat penerima di database.' },
+      { success: false, error: 'Gagal memproses permintaan.' },
       { status: 500 }
     );
   }
