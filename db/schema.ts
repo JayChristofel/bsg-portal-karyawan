@@ -58,6 +58,7 @@ export const recipients = pgTable('recipients', {
   waMessageId: text('wa_message_id'),                                     // ID pesan dari GOWA
   waStatus: text('wa_status').default('pending'),                        // 'pending' | 'sent' | 'delivered' | 'read'
   waSentAt: timestamp('wa_sent_at', { withTimezone: true }),             // Waktu kirim
+  campaignId: integer('campaign_id'),                                    // FK ke campaigns (null = broadcast ad-hoc)
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -74,4 +75,47 @@ export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull().default(''),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Message templates library (reusable WA message templates with spintax support)
+export const messageTemplates = pgTable('message_templates', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  category: text('category').default('umum'),
+  body: text('body').notNull(),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Campaigns — groups of recipients with a template, schedule, and send status
+export const campaigns = pgTable('campaigns', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  status: text('status').default('draft'), // 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled'
+  templateId: integer('template_id'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Audit log — tracks admin actions for security and accountability
+export const auditLog = pgTable('audit_log', {
+  id: serial('id').primaryKey(),
+  adminUsername: text('admin_username').notNull(),
+  action: text('action').notNull(), // 'login' | 'send_message' | 'save_template' | 'create_campaign' | etc.
+  detail: text('detail'),
+  ipAddress: text('ip_address'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Recipient status history — timeline of status transitions for real-time tracking
+export const recipientStatusHistory = pgTable('recipient_status_history', {
+  id: serial('id').primaryKey(),
+  recipientId: integer('recipient_id').notNull(),
+  status: text('status').notNull(), // 'pending' | 'sent' | 'delivered' | 'read'
+  messageId: text('message_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });

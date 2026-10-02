@@ -4,6 +4,7 @@ import { admins } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { verifyPassword, createSessionToken, COOKIE_NAME, SESSION_TTL_SECONDS } from '@/lib/auth';
 import { getClientIp, checkRateLimit } from '@/lib/proxy';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const clientIp = getClientIp(req);
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     }
 
     const token = await createSessionToken(admin.username);
+    await logAudit(admin.username, 'login', 'Login berhasil', clientIp);
 
     const response = NextResponse.json({ success: true, redirect: '/admin' });
     response.cookies.set({

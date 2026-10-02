@@ -43,6 +43,55 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 6. Table: message_templates (Library template pesan WhatsApp)
+CREATE TABLE IF NOT EXISTS message_templates (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT 'umum',
+    body TEXT NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 7. Table: campaigns (Kampanye broadcast dengan jadwal dan status)
+CREATE TABLE IF NOT EXISTS campaigns (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',
+    template_id INTEGER,
+    scheduled_at TIMESTAMPTZ,
+    sent_at TIMESTAMPTZ,
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 8. Table: audit_log (Jejak audit aktivitas admin)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id SERIAL PRIMARY KEY,
+    admin_username TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT,
+    ip_address TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 9. Table: recipient_status_history (Riwayat transisi status penerima)
+CREATE TABLE IF NOT EXISTS recipient_status_history (
+    id SERIAL PRIMARY KEY,
+    recipient_id INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    message_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_admin ON audit_log (admin_username);
+CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns (status);
+CREATE INDEX IF NOT EXISTS idx_recipients_campaign ON recipients (campaign_id);
+CREATE INDEX IF NOT EXISTS idx_rsh_recipient ON recipient_status_history (recipient_id);
+
 CREATE INDEX IF NOT EXISTS idx_recipients_token ON recipients (token);
 
 -- 4. Table: events (Event Tracking: Link Dibuka & Mulai Mengisi)

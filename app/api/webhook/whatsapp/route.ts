@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { recipients, webhookLogs } from '@/db/schema';
+import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 
 // Health check / verification
@@ -59,6 +59,11 @@ export async function POST(req: NextRequest) {
               .update(recipients)
               .set({ waStatus: newStatus })
               .where(eq(recipients.id, rec.id));
+            await db.insert(recipientStatusHistory).values({
+              recipientId: rec.id,
+              status: newStatus,
+              messageId: rec.waMessageId,
+            });
           }
         }
       }

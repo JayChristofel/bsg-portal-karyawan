@@ -54,7 +54,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     { label: 'Overview', href: '/admin', icon: '📊', exact: true },
     { label: 'Data Pegawai', href: '/admin/pegawai', icon: '👥' },
     { label: 'Broadcast WhatsApp', href: '/admin/campaign', icon: '📢' },
+    { label: 'Tracking Status', href: '/admin/tracking', icon: '📊' },
+    { label: 'Kampanye', href: '/admin/campaigns', icon: '📋' },
+    { label: 'Template Pesan', href: '/admin/templates', icon: '📝' },
     { label: 'WhatsApp Gateway', href: '/admin/whatsapp', icon: '📱' },
+    { label: 'Manajemen Admin', href: '/admin/admins', icon: '👤' },
+    { label: 'Audit Log', href: '/admin/audit', icon: '📋' },
   ];
 
   return (
