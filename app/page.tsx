@@ -256,20 +256,20 @@ export default function PortalPage() {
               {/* Field 2: NIP */}
               <div className="question-block">
                 <label className="question-label" htmlFor="input-nip">
-                  2. Nomor Induk Kepegawaian<span className="star">*</span>
+                  2. Nomor Induk Karyawan<span className="star">*</span>
                 </label>
                 <input
                   type="text"
                   id="input-nip"
                   className={`text-input ${errors.nip ? 'error' : ''}`}
-                  placeholder="Masukkan Nomor Induk Kepegawaian"
+                  placeholder="Masukkan Nomor Induk Karyawan"
                   value={nip}
                   onChange={(e) => {
                     setNip(e.target.value);
                     if (e.target.value.trim()) setErrors((prev) => ({ ...prev, nip: false }));
                   }}
                 />
-                {errors.nip && <div className="error-msg" style={{ display: 'block' }}>Nomor Induk Kepegawaian wajib diisi.</div>}
+                {errors.nip && <div className="error-msg" style={{ display: 'block' }}>Nomor Induk Karyawan wajib diisi.</div>}
               </div>
 
               {/* Field 3: Jabatan sesuai SK */}
@@ -313,7 +313,7 @@ export default function PortalPage() {
               {/* Field 5: Kantor Cabang / KCP */}
               <div className="question-block">
                 <label className="question-label">
-                  5. Kantor Cabang / KCP<span className="star">*</span>
+                  5. Unit Kerja<span className="star">*</span>
                 </label>
 
                 <div className="dropdown-container" ref={dropdownRef}>

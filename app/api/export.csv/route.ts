@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const headers = [
       'Timestamp (WITA)',
       'Nama Pegawai',
-      'Nomor Induk Kepegawaian',
+      'Nomor Induk Karyawan',
       'Jabatan sesuai SK',
       'Jabatan saat ini',
       'Kantor Cabang',
