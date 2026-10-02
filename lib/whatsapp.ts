@@ -1,12 +1,4 @@
-import { Agent } from 'undici';
-
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const gowaDispatcher = new Agent({
-  connect: {
-    rejectUnauthorized: false,
-  },
-});
 
 export interface GowaConfig {
   baseUrl: string;
@@ -100,9 +92,8 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
     res = await fetch(url, {
       ...options,
       headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
-      dispatcher: gowaDispatcher,
       cache: 'no-store',
-    } as RequestInit);
+    });
   } catch (err: any) {
     console.error('GOWA FETCH ERROR:', err?.message, '| cause:', err?.cause?.code, err?.cause?.message);
     throw err;
