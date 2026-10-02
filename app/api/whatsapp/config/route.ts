@@ -78,6 +78,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ code: 'SUCCESS', message: 'Konfigurasi gateway berhasil disimpan.' });
   } catch (error: any) {
     console.error('WA config POST error:', error);
-    return NextResponse.json({ error: 'Gagal menyimpan konfigurasi gateway' }, { status: 500 });
+    return NextResponse.json({ error: 'Gagal menyimpan konfigurasi gateway', detail: error?.message || String(error) }, { status: 500 });
   }
 }
