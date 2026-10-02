@@ -1,6 +1,26 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
+import { RefreshCw, ScrollText, ShieldAlert, ShieldCheck } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
 
 interface AuditLog {
   id: number;
@@ -11,22 +31,23 @@ interface AuditLog {
   createdAt: string;
 }
 
-const actionColors: Record<string, string> = {
-  login: '#4ade80',
-  send_message: '#38bdf8',
-  send_campaign: '#38bdf8',
-  save_template: '#facc15',
-  update_template: '#facc15',
-  delete_template: '#f87171',
-  create_campaign: '#a78bfa',
-  update_campaign: '#a78bfa',
-  delete_campaign: '#f87171',
-  create_admin: '#34d399',
-  delete_admin: '#f87171',
-  assign_recipients: '#94a3b8',
+/** Read-only palette: colour is decorative, never the sole signal. */
+const ACTION_STYLE: Record<string, string> = {
+  login: 'border-accent/30 bg-accent/10 text-accent',
+  send_message: 'border-chart-2/30 bg-chart-2/10 text-chart-2',
+  send_campaign: 'border-chart-2/30 bg-chart-2/10 text-chart-2',
+  save_template: 'border-chart-3/30 bg-chart-3/10 text-chart-3',
+  update_template: 'border-chart-3/30 bg-chart-3/10 text-chart-3',
+  create_campaign: 'border-chart-4/30 bg-chart-4/10 text-chart-4',
+  update_campaign: 'border-chart-4/30 bg-chart-4/10 text-chart-4',
+  delete_template: 'border-destructive/30 bg-destructive/10 text-destructive',
+  delete_campaign: 'border-destructive/30 bg-destructive/10 text-destructive',
+  delete_admin: 'border-destructive/30 bg-destructive/10 text-destructive',
+  create_admin: 'border-accent/30 bg-accent/10 text-accent',
+  assign_recipients: 'border-muted-foreground/30 bg-muted/40 text-muted-foreground',
 };
 
-const actionLabels: Record<string, string> = {
+const ACTION_LABEL: Record<string, string> = {
   login: 'Login',
   send_message: 'Kirim Pesan',
   send_campaign: 'Kirim Kampanye',
@@ -41,21 +62,23 @@ const actionLabels: Record<string, string> = {
   assign_recipients: 'Tambah Penerima',
 };
 
-export default function AuditPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [adminFilter, setAdminFilter] = useState('');
-  const [limit, setLimit] = useState(50);
+const FALLBACK_STYLE = 'border-muted-foreground/30 bg-muted/40 text-muted-foreground';
 
-  const fetchLogs = useCallback(async () => {
+export default function AuditPage() {
+  const [logs, setLogs] = React.useState<AuditLog[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [adminFilter, setAdminFilter] = React.useState('all');
+  const [limit, setLimit] = React.useState('50');
+
+  const fetchLogs = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(limit) });
-      if (adminFilter) params.set('admin', adminFilter);
-      const res = await fetch(`/api/audit?${params}`);
+      const params = new URLSearchParams({ limit });
+      if (adminFilter !== 'all') params.set('admin', adminFilter);
+      const res = await fetch(`/api/audit?${params}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setLogs(data.logs || []);
+        setLogs(data.logs ?? []);
       }
     } catch (err) {
       console.error('Fetch audit logs error:', err);
@@ -64,104 +87,133 @@ export default function AuditPage() {
     }
   }, [adminFilter, limit]);
 
-  useEffect(() => {
-    fetchLogs();
+  React.useEffect(() => {
+    void fetchLogs();
   }, [fetchLogs]);
 
-  const uniqueAdmins = Array.from(new Set(logs.map((l) => l.adminUsername))).sort();
+  const uniqueAdmins = React.useMemo(
+    () => Array.from(new Set(logs.map((l) => l.adminUsername))).sort(),
+    [logs],
+  );
+
+  const destructiveCount = React.useMemo(
+    () => logs.filter((l) => l.action.startsWith('delete')).length,
+    [logs],
+  );
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#f8fafc' }}>
-            📋 Audit Log
-          </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Jejak aktivitas administrator untuk keamanan dan akuntabilitas.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <select
-            value={adminFilter}
-            onChange={(e) => setAdminFilter(e.target.value)}
-            style={{ padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-          >
-            <option value="">Semua Admin</option>
-            {uniqueAdmins.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            style={{ padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-          >
-            <option value={20}>20 entri</option>
-            <option value={50}>50 entri</option>
-            <option value={100}>100 entri</option>
-            <option value={200}>200 entri</option>
-          </select>
-          <button
-            onClick={fetchLogs}
-            style={{ background: '#334155', border: 'none', color: '#f8fafc', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            🔄 Refresh
-          </button>
-        </div>
+    <div className="mx-auto max-w-[1200px]">
+      <PageHeader
+        title="Audit Log"
+        description="Jejak aktivitas administrator untuk keamanan dan akuntabilitas."
+        actions={
+          <Button variant="outline" onClick={() => void fetchLogs()}>
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </Button>
+        }
+      />
+
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+        <MetricCard label="Entri Dimuat" value={logs.length} icon={ScrollText} loading={isLoading} />
+        <MetricCard label="Admin Terlibat" value={uniqueAdmins.length} icon={ShieldCheck} loading={isLoading} />
+        <MetricCard
+          label="Aksi Destruktif"
+          value={destructiveCount}
+          icon={ShieldAlert}
+          loading={isLoading}
+          hint="Penghapusan data"
+        />
       </div>
 
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Memuat log...</div>
-      ) : logs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b', background: '#1e293b', borderRadius: '10px', border: '1px solid #334155' }}>
-          Belum ada log aktivitas.
+      <Toolbar>
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+          <Select value={adminFilter} onValueChange={setAdminFilter}>
+            <SelectTrigger className="sm:w-56" aria-label="Filter admin">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Admin</SelectItem>
+              {uniqueAdmins.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={limit} onValueChange={setLimit}>
+            <SelectTrigger className="sm:w-40" aria-label="Jumlah entri">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {['20', '50', '100', '200'].map((n) => (
+                <SelectItem key={n} value={n}>
+                  {n} entri
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      ) : (
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', overflow: 'hidden' }}>
-          <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #334155',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                }}
-              >
-                <span
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    background: `${actionColors[log.action] || '#94a3b8'}22`,
-                    color: actionColors[log.action] || '#94a3b8',
-                    border: `1px solid ${actionColors[log.action] || '#94a3b8'}44`,
-                    whiteSpace: 'nowrap',
-                    minWidth: '120px',
-                    textAlign: 'center',
-                  }}
-                >
-                  {actionLabels[log.action] || log.action}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', color: '#f8fafc' }}>
-                    <span style={{ fontWeight: 600 }}>{log.adminUsername}</span>
-                    {log.detail && <span style={{ color: '#94a3b8' }}> — {log.detail}</span>}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                    {new Date(log.createdAt).toLocaleString('id-ID')}
-                    {log.ipAddress && ` • IP: ${log.ipAddress}`}
-                  </div>
-                </div>
-              </div>
+      </Toolbar>
+
+      <SectionCard bodyClassName="p-0 sm:p-0">
+        {isLoading ? (
+          <div className="space-y-2 p-5" aria-busy="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        </div>
-      )}
+        ) : logs.length === 0 ? (
+          <EmptyState
+            icon={ScrollText}
+            title="Belum ada log aktivitas"
+            description="Setiap login dan perubahan data admin akan tercatat di sini."
+          />
+        ) : (
+          <div className="max-h-[600px] overflow-auto">
+            <Table>
+              <TableHeader className="bg-background/40">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-44">Aksi</TableHead>
+                  <TableHead>Detail</TableHead>
+                  <TableHead className="hidden md:table-cell">Waktu</TableHead>
+                  <TableHead className="hidden lg:table-cell">IP</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {logs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell>
+                      <span
+                        className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${
+                          ACTION_STYLE[log.action] ?? FALLBACK_STYLE
+                        }`}
+                      >
+                        {ACTION_LABEL[log.action] ?? log.action}
+                      </span>
+                    </TableCell>
+                    <TableCell className="min-w-0">
+                      <span className="font-medium text-foreground">{log.adminUsername}</span>
+                      {log.detail ? (
+                        <span className="text-muted-foreground"> — {log.detail}</span>
+                      ) : null}
+                      <span className="tabular mt-0.5 block text-[11px] text-muted-foreground/80 md:hidden">
+                        {new Date(log.createdAt).toLocaleString('id-ID')}
+                      </span>
+                    </TableCell>
+                    <TableCell className="tabular hidden text-xs whitespace-nowrap text-muted-foreground md:table-cell">
+                      {new Date(log.createdAt).toLocaleString('id-ID')}
+                    </TableCell>
+                    <TableCell className="tabular hidden text-xs text-chart-2 lg:table-cell">
+                      {log.ipAddress || '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

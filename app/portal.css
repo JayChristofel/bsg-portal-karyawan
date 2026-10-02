@@ -17,11 +17,28 @@
   --font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  -webkit-tap-highlight-color: transparent;
+/*
+ * Reset ini HARUS berada di dalam cascade layer.
+ *
+ * Tanpa layer, aturan `*` ini bersifat "unlayered" dan selalu menang atas
+ * utility Tailwind (yang berada di @layer utilities), meskipun specificity
+ * utility lebih tinggi. Akibatnya setiap `p-*`, `m-*`, `px-*` di admin ikut
+ * ditimpa `padding: 0; margin: 0`, sehingga seluruh layout admin kehilangan
+ * padding dan tampak bertumpuk.
+ *
+ * Dengan dibungkus `@layer portal-reset`, layer ini dibuat lebih dulu
+ * (portal.css dimuat sebelum admin.css) sehingga utility Tailwind di layer
+ * berikutnya tetap menang, sementara halaman publik tetap mendapat reset.
+ */
+@layer portal-reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 .portal-page-wrapper {

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import AdminShell from './AdminShell';
+import './admin.css';
 
 export const metadata: Metadata = {
   title: 'Dashboard Admin — Portal Pegawai',

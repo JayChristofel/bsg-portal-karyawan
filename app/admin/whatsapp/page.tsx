@@ -1,6 +1,30 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as React from 'react';
+import {
+  CheckCircle2,
+  Copy,
+  Info,
+  Link2,
+  LogOut,
+  Plug,
+  PlugZap,
+  QrCode,
+  Radio,
+  RefreshCw,
+  Save,
+  Send,
+  Smartphone,
+  Terminal,
+  Webhook,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { SectionCard, PageHeader } from '../components/ui';
+import { cn } from '@/lib/utils';
 
 interface DeviceStatusResult {
   device_id?: string;
@@ -13,52 +37,97 @@ interface WebhookLogItem {
   id: number;
   deviceId: string | null;
   event: string;
-  payload: any;
+  payload: unknown;
   createdAt: string;
 }
 
-export default function WhatsAppGatewayPage() {
-  const [status, setStatus] = useState<DeviceStatusResult | null>(null);
-  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [isLoadingQr, setIsLoadingQr] = useState(false);
-  const [qrCountdown, setQrCountdown] = useState<number>(30);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+type Notice = { tone: 'ok' | 'err' | 'info'; text: string };
 
-  // Webhook state
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [webhookSecret, setWebhookSecret] = useState('');
-  const [webhookEvents, setWebhookEvents] = useState('');
-  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
-  const [webhookLogsList, setWebhookLogsList] = useState<WebhookLogItem[]>([]);
-  const [isLoadingWebhook, setIsLoadingWebhook] = useState(false);
-
-  // Test send state
-  const [testPhone, setTestPhone] = useState('');
-  const [testMsg, setTestMsg] = useState(
-    'Yth. Bapak/Ibu Pegawai,\n\nMohon segera melakukan pengkinian data mandiri pegawai melalui tautan resmi internal berikut:\nhttps://portal-pegawai.internal\n\nTerima kasih,\nDivisi Kepegawaian & SDM'
+function Field({
+  label,
+  htmlFor,
+  placeholder,
+  value,
+  onChange,
+  type = 'text',
+  hint,
+  autoComplete,
+}: {
+  label: string;
+  htmlFor: string;
+  placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  hint?: string;
+  autoComplete?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor}>{label}</Label>
+      <Input
+        id={htmlFor}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+    </div>
   );
-  const [isSending, setIsSending] = useState(false);
-  const [sendResult, setSendResult] = useState<any>(null);
+}
 
-  // Gateway config state
-  const [gatewayUrl, setGatewayUrl] = useState('');
-  const [gatewayDeviceId, setGatewayDeviceId] = useState('');
-  const [gatewayUsername, setGatewayUsername] = useState('');
-  const [gatewayPassword, setGatewayPassword] = useState('');
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [isTestingConfig, setIsTestingConfig] = useState(false);
-  const [configTestResult, setConfigTestResult] = useState<any>(null);
+function CodeBlock({ content, maxHeight = '12rem' }: { content: string; maxHeight?: string }) {
+  return (
+    <pre
+      className="tabular overflow-auto rounded-lg border border-border/60 bg-background/60 p-3 text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground"
+      style={{ maxHeight }}
+    >
+      {content}
+    </pre>
+  );
+}
 
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+export default function WhatsAppGatewayPage() {
+  const [status, setStatus] = React.useState<DeviceStatusResult | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = React.useState(true);
+  const [qrUrl, setQrUrl] = React.useState<string | null>(null);
+  const [isLoadingQr, setIsLoadingQr] = React.useState(false);
+  const [qrCountdown, setQrCountdown] = React.useState(30);
+  const [notice, setNotice] = React.useState<Notice | null>(null);
 
-  const fetchStatus = useCallback(async () => {
+  const [webhookUrl, setWebhookUrl] = React.useState('');
+  const [webhookSecret, setWebhookSecret] = React.useState('');
+  const [webhookEvents, setWebhookEvents] = React.useState('');
+  const [isSavingWebhook, setIsSavingWebhook] = React.useState(false);
+  const [webhookLogs, setWebhookLogs] = React.useState<WebhookLogItem[]>([]);
+  const [isLoadingWebhook, setIsLoadingWebhook] = React.useState(false);
+
+  const [testPhone, setTestPhone] = React.useState('');
+  const [testMsg, setTestMsg] = React.useState(
+    'Yth. Bapak/Ibu Pegawai,\n\nMohon segera melakukan pengkinian data mandiri pegawai melalui tautan resmi internal berikut:\nhttps://portal-pegawai.internal\n\nTerima kasih,\nDivisi Kepegawaian & SDM',
+  );
+  const [isSending, setIsSending] = React.useState(false);
+  const [sendResult, setSendResult] = React.useState<unknown>(null);
+
+  const [gatewayUrl, setGatewayUrl] = React.useState('');
+  const [gatewayDeviceId, setGatewayDeviceId] = React.useState('');
+  const [gatewayUsername, setGatewayUsername] = React.useState('');
+  const [gatewayPassword, setGatewayPassword] = React.useState('');
+  const [isSavingConfig, setIsSavingConfig] = React.useState(false);
+  const [isTestingConfig, setIsTestingConfig] = React.useState(false);
+  const [configTestResult, setConfigTestResult] = React.useState<unknown>(null);
+
+  const countdownRef = React.useRef<number | null>(null);
+
+  const fetchStatus = React.useCallback(async () => {
     setIsLoadingStatus(true);
     try {
-      const res = await fetch('/api/whatsapp/status');
+      const res = await fetch('/api/whatsapp/status', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setStatus(data.results || null);
+        setStatus(data.results ?? null);
       }
     } catch {
       setStatus(null);
@@ -67,10 +136,10 @@ export default function WhatsAppGatewayPage() {
     }
   }, []);
 
-  const fetchWebhookData = useCallback(async () => {
+  const fetchWebhookData = React.useCallback(async () => {
     setIsLoadingWebhook(true);
     try {
-      const res = await fetch('/api/whatsapp/webhook');
+      const res = await fetch('/api/whatsapp/webhook', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.config) {
@@ -78,7 +147,7 @@ export default function WhatsAppGatewayPage() {
           setWebhookSecret(data.config.webhook_secret || '');
           setWebhookEvents(data.config.webhook_events || '');
         }
-        setWebhookLogsList(data.logs || []);
+        setWebhookLogs(data.logs ?? []);
       }
     } catch (err) {
       console.error('Fetch webhook error:', err);
@@ -87,9 +156,9 @@ export default function WhatsAppGatewayPage() {
     }
   }, []);
 
-  const fetchConfig = useCallback(async () => {
+  const fetchConfig = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/whatsapp/config');
+      const res = await fetch('/api/whatsapp/config', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setGatewayUrl(data.config?.baseUrl || '');
@@ -102,57 +171,54 @@ export default function WhatsAppGatewayPage() {
     }
   }, []);
 
-  const fetchQr = useCallback(async () => {
+  const fetchQr = React.useCallback(async () => {
     setIsLoadingQr(true);
-    setActionMessage(null);
+    setNotice(null);
     try {
       const res = await fetch('/api/whatsapp/qr');
       if (res.ok) {
         const data = await res.json();
-        let link = data?.results?.qr_link || data?.results?.qr_url || null;
-        if (link && link.startsWith('http://')) {
-          link = link.replace('http://', 'https://');
-        }
+        let link: string | null = data?.results?.qr_link ?? data?.results?.qr_url ?? null;
+        if (link?.startsWith('http://')) link = link.replace('http://', 'https://');
         setQrUrl(link);
-        const duration = data?.results?.qr_duration || 30;
-        setQrCountdown(duration);
+        setQrCountdown(data?.results?.qr_duration || 30);
       } else {
-        setActionMessage('Gagal mengambil QR. Pastikan server GOWA aktif.');
+        setNotice({ tone: 'err', text: 'Gagal mengambil QR. Pastikan server GOWA aktif.' });
       }
     } catch {
-      setActionMessage('Terjadi kesalahan saat memuat QR Code.');
+      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat memuat QR Code.' });
     } finally {
       setIsLoadingQr(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchStatus();
-    fetchWebhookData();
-    fetchConfig();
+  React.useEffect(() => {
+    void fetchStatus();
+    void fetchWebhookData();
+    void fetchConfig();
   }, [fetchStatus, fetchWebhookData, fetchConfig]);
 
-  // Countdown timer for QR
-  useEffect(() => {
-    if (qrUrl && !status?.is_connected) {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = setInterval(() => {
-        setQrCountdown((prev) => {
-          if (prev <= 1) {
-            fetchQr(); // auto-refresh when expired
-            return 30;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
+  const isConnected = Boolean(status?.is_connected || status?.is_logged_in);
+
+  // QR auto-refresh countdown
+  React.useEffect(() => {
+    if (!qrUrl || isConnected) return;
+    countdownRef.current = window.setInterval(() => {
+      setQrCountdown((prev) => {
+        if (prev <= 1) {
+          void fetchQr();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      if (countdownRef.current) window.clearInterval(countdownRef.current);
     };
-  }, [qrUrl, status?.is_connected, fetchQr]);
+  }, [qrUrl, isConnected, fetchQr]);
 
   const handleReconnect = async () => {
-    setActionMessage('Meminta reconnect ke perangkat...');
+    setNotice({ tone: 'info', text: 'Meminta reconnect ke perangkat…' });
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -160,16 +226,16 @@ export default function WhatsAppGatewayPage() {
         body: JSON.stringify({ action: 'reconnect' }),
       });
       const data = await res.json();
-      setActionMessage(data.message || 'Perintah reconnect terkirim.');
-      fetchStatus();
+      setNotice({ tone: 'ok', text: data.message || 'Perintah reconnect terkirim.' });
+      void fetchStatus();
     } catch {
-      setActionMessage('Gagal menghubungi gateway untuk reconnect.');
+      setNotice({ tone: 'err', text: 'Gagal menghubungi gateway untuk reconnect.' });
     }
   };
 
   const handleLogoutDevice = async () => {
-    if (!confirm('Putuskan tautan WhatsApp dari perangkat portal-pegawai?')) return;
-    setActionMessage('Memutuskan perangkat...');
+    if (!window.confirm('Putuskan tautan WhatsApp dari perangkat portal-pegawai?')) return;
+    setNotice({ tone: 'info', text: 'Memutuskan perangkat…' });
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -177,17 +243,17 @@ export default function WhatsAppGatewayPage() {
         body: JSON.stringify({ action: 'logout' }),
       });
       const data = await res.json();
-      setActionMessage(data.message || 'Perangkat berhasil diputuskan.');
+      setNotice({ tone: 'ok', text: data.message || 'Perangkat berhasil diputuskan.' });
       setQrUrl(null);
-      fetchStatus();
+      void fetchStatus();
     } catch {
-      setActionMessage('Gagal logout perangkat.');
+      setNotice({ tone: 'err', text: 'Gagal logout perangkat.' });
     }
   };
 
   const handleSaveWebhook = async () => {
     setIsSavingWebhook(true);
-    setActionMessage(null);
+    setNotice(null);
     try {
       const res = await fetch('/api/whatsapp/webhook', {
         method: 'POST',
@@ -200,13 +266,16 @@ export default function WhatsAppGatewayPage() {
       });
       const data = await res.json();
       if (data.code === 'SUCCESS' || res.ok) {
-        setActionMessage('✅ Konfigurasi webhook berhasil disimpan ke GOWA.');
-        fetchWebhookData();
+        setNotice({ tone: 'ok', text: 'Konfigurasi webhook berhasil disimpan ke GOWA.' });
+        void fetchWebhookData();
       } else {
-        setActionMessage(`❌ Gagal menyimpan webhook: ${data.message || data.error}`);
+        setNotice({
+          tone: 'err',
+          text: `Gagal menyimpan webhook: ${data.message || data.error}`,
+        });
       }
-    } catch (err: any) {
-      setActionMessage(`❌ Error: ${err.message}`);
+    } catch (err) {
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setIsSavingWebhook(false);
     }
@@ -214,15 +283,15 @@ export default function WhatsAppGatewayPage() {
 
   const handleSaveConfig = async () => {
     if (!gatewayUrl.trim()) {
-      alert('URL gateway wajib diisi.');
+      setNotice({ tone: 'err', text: 'URL gateway wajib diisi.' });
       return;
     }
     if (!gatewayDeviceId.trim()) {
-      alert('Device ID wajib diisi.');
+      setNotice({ tone: 'err', text: 'Device ID wajib diisi.' });
       return;
     }
     setIsSavingConfig(true);
-    setActionMessage(null);
+    setNotice(null);
     setConfigTestResult(null);
     try {
       const res = await fetch('/api/whatsapp/config', {
@@ -237,13 +306,16 @@ export default function WhatsAppGatewayPage() {
       });
       const data = await res.json();
       if (data.code === 'SUCCESS' || res.ok) {
-        setActionMessage('✅ Konfigurasi gateway berhasil disimpan.');
-        fetchStatus();
+        setNotice({ tone: 'ok', text: 'Konfigurasi gateway berhasil disimpan.' });
+        void fetchStatus();
       } else {
-        setActionMessage(`❌ Gagal menyimpan konfigurasi: ${data.error || data.message}`);
+        setNotice({
+          tone: 'err',
+          text: `Gagal menyimpan konfigurasi: ${data.error || data.message}`,
+        });
       }
-    } catch (err: any) {
-      setActionMessage(`❌ Error: ${err.message}`);
+    } catch (err) {
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setIsSavingConfig(false);
     }
@@ -273,30 +345,33 @@ export default function WhatsAppGatewayPage() {
       setConfigTestResult(data);
 
       if (data.authOk) {
-        setActionMessage('✅ Koneksi & autentikasi gateway berhasil. Silakan pindai QR Code untuk mendaftarkan perangkat.');
-        fetchStatus();
+        setNotice({
+          tone: 'ok',
+          text: 'Koneksi & autentikasi gateway berhasil. Silakan pindai QR Code untuk mendaftarkan perangkat.',
+        });
+        void fetchStatus();
       } else {
         const msg = data?.message || data?.error || 'respons tidak dikenal';
-        setActionMessage(`❌ Autentikasi gagal: ${msg}. Pastikan username/password Basic Auth benar.`);
+        setNotice({
+          tone: 'err',
+          text: `Autentikasi gagal: ${msg}. Pastikan username/password Basic Auth benar.`,
+        });
       }
-    } catch (err: any) {
-      setConfigTestResult({ error: err.message });
-      setActionMessage(`❌ Error: ${err.message}`);
+    } catch (err) {
+      setConfigTestResult({ error: (err as Error).message });
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setIsTestingConfig(false);
     }
   };
 
   const handleUseCurrentHost = () => {
-    if (typeof window !== 'undefined') {
-      const autoUrl = `${window.location.origin}/api/webhook/whatsapp`;
-      setWebhookUrl(autoUrl);
-    }
+    setWebhookUrl(`${window.location.origin}/api/webhook/whatsapp`);
   };
 
   const handleTestSend = async () => {
     if (!testPhone.trim()) {
-      alert('Masukkan nomor telepon tujuan.');
+      setNotice({ tone: 'err', text: 'Masukkan nomor telepon tujuan.' });
       return;
     }
     setIsSending(true);
@@ -307,607 +382,403 @@ export default function WhatsAppGatewayPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: testPhone, message: testMsg }),
       });
-      const data = await res.json();
-      setSendResult(data);
-    } catch (err: any) {
-      setSendResult({ error: err.message || 'Gagal mengirim pesan' });
+      setSendResult(await res.json());
+    } catch (err) {
+      setSendResult({ error: (err as Error).message || 'Gagal mengirim pesan' });
     } finally {
       setIsSending(false);
     }
   };
 
-  const isConnected = Boolean(status?.is_connected || status?.is_logged_in);
+  const refreshAll = () => {
+    void fetchStatus();
+    void fetchWebhookData();
+    setNotice({ tone: 'info', text: 'Data gateway diperbarui.' });
+  };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#f8fafc' }}>
-            📱 WhatsApp Gateway Management
-          </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Integrasi pengiriman pesan otomatis dan penerimaan webhook event WhatsApp multi-device (GOWA).
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => {
-              fetchStatus();
-              fetchWebhookData();
-              setActionMessage('Data gateway diperbarui.');
-            }}
-            style={{
-              background: '#334155',
-              border: 'none',
-              color: '#f8fafc',
-              padding: '8px 14px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            🔄 Refresh Semua
-          </button>
-        </div>
-      </div>
-
-      {actionMessage && (
-        <div style={{ padding: '12px 16px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', color: '#38bdf8', fontSize: '13px', marginBottom: '20px' }}>
-          ℹ️ {actionMessage}
-        </div>
-      )}
-
-      {/* Gateway Configuration Card */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '24px', marginBottom: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '8px' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#f8fafc' }}>
-            ⚙️ Konfigurasi Koneksi Gateway GOWA
-          </h2>
-        </div>
-        <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#94a3b8' }}>
-          Atur URL endpoint gateway, Device ID, dan kredensial HTTP Basic Auth. Perubahan tersimpan di database dan langsung dipakai oleh semua fitur WhatsApp.
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '16px', marginBottom: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Gateway Endpoint URL
-            </label>
-            <input
-              type="text"
-              placeholder="Contoh: https://107.23.128.93"
-              value={gatewayUrl}
-              onChange={(e) => setGatewayUrl(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Device ID
-            </label>
-            <input
-              type="text"
-              placeholder="Contoh: portal-pegawai"
-              value={gatewayDeviceId}
-              onChange={(e) => setGatewayDeviceId(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Basic Auth Username (Opsional)
-            </label>
-            <input
-              type="text"
-              placeholder="Kosongkan jika gateway tidak memakai Basic Auth"
-              value={gatewayUsername}
-              onChange={(e) => setGatewayUsername(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Basic Auth Password (Opsional)
-            </label>
-            <input
-              type="password"
-              placeholder="Kosongkan jika gateway tidak memakai Basic Auth"
-              value={gatewayPassword}
-              onChange={(e) => setGatewayPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={handleSaveConfig}
-            disabled={isSavingConfig}
-            style={{
-              background: '#0078d4',
-              color: '#fff',
-              padding: '9px 18px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {isSavingConfig ? 'Menyimpan...' : '💾 Simpan Konfigurasi'}
-          </button>
-          <button
-            onClick={handleTestConfig}
-            disabled={isTestingConfig}
-            style={{
-              background: '#0f766e',
-              color: '#fff',
-              padding: '9px 18px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {isTestingConfig ? 'Menguji...' : '🔌 Tes Koneksi ke Gateway'}
-          </button>
-        </div>
-
-        {configTestResult && (
-          <div
-            style={{
-              marginTop: '16px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              padding: '12px',
-              fontSize: '12px',
-              color: '#cbd5e1',
-              fontFamily: 'monospace',
-              maxHeight: '200px',
-              overflowY: 'auto',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {typeof configTestResult === 'object' ? JSON.stringify(configTestResult, null, 2) : String(configTestResult)}
-          </div>
-        )}
-      </div>
-
-      {/* Grid: Status & QR Scan */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '20px', marginBottom: '28px' }}>
-        {/* Device Status Card */}
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#f8fafc' }}>
-              Status Perangkat WhatsApp
-            </h2>
-            <span
-              style={{
-                padding: '4px 10px',
-                borderRadius: '9999px',
-                fontSize: '12px',
-                fontWeight: 600,
-                background: isConnected ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: isConnected ? '#4ade80' : '#f87171',
-                border: `1px solid ${isConnected ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-              }}
-            >
-              ● {isLoadingStatus ? 'Memeriksa...' : isConnected ? 'Terhubung (Online)' : 'Terputus (Offline)'}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '8px 0', borderBottom: '1px solid #334155' }}>
-              <span style={{ color: '#94a3b8' }}>Device ID:</span>
-              <code style={{ color: '#38bdf8' }}>{status?.device_id || 'portal-pegawai'}</code>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '8px 0', borderBottom: '1px solid #334155' }}>
-              <span style={{ color: '#94a3b8' }}>Status Login:</span>
-              <span style={{ color: status?.is_logged_in ? '#4ade80' : '#f87171', fontWeight: 600 }}>
-                {status?.is_logged_in ? 'Logged In' : 'Belum Login'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '8px 0', borderBottom: '1px solid #334155' }}>
-              <span style={{ color: '#94a3b8' }}>Status Koneksi Soket:</span>
-              <span style={{ color: status?.is_connected ? '#4ade80' : '#f87171', fontWeight: 600 }}>
-                {status?.is_connected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '8px 0' }}>
-              <span style={{ color: '#94a3b8' }}>Gateway Endpoint:</span>
-              <span style={{ color: '#cbd5e1' }}>{gatewayUrl || 'https://107.23.128.93'}</span>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              onClick={handleReconnect}
-              style={{
-                background: '#0078d4',
-                color: '#fff',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              ⚡ Reconnect
-            </button>
-            <button
-              onClick={fetchQr}
-              style={{
-                background: '#0f766e',
-                color: '#fff',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              📷 Tampilkan QR Code
-            </button>
-            {isConnected && (
-              <button
-                onClick={handleLogoutDevice}
-                style={{
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239,68,68,0.3)',
-                  color: '#f87171',
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Putuskan WhatsApp
-              </button>
+    <div className="mx-auto max-w-[1200px]">
+      <PageHeader
+        title="WhatsApp Gateway Management"
+        description="Integrasi pengiriman pesan otomatis dan penerimaan webhook event WhatsApp multi-device (GOWA)."
+        actions={
+          <Button variant="outline" size="sm" onClick={refreshAll} disabled={isLoadingStatus}>
+            {isLoadingStatus ? (
+              <RefreshCw className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Plug aria-hidden="true" />
             )}
-          </div>
+            Refresh Semua
+          </Button>
+        }
+      />
+
+      {notice ? (
+        <div
+          role="status"
+          className={cn(
+            'mb-4 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm',
+            notice.tone === 'ok' && 'border-accent/30 bg-accent/10 text-accent',
+            notice.tone === 'err' && 'border-destructive/30 bg-destructive/10 text-destructive',
+            notice.tone === 'info' && 'border-chart-2/30 bg-chart-2/10 text-chart-2',
+          )}
+        >
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1">{notice.text}</span>
+        </div>
+      ) : null}
+
+      {/* ── Gateway configuration ─────────────────────────────── */}
+      <SectionCard
+        title="Konfigurasi Koneksi Gateway GOWA"
+        description="Atur URL endpoint, Device ID, dan kredensial HTTP Basic Auth. Tersimpan di database dan langsung dipakai semua fitur WhatsApp."
+        className="mb-4"
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Gateway Endpoint URL"
+            htmlFor="gw-url"
+            placeholder="Contoh: https://107.23.128.93"
+            value={gatewayUrl}
+            onChange={setGatewayUrl}
+          />
+          <Field
+            label="Device ID"
+            htmlFor="gw-device"
+            placeholder="Contoh: portal-pegawai"
+            value={gatewayDeviceId}
+            onChange={setGatewayDeviceId}
+          />
+          <Field
+            label="Basic Auth Username (Opsional)"
+            htmlFor="gw-user"
+            placeholder="Kosongkan jika gateway tanpa Basic Auth"
+            value={gatewayUsername}
+            onChange={setGatewayUsername}
+            autoComplete="off"
+          />
+          <Field
+            label="Basic Auth Password (Opsional)"
+            htmlFor="gw-pass"
+            placeholder="Kosongkan jika gateway tanpa Basic Auth"
+            value={gatewayPassword}
+            onChange={setGatewayPassword}
+            type="password"
+            autoComplete="new-password"
+          />
         </div>
 
-        {/* QR Code Scanner Card */}
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h2 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600, color: '#f8fafc', alignSelf: 'flex-start' }}>
-            📷 Pindai QR Code WhatsApp Web
-          </h2>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={() => void handleSaveConfig()} disabled={isSavingConfig}>
+            <Save aria-hidden="true" />
+            {isSavingConfig ? 'Menyimpan…' : 'Simpan Konfigurasi'}
+          </Button>
+          <Button variant="outline" onClick={() => void handleTestConfig()} disabled={isTestingConfig}>
+            <PlugZap aria-hidden="true" />
+            {isTestingConfig ? 'Menguji…' : 'Tes Koneksi'}
+          </Button>
+        </div>
 
+        {configTestResult ? (
+          <div className="mt-4">
+            <CodeBlock content={JSON.stringify(configTestResult, null, 2)} maxHeight="10rem" />
+          </div>
+        ) : null}
+      </SectionCard>
+
+      {/* ── Device status + QR ────────────────────────────────── */}
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SectionCard
+          title="Status Perangkat WhatsApp"
+          actions={
+            <Badge
+              variant="outline"
+              className={cn(
+                'gap-1.5 border px-2 py-0 text-[10px] font-semibold',
+                isLoadingStatus
+                  ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                  : isConnected
+                    ? 'border-accent/30 bg-accent/10 text-accent'
+                    : 'border-destructive/30 bg-destructive/10 text-destructive',
+              )}
+            >
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  isLoadingStatus
+                    ? 'bg-amber-400 animate-pulse'
+                    : isConnected
+                      ? 'bg-accent'
+                      : 'bg-destructive',
+                )}
+                aria-hidden="true"
+              />
+              {isLoadingStatus ? 'Memeriksa' : isConnected ? 'Terhubung' : 'Terputus'}
+            </Badge>
+          }
+        >
+          <dl className="divide-y divide-border/50">
+            {[
+              { label: 'Device ID', value: status?.device_id || 'portal-pegawai', mono: true },
+              {
+                label: 'Status Login',
+                value: status?.is_logged_in ? 'Logged In' : 'Belum Login',
+                tone: status?.is_logged_in ? 'ok' : 'err',
+              },
+              {
+                label: 'Status Koneksi Soket',
+                value: status?.is_connected ? 'Connected' : 'Disconnected',
+                tone: status?.is_connected ? 'ok' : 'err',
+              },
+              { label: 'Gateway Endpoint', value: gatewayUrl || '—', mono: false },
+            ].map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-3 py-2.5">
+                <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                <dd
+                  className={cn(
+                    'min-w-0 truncate text-sm',
+                    row.mono && 'tabular text-chart-2',
+                    row.tone === 'ok' && 'font-medium text-accent',
+                    row.tone === 'err' && 'font-medium text-destructive',
+                    !row.mono && !row.tone && 'text-foreground',
+                  )}
+                  title={typeof row.value === 'string' ? row.value : undefined}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => void handleReconnect()}>
+              <RefreshCw aria-hidden="true" />
+              Reconnect
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => void fetchQr()} disabled={isLoadingQr}>
+              <QrCode aria-hidden="true" />
+              Tampilkan QR Code
+            </Button>
+            {isConnected ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleLogoutDevice()}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <LogOut aria-hidden="true" />
+                Putuskan WhatsApp
+              </Button>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Pindai QR Code WhatsApp Web">
           {isConnected ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-              <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', margin: '0 auto 16px' }}>
-                ✓
-              </div>
-              <div style={{ fontSize: '16px', fontWeight: 600, color: '#f8fafc', marginBottom: '8px' }}>
-                WhatsApp Telah Terhubung!
-              </div>
-              <p style={{ fontSize: '13px', color: '#94a3b8', maxWidth: '320px', margin: '0 auto' }}>
-                Perangkat <code>portal-pegawai</code> aktif dan siap digunakan untuk mengirim notifikasi atau link kampanye.
+            <div className="flex flex-col items-center px-4 py-10 text-center">
+              <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-accent/15">
+                <CheckCircle2 className="size-7 text-accent" aria-hidden="true" />
+              </span>
+              <p className="text-base font-semibold text-foreground">WhatsApp Telah Terhubung!</p>
+              <p className="mt-2 max-w-xs text-xs text-muted-foreground">
+                Perangkat <span className="tabular">portal-pegawai</span> aktif dan siap digunakan untuk
+                mengirim notifikasi atau tautan kampanye.
               </p>
             </div>
           ) : qrUrl ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ background: '#fff', padding: '12px', borderRadius: '8px', display: 'inline-block', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+            <div className="flex flex-col items-center">
+              <div className="rounded-xl bg-white p-3 shadow-xl shadow-black/40">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={qrUrl}
-                  alt="WhatsApp QR Code"
-                  style={{ width: '220px', height: '220px', display: 'block' }}
-                />
+                <img src={qrUrl} alt="WhatsApp QR Code untuk penautan perangkat" className="size-52" />
               </div>
-              <div style={{ marginTop: '12px', fontSize: '13px', color: '#94a3b8' }}>
-                Kadaluarsa dalam: <b style={{ color: '#facc15' }}>{qrCountdown}s</b> (auto-refresh)
-              </div>
-              <button
-                onClick={fetchQr}
-                style={{
-                  marginTop: '10px',
-                  background: '#334155',
-                  color: '#f8fafc',
-                  border: 'none',
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                }}
-              >
-                🔄 Refresh QR Sekarang
-              </button>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Kadaluarsa dalam{' '}
+                <span className="tabular font-semibold text-chart-3">{qrCountdown}s</span> (auto-refresh)
+              </p>
+              <Button size="sm" variant="ghost" className="mt-2" onClick={() => void fetchQr()}>
+                <RefreshCw aria-hidden="true" />
+                Refresh QR Sekarang
+              </Button>
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: '36px 20px' }}>
-              <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
+            <div className="flex flex-col items-center px-4 py-10 text-center">
+              <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-secondary/60">
+                <Smartphone className="size-7 text-muted-foreground" aria-hidden="true" />
+              </span>
+              <p className="max-w-xs text-xs text-muted-foreground">
                 Klik tombol di bawah untuk meminta QR Code autentikasi dari WhatsApp.
               </p>
-              <button
-                onClick={fetchQr}
-                disabled={isLoadingQr}
-                style={{
-                  background: '#0078d4',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {isLoadingQr ? 'Memuat QR Code...' : '📷 Tampilkan QR Code'}
-              </button>
+              <Button className="mt-4" onClick={() => void fetchQr()} disabled={isLoadingQr}>
+                <QrCode aria-hidden="true" />
+                {isLoadingQr ? 'Memuat QR Code…' : 'Tampilkan QR Code'}
+              </Button>
             </div>
           )}
 
-          {/* Instructions */}
-          <div style={{ width: '100%', marginTop: '20px', padding: '14px', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '8px' }}>
-              💡 Petunjuk Menautkan Perangkat:
-            </div>
-            <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#94a3b8', lineHeight: '1.6' }}>
+          <div className="mt-4 rounded-lg border border-border/60 bg-background/40 p-3.5">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Info className="size-3.5 text-accent" aria-hidden="true" />
+              Petunjuk Menautkan Perangkat
+            </p>
+            <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-muted-foreground">
               <li>Buka aplikasi WhatsApp di smartphone Anda.</li>
-              <li>Ketuk <b>Menu (titik tiga)</b> atau <b>Pengaturan</b> &rarr; <b>Perangkat Tertaut</b>.</li>
-              <li>Ketuk <b>Tautkan Perangkat</b> lalu arahkan kamera ke QR Code di atas.</li>
+              <li>
+                Ketuk <b className="text-foreground">Menu (titik tiga)</b> atau{' '}
+                <b className="text-foreground">Pengaturan</b> → <b className="text-foreground">Perangkat Tertaut</b>.
+              </li>
+              <li>
+                Ketuk <b className="text-foreground">Tautkan Perangkat</b> lalu arahkan kamera ke QR Code di atas.
+              </li>
             </ol>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
-      {/* Webhook Configuration Card */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '24px', marginBottom: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#f8fafc' }}>
-              🔗 Konfigurasi Webhook GOWA
-            </h2>
-            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-              GOWA akan mengirim event WhatsApp (status koneksi, pesan masuk, dll.) via HTTP POST ke endpoint ini.
-            </p>
-          </div>
-          <button
-            onClick={handleUseCurrentHost}
-            style={{
-              background: '#334155',
-              border: 'none',
-              color: '#38bdf8',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            ⚡ Pasang URL Domain Saat Ini
-          </button>
+      {/* ── Webhook ──────────────────────────────────────────── */}
+      <SectionCard
+        title="Konfigurasi Webhook GOWA"
+        description="GOWA mengirim event WhatsApp (status koneksi, pesan masuk, dll.) via HTTP POST ke endpoint ini."
+        className="mb-4"
+        actions={
+          <Button size="sm" variant="outline" onClick={handleUseCurrentHost}>
+            <Copy aria-hidden="true" />
+            Pakai URL Domain Saat Ini
+          </Button>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field
+            label="Webhook Target URL"
+            htmlFor="wh-url"
+            placeholder="https://domain-anda/api/webhook/whatsapp"
+            value={webhookUrl}
+            onChange={setWebhookUrl}
+          />
+          <Field
+            label="Webhook Secret Key (Opsional)"
+            htmlFor="wh-secret"
+            placeholder="Kunci rahasia HMAC SHA-256"
+            value={webhookSecret}
+            onChange={setWebhookSecret}
+            autoComplete="off"
+          />
+          <Field
+            label="Filter Events (Opsional)"
+            htmlFor="wh-events"
+            placeholder="message,connection,message.ack"
+            value={webhookEvents}
+            onChange={setWebhookEvents}
+            hint="Pisahkan dengan koma. Kosong = semua event."
+          />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '16px', marginBottom: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Webhook Target URL
-            </label>
-            <input
-              type="text"
-              placeholder="Contoh: https://portal-pegawai.vercel.app/api/webhook/whatsapp"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Webhook Secret Key (Opsional)
-            </label>
-            <input
-              type="text"
-              placeholder="Kunci rahasia HMAC SHA-256"
-              value={webhookSecret}
-              onChange={(e) => setWebhookSecret(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Filter Events (Opsional, pisahkan koma)
-            </label>
-            <input
-              type="text"
-              placeholder="Contoh: message,connection,message.ack (kosong = semua)"
-              value={webhookEvents}
-              onChange={(e) => setWebhookEvents(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            onClick={handleSaveWebhook}
-            disabled={isSavingWebhook}
-            style={{
-              background: '#0078d4',
-              color: '#fff',
-              padding: '9px 18px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {isSavingWebhook ? 'Menyimpan...' : '💾 Simpan Konfigurasi Webhook'}
-          </button>
-          <span style={{ fontSize: '12px', color: '#64748b' }}>
-            Endpoint internal receiver: <code>/api/webhook/whatsapp</code>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button onClick={() => void handleSaveWebhook()} disabled={isSavingWebhook}>
+            <Save aria-hidden="true" />
+            {isSavingWebhook ? 'Menyimpan…' : 'Simpan Konfigurasi Webhook'}
+          </Button>
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Webhook className="size-3" aria-hidden="true" />
+            Receiver internal: <code className="tabular">/api/webhook/whatsapp</code>
           </span>
         </div>
 
-        {/* Webhook Activity Stream */}
-        <div style={{ marginTop: '24px', borderTop: '1px solid #334155', paddingTop: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#f8fafc' }}>
-              📡 Log Aktivitas Webhook Diterima ({webhookLogsList.length})
+        <div className="mt-5 border-t border-border/60 pt-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Radio className="size-3.5 text-accent" aria-hidden="true" />
+              Log Aktivitas Webhook ({webhookLogs.length})
             </h3>
-            <button
-              onClick={fetchWebhookData}
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => void fetchWebhookData()}
               disabled={isLoadingWebhook}
-              style={{
-                background: '#334155',
-                color: '#cbd5e1',
-                border: 'none',
-                padding: '4px 10px',
-                borderRadius: '4px',
-                fontSize: '11px',
-                cursor: 'pointer',
-              }}
             >
-              🔄 Refresh Log
-            </button>
+              <RefreshCw aria-hidden="true" />
+              Refresh Log
+            </Button>
           </div>
 
-          {webhookLogsList.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '12px', background: '#0f172a', borderRadius: '6px' }}>
+          {webhookLogs.length === 0 ? (
+            <p className="rounded-lg bg-background/40 px-4 py-6 text-center text-xs text-muted-foreground">
               Belum ada event webhook yang diterima. Event akan muncul di sini setelah GOWA mengirim data.
-            </div>
+            </p>
           ) : (
-            <div style={{ maxHeight: '240px', overflowY: 'auto', background: '#0f172a', borderRadius: '6px', border: '1px solid #334155' }}>
-              {webhookLogsList.map((log) => (
-                <div
-                  key={log.id}
-                  style={{
-                    padding: '8px 12px',
-                    borderBottom: '1px solid #1e293b',
-                    fontSize: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ background: '#334155', color: '#38bdf8', padding: '2px 6px', borderRadius: '4px', fontWeight: 600, marginRight: '8px' }}>
+            <ul className="max-h-64 space-y-2 overflow-y-auto">
+              {webhookLogs.map((log) => (
+                <li key={log.id} className="rounded-lg border border-border/60 bg-background/40 p-2.5">
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <Badge variant="outline" className="border-chart-2/30 bg-chart-2/10 text-[10px] text-chart-2">
                         {log.event}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground">
+                        Device: {log.deviceId || 'portal-pegawai'}
                       </span>
-                      <span style={{ color: '#94a3b8' }}>Device: {log.deviceId || 'portal-pegawai'}</span>
-                    </div>
-                    <span style={{ color: '#64748b', fontSize: '11px' }}>{log.createdAt}</span>
+                    </span>
+                    <span className="tabular text-[11px] text-muted-foreground/80">{log.createdAt}</span>
                   </div>
-                  <pre
-                    style={{
-                      margin: '4px 0 0',
-                      padding: '6px',
-                      background: '#1e293b',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      color: '#cbd5e1',
-                      overflowX: 'auto',
-                      maxHeight: '80px',
-                    }}
-                  >
-                    {typeof log.payload === 'object' ? JSON.stringify(log.payload, null, 2) : log.payload}
-                  </pre>
-                </div>
+                  <CodeBlock
+                    maxHeight="5rem"
+                    content={
+                      typeof log.payload === 'object'
+                        ? JSON.stringify(log.payload, null, 2)
+                        : String(log.payload)
+                    }
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Test Send Message Card */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '24px' }}>
-        <h2 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 600, color: '#f8fafc' }}>
-          ✉️ Uji Coba Pengiriman Pesan WhatsApp
-        </h2>
-        <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#94a3b8' }}>
-          Kirim pesan percobaan ke nomor pegawai untuk memastikan koneksi WhatsApp Gateway berfungsi dengan baik.
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-          <div>
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                Nomor WhatsApp Tujuan
-              </label>
-              <input
-                type="text"
-                placeholder="Contoh: 08123456789 atau 628123456789"
-                value={testPhone}
-                onChange={(e) => setTestPhone(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                Isi Pesan
-              </label>
+      {/* ── Test send ────────────────────────────────────────── */}
+      <SectionCard
+        title="Uji Coba Pengiriman Pesan"
+        description="Kirim pesan percobaan untuk memastikan koneksi WhatsApp Gateway berfungsi."
+      >
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="space-y-4">
+            <Field
+              label="Nomor WhatsApp Tujuan"
+              htmlFor="test-phone"
+              placeholder="08123456789 atau 628123456789"
+              value={testPhone}
+              onChange={setTestPhone}
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor="test-msg">Isi Pesan</Label>
               <textarea
+                id="test-msg"
                 rows={6}
                 value={testMsg}
                 onChange={(e) => setTestMsg(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical' }}
+                className="w-full resize-vertical rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>
-
-            <button
-              onClick={handleTestSend}
-              disabled={isSending}
-              style={{
-                background: '#25d366',
-                color: '#0f172a',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              {isSending ? 'Mengirim...' : '🚀 Kirim Pesan Uji Coba'}
-            </button>
+            <Button onClick={() => void handleTestSend()} disabled={isSending}>
+              <Send aria-hidden="true" />
+              {isSending ? 'Mengirim…' : 'Kirim Pesan Uji Coba'}
+            </Button>
           </div>
 
-          {/* Result log */}
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+            <Label htmlFor="send-log" className="mb-1.5 block">
               Log Respons Gateway
-            </label>
-            <div
-              style={{
-                width: '100%',
-                minHeight: '190px',
-                background: '#0f172a',
-                border: '1px solid #334155',
-                borderRadius: '6px',
-                padding: '12px',
-                fontSize: '12px',
-                color: '#cbd5e1',
-                fontFamily: 'monospace',
-                overflowY: 'auto',
-                whiteSpace: 'pre-wrap',
-                boxSizing: 'border-box',
-              }}
-            >
-              {sendResult ? JSON.stringify(sendResult, null, 2) : '// Log respons pengiriman akan muncul di sini...'}
-            </div>
+            </Label>
+            <CodeBlock
+              maxHeight="16rem"
+              content={
+                sendResult
+                  ? JSON.stringify(sendResult, null, 2)
+                  : '// Log respons pengiriman akan muncul di sini...'
+              }
+            />
           </div>
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }

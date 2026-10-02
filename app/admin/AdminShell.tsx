@@ -1,376 +1,629 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  Activity,
+  Building2,
+  ChevronRight,
+  ClipboardList,
+  Download,
+  FileText,
+  Globe,
+  LayoutDashboard,
+  LogOut,
+  Megaphone,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
+  ScrollText,
+  Smartphone,
+  Sun,
+  Moon,
+  UserCog,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
+/* ──────────────────────────────────────────────────────────────
+   Navigation data
+   ────────────────────────────────────────────────────────────── */
+type NavItem = {
+  label: string;
+  short: string;
+  href: string;
+  icon: LucideIcon;
+  exact?: boolean;
+  description: string;
+};
+
+type NavSection = {
+  title: string;
+  items: NavItem[];
+};
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    title: 'Ringkasan',
+    items: [
+      {
+        label: 'Overview',
+        short: 'Overview',
+        href: '/admin',
+        icon: LayoutDashboard,
+        exact: true,
+        description: 'Metrik, tren, dan aktivitas terbaru',
+      },
+      {
+        label: 'Data Pegawai',
+        short: 'Pegawai',
+        href: '/admin/pegawai',
+        icon: Users,
+        description: 'Kelola dan ekspor data pegawai',
+      },
+    ],
+  },
+  {
+    title: 'Broadcast',
+    items: [
+      {
+        label: 'Broadcast WhatsApp',
+        short: 'Broadcast',
+        href: '/admin/campaign',
+        icon: Megaphone,
+        description: 'Kirim pesan massal ke pegawai',
+      },
+      {
+        label: 'Kampanye',
+        short: 'Kampanye',
+        href: '/admin/campaigns',
+        icon: ClipboardList,
+        description: 'Kelola kampanye terjadwal',
+      },
+      {
+        label: 'Template Pesan',
+        short: 'Template',
+        href: '/admin/templates',
+        icon: FileText,
+        description: 'Pustaka template pesan',
+      },
+      {
+        label: 'Tracking Status',
+        short: 'Tracking',
+        href: '/admin/tracking',
+        icon: Activity,
+        description: 'Pantau status pengiriman real-time',
+      },
+    ],
+  },
+  {
+    title: 'Sistem',
+    items: [
+      {
+        label: 'WhatsApp Gateway',
+        short: 'Gateway',
+        href: '/admin/whatsapp',
+        icon: Smartphone,
+        description: 'Konfigurasi koneksi gateway',
+      },
+      {
+        label: 'Manajemen Admin',
+        short: 'Admin',
+        href: '/admin/admins',
+        icon: UserCog,
+        description: 'Kelola akun administrator',
+      },
+      {
+        label: 'Audit Log',
+        short: 'Audit',
+        href: '/admin/audit',
+        icon: ScrollText,
+        description: 'Riwayat aktivitas admin',
+      },
+    ],
+  },
+];
+
+/* ──────────────────────────────────────────────────────────────
+   Gateway status
+   ────────────────────────────────────────────────────────────── */
+type GatewayState = 'connected' | 'disconnected' | 'checking';
+
+const GATEWAY_META: Record<GatewayState, { label: string; dot: string; badge: string }> = {
+  connected: {
+    label: 'Aktif',
+    dot: 'bg-emerald-400',
+    badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+  },
+  checking: {
+    label: 'Memeriksa',
+    dot: 'bg-amber-400 animate-pulse',
+    badge: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
+  },
+  disconnected: {
+    label: 'Terputus',
+    dot: 'bg-red-400',
+    badge: 'border-red-400/30 bg-red-400/10 text-red-300',
+  },
+};
+
+/* ──────────────────────────────────────────────────────────────
+   Main component
+   ────────────────────────────────────────────────────────────── */
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [waStatus, setWaStatus] = useState<string>('checking');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [gateway, setGateway] = React.useState<GatewayState>('checking');
+  const [lastChecked, setLastChecked] = React.useState<Date | null>(null);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(false);
 
-  const checkWA = async () => {
-    try {
-      const res = await fetch('/api/whatsapp/status');
-      if (res.ok) {
-        const data = await res.json();
-        const isConnected = Boolean(data?.results?.is_connected || data?.results?.is_logged_in);
-        setWaStatus(isConnected ? 'connected' : 'disconnected');
-      } else {
-        setWaStatus('disconnected');
-      }
-    } catch {
-      setWaStatus('disconnected');
+  const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
+
+  /* Restore sidebar collapse and theme preferences */
+  React.useEffect(() => {
+    const stored = window.localStorage.getItem('admin:sidebar-collapsed');
+    if (stored === '1') setCollapsed(true);
+    else if (!stored && window.innerWidth < 1280) setCollapsed(true);
+
+    const storedTheme = window.localStorage.getItem('admin:theme') as 'dark' | 'light' | null;
+    if (storedTheme === 'light' || storedTheme === 'dark') {
+      setTheme(storedTheme);
     }
-  };
-
-  useEffect(() => {
-    checkWA();
-    const interval = setInterval(checkWA, 15000); // Poll status every 15s
-    return () => clearInterval(interval);
   }, []);
 
-  // Prevent background scroll when sidebar is open on mobile
-  useEffect(() => {
-    if (sidebarOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+  const toggleTheme = React.useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      window.localStorage.setItem('admin:theme', next);
+      return next;
+    });
+  }, []);
+
+  const toggleCollapsed = React.useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem('admin:sidebar-collapsed', next ? '1' : '0');
+      return next;
+    });
+  }, []);
+
+  /* Gateway health check */
+  const checkGateway = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/status', { cache: 'no-store' });
+      if (!res.ok) throw new Error('status request failed');
+      const data = await res.json();
+      const connected = Boolean(data?.results?.is_connected || data?.results?.is_logged_in);
+      setGateway(connected ? 'connected' : 'disconnected');
+    } catch {
+      setGateway('disconnected');
+    } finally {
+      setLastChecked(new Date());
     }
+  }, []);
+
+  React.useEffect(() => {
+    void checkGateway();
+    const id = window.setInterval(() => void checkGateway(), 15_000);
+    return () => window.clearInterval(id);
+  }, [checkGateway]);
+
+  /* Mobile: lock scroll + close on route change */
+  React.useEffect(() => {
+    document.body.style.overflow = mobileOpen ? 'hidden' : '';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [sidebarOpen]);
+  }, [mobileOpen]);
 
-  const handleLogout = async () => {
+  React.useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  /* Logout */
+  const handleLogout = React.useCallback(async () => {
     try {
       await fetch('/api/logout', { method: 'POST' });
     } finally {
       window.location.href = '/login';
     }
+  }, []);
+
+  /* Active item helpers: exact match or strict subpath match (e.g. /admin/campaign/123, NOT /admin/campaigns) */
+  const isActive = (item: NavItem) => {
+    if (item.exact) return pathname === item.href;
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
   };
 
-  const navItems = [
-    { label: 'Overview', href: '/admin', icon: '📊', exact: true },
-    { label: 'Data Pegawai', href: '/admin/pegawai', icon: '👥' },
-    { label: 'Broadcast WhatsApp', href: '/admin/campaign', icon: '📢' },
-    { label: 'Tracking Status', href: '/admin/tracking', icon: '📊' },
-    { label: 'Kampanye', href: '/admin/campaigns', icon: '📋' },
-    { label: 'Template Pesan', href: '/admin/templates', icon: '📝' },
-    { label: 'WhatsApp Gateway', href: '/admin/whatsapp', icon: '📱' },
-    { label: 'Manajemen Admin', href: '/admin/admins', icon: '👤' },
-    { label: 'Audit Log', href: '/admin/audit', icon: '📋' },
-  ];
+  const activeItem = React.useMemo(
+    () => NAV_SECTIONS.flatMap((s) => s.items).find(isActive) ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pathname],
+  );
 
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0f172a', color: '#e2e8f0', fontFamily: '"Segoe UI", system-ui, sans-serif' }}>
-      <style>{`
-        * { box-sizing: border-box; }
-        
-        .sidebar {
-          width: 260px;
-          background: #1e293b;
-          border-right: 1px solid #334155;
-          display: flex;
-          flex-direction: column;
-          position: fixed;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          z-index: 60;
-          transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+  const meta = GATEWAY_META[gateway];
 
-        .sidebar-backdrop {
-          display: none;
-          position: fixed;
-          inset: 0;
-          background: rgba(15, 23, 42, 0.75);
-          backdrop-filter: blur(3px);
-          -webkit-backdrop-filter: blur(3px);
-          z-index: 55;
-          opacity: 0;
-          transition: opacity 0.25s ease;
-          pointer-events: none;
-        }
-
-        @media (max-width: 900px) {
-          .sidebar {
-            transform: translateX(-100%);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-          }
-          .sidebar.open {
-            transform: translateX(0);
-          }
-          .sidebar-backdrop.active {
-            display: block;
-            opacity: 1;
-            pointer-events: auto;
-          }
-          .main-content {
-            margin-left: 0 !important;
-          }
-          .top-bar-mobile {
-            display: flex !important;
-          }
-        }
-
-        .main-content {
-          flex: 1;
-          margin-left: 260px;
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          background: #0f172a;
-          width: 100%;
-          max-width: 100%;
-          overflow-x: hidden;
-        }
-
-        .admin-page-container {
-          padding: 16px 14px;
-          flex: 1;
-          width: 100%;
-          max-width: 100%;
-          overflow-x: hidden;
-        }
-        @media (min-width: 640px) {
-          .admin-page-container {
-            padding: 22px 20px;
-          }
-        }
-        @media (min-width: 1024px) {
-          .admin-page-container {
-            padding: 28px 32px;
-          }
-        }
-
-        .nav-link {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 11px 16px;
-          border-radius: 8px;
-          color: #94a3b8;
-          text-decoration: none;
-          font-size: 14px;
-          font-weight: 500;
-          transition: all 0.15s;
-          margin-bottom: 4px;
-          min-height: 42px;
-        }
-        .nav-link:hover {
-          background: #334155;
-          color: #f8fafc;
-        }
-        .nav-link.active {
-          background: #0078d4;
-          color: #ffffff;
-          font-weight: 600;
-          box-shadow: 0 4px 12px rgba(0,120,212,0.3);
-        }
-
-        .wa-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 4px 8px;
-          border-radius: 9999px;
-          font-size: 11px;
-          font-weight: 600;
-        }
-        .wa-connected {
-          background: rgba(34, 197, 94, 0.15);
-          color: #4ade80;
-          border: 1px solid rgba(34, 197, 94, 0.3);
-        }
-        .wa-disconnected {
-          background: rgba(239, 68, 68, 0.15);
-          color: #f87171;
-          border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-        .wa-checking {
-          background: rgba(234, 179, 8, 0.15);
-          color: #facc15;
-          border: 1px solid rgba(234, 179, 8, 0.3);
-        }
-
-        .top-bar-mobile {
-          display: none;
-          height: 60px;
-          background: #1e293b;
-          border-bottom: 1px solid #334155;
-          padding: 0 16px;
-          align-items: center;
-          justify-content: space-between;
-          position: sticky;
-          top: 0;
-          z-index: 40;
-        }
-        .btn-hamburger {
-          background: #334155;
-          border: 1px solid #475569;
-          color: #f8fafc;
-          padding: 8px 14px;
-          border-radius: 6px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          font-family: inherit;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          min-height: 38px;
-        }
-        .btn-hamburger:hover {
-          background: #475569;
-        }
-      `}</style>
-
-      {/* Backdrop overlay for mobile drawer */}
+  /* ── Sidebar body (shared between desktop & mobile drawer) ── */
+  const sidebarBody = (
+    <div className="flex h-full w-full flex-col">
+      {/* Brand header */}
       <div
-        className={`sidebar-backdrop ${sidebarOpen ? 'active' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-        aria-hidden="true"
-      />
-
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        {/* Brand */}
-        <div style={{ padding: '22px 20px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'linear-gradient(135deg, #0078d4, #004578)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', boxShadow: '0 2px 8px rgba(0,120,212,0.4)' }}>
-              🏢
-            </div>
-            <div>
-              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#f8fafc', lineHeight: 1.2 }}>Portal Pegawai</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', letterSpacing: '0.5px' }}>ADMIN CONSOLE</div>
-            </div>
-          </div>
-          {/* Close button on mobile */}
-          <button
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Tutup Menu"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              fontSize: '20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '6px',
-            }}
-          >
-            ✕
-          </button>
+        className={cn(
+          'flex h-14 shrink-0 items-center gap-3 border-b border-border px-4',
+          collapsed && 'lg:justify-center lg:px-2',
+        )}
+      >
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 shadow-lg ring-1 ring-border">
+          <Building2 className="size-[18px] text-emerald-400" aria-hidden="true" />
         </div>
 
-        {/* Navigation */}
-        <nav style={{ flex: 1, padding: '16px 12px', overflowY: 'auto' }}>
-          <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 600, padding: '0 8px 8px 8px', letterSpacing: '0.5px' }}>
-            Menu Utama
-          </div>
-          {navItems.map((item) => {
-            const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`nav-link ${isActive ? 'active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <span style={{ fontSize: '16px' }}>{item.icon}</span>
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        <div className={cn('min-w-0 flex-1', collapsed && 'lg:hidden')}>
+          <p className="truncate text-[13px] font-semibold text-foreground">Portal Pegawai</p>
+          <p className="truncate text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+            Admin Console
+          </p>
+        </div>
 
-          <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 600, padding: '24px 8px 8px 8px', letterSpacing: '0.5px' }}>
-            Akses Eksternal
-          </div>
-          <a
-            href="/"
-            target="_blank"
-            rel="noreferrer"
-            className="nav-link"
-          >
-            <span style={{ fontSize: '16px' }}>🌐</span>
-            <span>Buka Form Publik ↗</span>
-          </a>
-          <a
-            href="/api/export.csv"
-            className="nav-link"
-            download
-          >
-            <span style={{ fontSize: '16px' }}>📥</span>
-            <span>Export CSV Pegawai</span>
-          </a>
-        </nav>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-muted-foreground hover:text-foreground lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Tutup menu navigasi"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </Button>
+      </div>
 
-        {/* WA Gateway Status in Sidebar */}
-        <div style={{ padding: '14px 16px', background: '#0f172a', borderTop: '1px solid #334155' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>WhatsApp Gateway</span>
-            <span
-              className={`wa-badge ${
-                waStatus === 'connected'
-                  ? 'wa-connected'
-                  : waStatus === 'checking'
-                  ? 'wa-checking'
-                  : 'wa-disconnected'
-              }`}
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Navigasi utama">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.title} className="mb-4 last:mb-0">
+            <p
+              className={cn(
+                'mb-1 px-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase',
+                collapsed && 'lg:hidden',
+              )}
             >
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }}></span>
-              {waStatus === 'connected' ? 'Aktif' : waStatus === 'checking' ? 'Cek...' : 'Terputus'}
+              {section.title}
+            </p>
+
+            <ul className="space-y-0.5" role="list">
+              {section.items.map((item) => {
+                const active = isActive(item);
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        'relative flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
+                        'text-[13px] font-medium transition-colors duration-150',
+                        collapsed && 'lg:justify-center lg:px-0',
+                        active
+                          ? 'nav-item-active text-emerald-500 font-semibold dark:text-emerald-400'
+                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          'size-4 shrink-0 transition-colors duration-150',
+                          active
+                            ? 'text-emerald-500 dark:text-emerald-400'
+                            : 'text-muted-foreground group-hover:text-foreground',
+                        )}
+                        aria-hidden="true"
+                      />
+                      <span className={cn('truncate', collapsed && 'lg:hidden')}>
+                        {item.label}
+                      </span>
+                      {active && !collapsed && (
+                        <ChevronRight
+                          className="ml-auto size-3.5 shrink-0 text-emerald-500/50"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+
+        {/* Quick access */}
+        <div>
+          <p
+            className={cn(
+              'mb-1 px-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase',
+              collapsed && 'lg:hidden',
+            )}
+          >
+            Akses Cepat
+          </p>
+          <ul className="space-y-0.5" role="list">
+            <li>
+              <a
+                href="/"
+                target="_blank"
+                rel="noreferrer"
+                title={collapsed ? 'Buka Form Publik' : undefined}
+                className={cn(
+                  'flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
+                  'text-[13px] font-medium text-muted-foreground',
+                  'transition-colors duration-150 hover:bg-muted/60 hover:text-foreground',
+                  collapsed && 'lg:justify-center lg:px-0',
+                )}
+              >
+                <Globe className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className={cn('truncate', collapsed && 'lg:hidden')}>Form Publik</span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="/api/export.csv"
+                download
+                title={collapsed ? 'Export CSV Pegawai' : undefined}
+                className={cn(
+                  'flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
+                  'text-[13px] font-medium text-muted-foreground',
+                  'transition-colors duration-150 hover:bg-muted/60 hover:text-foreground',
+                  collapsed && 'lg:justify-center lg:px-0',
+                )}
+              >
+                <Download className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className={cn('truncate', collapsed && 'lg:hidden')}>Export CSV</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      {/* Gateway status */}
+      <div
+        className={cn(
+          'shrink-0 border-t border-border px-2 py-2',
+        )}
+      >
+        <div
+          className={cn(
+            'rounded-xl px-3 py-2.5',
+            collapsed
+              ? 'lg:flex lg:justify-center lg:rounded-lg lg:bg-transparent lg:px-0 lg:py-1'
+              : 'bg-muted/40 ring-1 ring-border',
+          )}
+          title={`WhatsApp Gateway — ${meta.label}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={cn(
+                'text-[11px] font-medium text-muted-foreground',
+                collapsed && 'lg:hidden',
+              )}
+            >
+              WhatsApp Gateway
             </span>
+            <Badge
+              variant="outline"
+              className={cn('gap-1.5 border px-2 py-0.5 text-[10px] font-semibold', meta.badge)}
+            >
+              <span className={cn('size-1.5 rounded-full', meta.dot)} aria-hidden="true" />
+              <span className={cn(collapsed && 'lg:sr-only')}>{meta.label}</span>
+            </Badge>
           </div>
-          <div style={{ fontSize: '12px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            Device: <code>portal-pegawai</code>
+
+          <div
+            className={cn(
+              'mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground',
+              collapsed && 'lg:hidden',
+            )}
+          >
+            <span className="truncate">
+              Device:{' '}
+              <span className="font-mono text-foreground/80">portal-pegawai</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void checkGateway()}
+              className="cursor-pointer rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Periksa ulang status gateway"
+            >
+              <RefreshCw className="size-3" aria-hidden="true" />
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* User footer */}
+      <div
+        className={cn(
+          'flex shrink-0 items-center gap-3 border-t border-border px-3 py-3',
+          collapsed && 'lg:justify-center',
+        )}
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-bold text-secondary-foreground ring-1 ring-border">
+          AD
         </div>
 
-        {/* User Info & Logout */}
-        <div style={{ padding: '16px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>
-              👤
-            </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>Administrator</div>
-              <div style={{ fontSize: '10px', color: '#10b981' }}>● Online</div>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            title="Logout"
-            style={{ background: '#334155', border: 'none', color: '#ef4444', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', minHeight: '36px' }}
-          >
-            🚪
-          </button>
+        <div className={cn('min-w-0 flex-1', collapsed && 'lg:hidden')}>
+          <p className="truncate text-[13px] font-semibold text-foreground">Administrator</p>
+          <p className="truncate text-[10px] text-muted-foreground">
+            {lastChecked
+              ? `Cek terakhir ${lastChecked.toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`
+              : 'Memeriksa…'}
+          </p>
         </div>
+
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleLogout}
+          title="Keluar"
+          aria-label="Keluar dari sesi admin"
+          className={cn(
+            'shrink-0 text-muted-foreground transition-colors hover:text-destructive',
+            collapsed && 'lg:hidden',
+          )}
+        >
+          <LogOut className="size-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  /* ── Render ── */
+  return (
+    <div className={cn('admin-root min-h-screen', theme)}>
+      {/* Desktop sidebar */}
+      <aside className={cn('admin-sidebar relative', collapsed && 'is-collapsed')}>
+        {sidebarBody}
+
+        {/* Collapse toggle (desktop, pinned at edge) */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Perlebar sidebar' : 'Perkecil sidebar'}
+          className={cn(
+            'absolute -right-3 top-[4.25rem] z-50 hidden',
+            'size-6 cursor-pointer items-center justify-center rounded-full',
+            'border border-border bg-card text-muted-foreground shadow-md',
+            'transition-colors hover:border-foreground/30 hover:bg-muted hover:text-foreground',
+            'lg:flex',
+          )}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-3.5" aria-hidden="true" />
+          ) : (
+            <PanelLeftClose className="size-3.5" aria-hidden="true" />
+          )}
+        </button>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="main-content">
-        {/* Top mobile bar */}
-        <div className="top-bar-mobile">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '20px' }}>🏢</span>
-            <span style={{ fontWeight: 'bold', fontSize: '15px', color: '#f8fafc' }}>Portal Pegawai</span>
-          </div>
-          <button
-            className="btn-hamburger"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle Navigation"
-          >
-            {sidebarOpen ? '✕ Tutup' : '☰ Menu'}
-          </button>
-        </div>
+      {/* Mobile drawer overlay */}
+      <div
+        className={cn(
+          'fixed inset-0 z-50 lg:hidden',
+          mobileOpen ? 'pointer-events-auto' : 'pointer-events-none',
+        )}
+        aria-hidden={!mobileOpen}
+      >
+        {/* Scrim */}
+        <div
+          onClick={() => setMobileOpen(false)}
+          className={cn(
+            'absolute inset-0 bg-black/65 backdrop-blur-sm transition-opacity duration-200',
+            mobileOpen ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+        {/* Drawer panel */}
+        <aside
+          className={cn(
+            'absolute inset-y-0 left-0 flex w-72 flex-col border-r border-border',
+            'bg-card',
+            'transition-transform duration-200 ease-out',
+            mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          )}
+        >
+          {sidebarBody}
+        </aside>
+      </div>
 
-        {/* Page Content */}
-        <main className="admin-page-container">
+      {/* Main content */}
+      <div className="admin-main">
+        {/* Topbar */}
+        <header
+          className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b px-4 backdrop-blur-xl sm:px-6"
+          style={{
+            background: 'var(--header-bg)',
+            borderColor: 'var(--header-border)',
+          }}
+        >
+          {/* Mobile hamburger */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground hover:text-foreground lg:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Buka menu navigasi"
+          >
+            <Menu className="size-5" aria-hidden="true" />
+          </Button>
+
+          {/* Page title */}
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-sm font-semibold text-foreground">
+              {activeItem?.label ?? 'Dashboard Admin'}
+            </h1>
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
+              {activeItem?.description ?? 'Portal Pegawai — Divisi SDM'}
+            </p>
+          </div>
+
+          {/* Gateway badge */}
+          <Badge
+            variant="outline"
+            className={cn(
+              'hidden shrink-0 gap-1.5 border px-2.5 py-1 text-[10px] font-semibold sm:inline-flex',
+              meta.badge,
+            )}
+          >
+            <span className={cn('size-1.5 rounded-full', meta.dot)} aria-hidden="true" />
+            Gateway {meta.label}
+          </Badge>
+
+          {/* Theme toggle */}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
+            title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
+            className="shrink-0 cursor-pointer border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+          >
+            {theme === 'dark' ? (
+              <Sun className="size-3.5 text-amber-400" aria-hidden="true" />
+            ) : (
+              <Moon className="size-3.5 text-slate-700" aria-hidden="true" />
+            )}
+          </Button>
+
+          {/* Refresh */}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => void checkGateway()}
+            aria-label="Periksa ulang status gateway"
+            className="shrink-0 cursor-pointer border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+          >
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+          </Button>
+
+          {/* Mobile logout */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleLogout}
+            aria-label="Keluar dari sesi admin"
+            className="shrink-0 text-muted-foreground hover:text-destructive sm:hidden"
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+          </Button>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
           {children}
         </main>
       </div>

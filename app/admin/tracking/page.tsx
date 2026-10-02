@@ -1,6 +1,39 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
+import {
+  Clock,
+  Download,
+  Eye,
+  FileSpreadsheet,
+  FileText,
+  Pause,
+  Play,
+  RefreshCw,
+  Search,
+  Send,
+  UserCheck,
+  Users,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  Toolbar,
+} from '../components/ui';
 
 interface Recipient {
   id: number;
@@ -33,66 +66,78 @@ interface Campaign {
   readCount: number;
 }
 
-const statusColors: Record<string, string> = {
-  pending: '#facc15',
-  sent: '#38bdf8',
-  delivered: '#38bdf8',
-  read: '#4ade80',
+const REFRESH_MS = 8000;
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'Semua Status' },
+  { value: 'pending', label: 'Menunggu' },
+  { value: 'sent', label: 'Terkirim' },
+  { value: 'delivered', label: 'Diterima' },
+  { value: 'read', label: 'Dibaca' },
+] as const;
+
+const DOT_COLOR: Record<string, string> = {
+  pending: 'var(--color-chart-3)',
+  sent: 'var(--color-chart-2)',
+  delivered: 'var(--color-chart-2)',
+  read: 'var(--color-chart-1)',
 };
 
-const statusLabels: Record<string, string> = {
-  pending: 'Pending',
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Menunggu',
   sent: 'Terkirim',
   delivered: 'Diterima',
   read: 'Dibaca',
 };
 
 export default function TrackingPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
-  const [recipients, setRecipients] = useState<Recipient[]>([]);
-  const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
-  const [history, setHistory] = useState<StatusHistory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = React.useState('all');
+  const [recipients, setRecipients] = React.useState<Recipient[]>([]);
+  const [selectedRecipient, setSelectedRecipient] = React.useState<Recipient | null>(null);
+  const [history, setHistory] = React.useState<StatusHistory[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState<string>('all');
+  const [isLive, setIsLive] = React.useState(true);
+  const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
 
-  const fetchCampaigns = useCallback(async () => {
+  const fetchCampaigns = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/campaigns');
+      const res = await fetch('/api/campaigns', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setCampaigns(data.campaigns || []);
+        setCampaigns(data.campaigns ?? []);
       }
     } catch (err) {
       console.error('Fetch campaigns error:', err);
     }
   }, []);
 
-  const fetchRecipients = useCallback(async () => {
-    setIsLoading(true);
+  const fetchRecipients = React.useCallback(async () => {
     try {
-      const params = selectedCampaign ? `?campaignId=${selectedCampaign}` : '';
-      const res = await fetch(`/api/tracking${params}`);
+      const params = selectedCampaign !== 'all' ? `?campaignId=${selectedCampaign}` : '';
+      const res = await fetch(`/api/tracking${params}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setRecipients(data.recipients || []);
+        setRecipients(data.recipients ?? []);
       }
     } catch (err) {
       console.error('Fetch recipients error:', err);
     } finally {
       setIsLoading(false);
+      setLastUpdated(new Date());
     }
   }, [selectedCampaign]);
 
-  const fetchHistory = useCallback(async (recipientId: number) => {
+  const fetchHistory = React.useCallback(async (recipientId: number) => {
     setIsLoadingHistory(true);
     try {
-      const res = await fetch(`/api/tracking?recipientId=${recipientId}`);
+      const res = await fetch(`/api/tracking?recipientId=${recipientId}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setHistory(data.history || []);
+        setHistory(data.history ?? []);
         setSelectedRecipient(data.recipient);
       }
     } catch (err) {
@@ -102,226 +147,289 @@ export default function TrackingPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchCampaigns();
+  React.useEffect(() => {
+    void fetchCampaigns();
   }, [fetchCampaigns]);
 
-  useEffect(() => {
-    fetchRecipients();
-    const interval = setInterval(fetchRecipients, 8000);
-    return () => clearInterval(interval);
+  React.useEffect(() => {
+    setIsLoading(true);
+    void fetchRecipients();
   }, [fetchRecipients]);
 
-  const filteredRecipients = recipients.filter((r) => {
-    if (statusFilter !== 'all' && r.waStatus !== statusFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+  // Auto-refresh loop — pausable for keyboard/accessibility control
+  React.useEffect(() => {
+    if (!isLive) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchRecipients();
+    }, REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [isLive, fetchRecipients]);
+
+  // Stop work while tab is hidden
+  React.useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void fetchRecipients();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [fetchRecipients]);
+
+  const filteredRecipients = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return recipients.filter((r) => {
+      if (statusFilter !== 'all' && r.waStatus !== statusFilter) return false;
+      if (!q) return true;
       return (
         r.label.toLowerCase().includes(q) ||
-        (r.phone || '').toLowerCase().includes(q) ||
-        (r.cabang || '').toLowerCase().includes(q)
+        (r.phone ?? '').toLowerCase().includes(q) ||
+        (r.cabang ?? '').toLowerCase().includes(q)
       );
-    }
-    return true;
-  });
+    });
+  }, [recipients, searchQuery, statusFilter]);
 
-  const stats = {
-    total: recipients.length,
-    pending: recipients.filter((r) => r.waStatus === 'pending' || !r.waStatus).length,
-    sent: recipients.filter((r) => r.waStatus === 'sent' || r.waStatus === 'delivered').length,
-    read: recipients.filter((r) => r.waStatus === 'read').length,
-    submitted: recipients.filter((r) => r.isSubmitted).length,
-  };
+  const stats = React.useMemo(
+    () => ({
+      total: recipients.length,
+      pending: recipients.filter((r) => !r.waStatus || r.waStatus === 'pending').length,
+      sent: recipients.filter((r) => r.waStatus === 'sent' || r.waStatus === 'delivered').length,
+      read: recipients.filter((r) => r.waStatus === 'read').length,
+      submitted: recipients.filter((r) => r.isSubmitted).length,
+    }),
+    [recipients],
+  );
+
+  const exportParams = React.useMemo(() => {
+    const p = new URLSearchParams();
+    if (selectedCampaign !== 'all') p.set('campaignId', selectedCampaign);
+    return p;
+  }, [selectedCampaign]);
 
   return (
-    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#f8fafc' }}>
-            📊 Tracking Status Pengiriman
-          </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Pantau status pengiriman WhatsApp secara real-time per kampanye dan per penerima.
+    <div className="mx-auto max-w-[1400px]">
+      <PageHeader
+        title="Tracking Status Pengiriman"
+        description="Pantau status pengiriman WhatsApp per kampanye dan per penerima."
+        actions={
+          <>
+            <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+              <SelectTrigger className="w-full sm:w-56" aria-label="Filter kampanye">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kampanye</SelectItem>
+                {campaigns.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button asChild variant="outline">
+              <a href={`/api/export?${exportParams.toString()}`} target="_blank" rel="noreferrer">
+                <FileSpreadsheet aria-hidden="true" />
+                Excel
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <a
+                href={`/api/export?${new URLSearchParams([...exportParams, ['format', 'csv']]).toString()}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <FileText aria-hidden="true" />
+                CSV
+              </a>
+            </Button>
+            <Button onClick={() => void fetchRecipients()}>
+              <RefreshCw aria-hidden="true" />
+              Refresh
+            </Button>
+          </>
+        }
+      />
+
+      {/* Metrics */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+        <MetricCard label="Total Penerima" value={stats.total} icon={Users} loading={isLoading} />
+        <MetricCard label="Menunggu" value={stats.pending} icon={Clock} loading={isLoading} />
+        <MetricCard label="Terkirim" value={stats.sent} icon={Send} loading={isLoading} />
+        <MetricCard label="Dibaca" value={stats.read} icon={Eye} loading={isLoading} />
+        <MetricCard label="Sudah Isi Form" value={stats.submitted} icon={UserCheck} loading={isLoading} />
+      </div>
+
+      {/* Filters + live controls */}
+      <Toolbar>
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1 sm:max-w-sm">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari nama, nomor, atau cabang…"
+              className="pl-9"
+              aria-label="Cari penerima"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="sm:w-48" aria-label="Filter status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTERS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button
+            variant={isLive ? 'outline' : 'secondary'}
+            size="sm"
+            onClick={() => setIsLive((v) => !v)}
+            aria-pressed={isLive}
+            aria-label={isLive ? 'Jeda pembaruan otomatis' : 'Lanjutkan pembaruan otomatis'}
+          >
+            {isLive ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            {isLive ? 'Jeda' : 'Lanjut'}
+          </Button>
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span
+              className={
+                isLive ? 'size-1.5 rounded-full bg-accent animate-pulse' : 'size-1.5 rounded-full bg-muted-foreground'
+              }
+              aria-hidden="true"
+            />
+            {isLive ? 'Live' : 'Dijeda'}
+            {lastUpdated ? ` · ${lastUpdated.toLocaleTimeString('id-ID')}` : ''}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <select
-            value={selectedCampaign}
-            onChange={(e) => setSelectedCampaign(e.target.value)}
-            style={{ padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-          >
-            <option value="">Semua Kampanye</option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => {
-                const params = selectedCampaign ? `?campaignId=${selectedCampaign}` : '';
-                window.open(`/api/export${params}`, '_blank');
-              }}
-              style={{ background: '#0f766e', border: 'none', color: '#f8fafc', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-            >
-              📥 Export Excel
-            </button>
-            <button
-              onClick={() => {
-                const params = selectedCampaign ? `?campaignId=${selectedCampaign}&format=csv` : '?format=csv';
-                window.open(`/api/export${params}`, '_blank');
-              }}
-              style={{ background: '#334155', border: 'none', color: '#f8fafc', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-            >
-              📄 Export CSV
-            </button>
-            <button
-              onClick={fetchRecipients}
-              style={{ background: '#334155', border: 'none', color: '#f8fafc', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-            >
-              🔄 Refresh
-            </button>
-          </div>
-        </div>
-      </div>
+      </Toolbar>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: '14px', marginBottom: '24px' }}>
-        {[
-          { label: 'Total Penerima', value: stats.total, color: '#f8fafc' },
-          { label: 'Pending', value: stats.pending, color: '#facc15' },
-          { label: 'Terkirim', value: stats.sent, color: '#38bdf8' },
-          { label: 'Dibaca', value: stats.read, color: '#4ade80' },
-          { label: 'Sudah Isi Form', value: stats.submitted, color: '#34d399' },
-        ].map((s) => (
-          <div key={s.label} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '16px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>{s.label}</div>
-            <div style={{ fontSize: '26px', fontWeight: 700, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder="Cari nama, nomor, atau cabang..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ padding: '8px 14px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px', minWidth: '220px' }}
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+      {/* List + timeline */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <SectionCard
+          title={`Daftar Penerima (${filteredRecipients.length})`}
+          description="Klik penerima untuk melihat timeline status"
+          bodyClassName="p-0 sm:p-0"
         >
-          <option value="all">Semua Status</option>
-          <option value="pending">Pending</option>
-          <option value="sent">Terkirim</option>
-          <option value="delivered">Diterima</option>
-          <option value="read">Dibaca</option>
-        </select>
-      </div>
+          {isLoading ? (
+            <div className="space-y-2 p-4" aria-busy="true">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          ) : filteredRecipients.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Tidak ada penerima"
+              description={
+                searchQuery || statusFilter !== 'all'
+                  ? 'Coba ubah pencarian atau filter status.'
+                  : 'Belum ada penerima pada kampanye ini.'
+              }
+            />
+          ) : (
+            <ul className="max-h-[560px] divide-y divide-border/50 overflow-y-auto">
+              {filteredRecipients.map((r) => {
+                const active = selectedRecipient?.id === r.id;
+                return (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      onClick={() => void fetchHistory(r.id)}
+                      aria-current={active ? 'true' : undefined}
+                      className={`flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 ${
+                        active ? 'bg-accent/10' : 'hover:bg-secondary/50'
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-foreground">
+                          {r.label}
+                        </span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {r.cabang || '-'} · {r.phone || 'No WA'}
+                        </span>
+                      </span>
+                      <StatusBadge status={r.waStatus} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </SectionCard>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: '20px' }}>
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid #334155', fontWeight: 600, color: '#f8fafc', fontSize: '14px' }}>
-            Daftar Penerima ({filteredRecipients.length})
-          </div>
-          <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            {isLoading ? (
-              <div style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>Memuat data...</div>
-            ) : filteredRecipients.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>Tidak ada penerima.</div>
-            ) : (
-              filteredRecipients.map((r) => (
-                <div
-                  key={r.id}
-                  onClick={() => fetchHistory(r.id)}
-                  style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid #334155',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#334155')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '13px' }}>{r.label}</div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>
-                      {r.cabang || '-'} • {r.phone || 'No WA'}
-                    </div>
-                  </div>
+        <SectionCard
+          title="Timeline Status"
+          description={
+            selectedRecipient
+              ? selectedRecipient.label
+              : 'Riwayat perubahan status pengiriman'
+          }
+        >
+          {isLoadingHistory ? (
+            <div className="space-y-3" aria-busy="true">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : !selectedRecipient ? (
+            <EmptyState
+              icon={Clock}
+              title="Belum ada penerima dipilih"
+              description="Pilih salah satu penerima dari daftar untuk melihat riwayat status pengirimannya."
+            />
+          ) : history.length === 0 ? (
+            <EmptyState
+              icon={Clock}
+              title="Belum ada riwayat"
+              description="Penerima ini belum memiliki perubahan status tercatat."
+            />
+          ) : (
+            <ol className="relative max-h-[520px] space-y-5 overflow-y-auto pl-6">
+              <span
+                className="absolute top-1 bottom-1 left-2 w-0.5 bg-border"
+                aria-hidden="true"
+              />
+              {history.map((h) => (
+                <li key={h.id} className="relative">
                   <span
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      background: `${statusColors[r.waStatus] || '#94a3b8'}22`,
-                      color: statusColors[r.waStatus] || '#94a3b8',
-                      border: `1px solid ${statusColors[r.waStatus] || '#94a3b8'}44`,
-                    }}
+                    className="absolute top-1.5 -left-[18px] size-3 rounded-full border-2 border-card"
+                    style={{ background: DOT_COLOR[h.status] ?? 'var(--color-muted-foreground)' }}
+                    aria-hidden="true"
+                  />
+                  <p
+                    className="text-sm font-semibold"
+                    style={{ color: DOT_COLOR[h.status] ?? 'var(--color-foreground)' }}
                   >
-                    {statusLabels[r.waStatus] || r.waStatus}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid #334155', fontWeight: 600, color: '#f8fafc', fontSize: '14px' }}>
-            Timeline Status {selectedRecipient ? `- ${selectedRecipient.label}` : ''}
-          </div>
-          <div style={{ padding: '16px', maxHeight: '600px', overflowY: 'auto' }}>
-            {isLoadingHistory ? (
-              <div style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>Memuat timeline...</div>
-            ) : !selectedRecipient ? (
-              <div style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
-                Klik penerima di sebelah kiri untuk melihat timeline status.
-              </div>
-            ) : history.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
-                Belum ada riwayat status untuk penerima ini.
-              </div>
-            ) : (
-              <div style={{ position: 'relative', paddingLeft: '24px' }}>
-                <div style={{ position: 'absolute', left: '8px', top: 0, bottom: 0, width: '2px', background: '#334155' }} />
-                {history.map((h, i) => (
-                  <div key={h.id} style={{ position: 'relative', marginBottom: '20px' }}>
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: '-20px',
-                        top: '4px',
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        background: statusColors[h.status] || '#94a3b8',
-                        border: '2px solid #1e293b',
-                      }}
-                    />
-                    <div style={{ fontWeight: 600, color: statusColors[h.status] || '#94a3b8', fontSize: '13px' }}>
-                      {statusLabels[h.status] || h.status}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                      {new Date(h.createdAt).toLocaleString('id-ID')}
-                    </div>
-                    {h.messageId && (
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace', marginTop: '2px' }}>
-                        ID: {h.messageId}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                    {STATUS_LABEL[h.status] ?? h.status}
+                  </p>
+                  <p className="tabular mt-0.5 text-[11px] text-muted-foreground">
+                    {new Date(h.createdAt).toLocaleString('id-ID')}
+                  </p>
+                  {h.messageId ? (
+                    <p className="tabular mt-1 truncate text-[11px] text-muted-foreground/80">
+                      ID: {h.messageId}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          )}
+        </SectionCard>
       </div>
+
+      <p className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground">
+        <Download className="size-3" aria-hidden="true" />
+        Export mengikuti filter kampanye yang dipilih
+      </p>
     </div>
   );
 }

@@ -1,5 +1,20 @@
 import type { Metadata, Viewport } from 'next';
+import { Fira_Code, Fira_Sans } from 'next/font/google';
 import './portal.css';
+
+const firaSans = Fira_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-fira-sans',
+  display: 'swap',
+});
+
+const firaCode = Fira_Code({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-fira-code',
+  display: 'swap',
+});
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -22,7 +37,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body style={{ margin: 0, padding: 0, minHeight: '100vh', background: '#0f172a' }}>
+      <body className={`${firaSans.variable} ${firaCode.variable}`} style={{ margin: 0, padding: 0, minHeight: '100vh', background: '#0f172a' }}>
         {children}
       </body>
     </html>

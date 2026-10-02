@@ -1,6 +1,21 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
+import { FileText, Pencil, Plus, Trash2, X } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, PageHeader } from '../components/ui';
 
 interface Template {
   id: number;
@@ -13,23 +28,23 @@ interface Template {
 }
 
 export default function TemplatesPage() {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<Template | null>(null);
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('umum');
-  const [body, setBody] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [templates, setTemplates] = React.useState<Template[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [open, setOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<Template | null>(null);
+  const [name, setName] = React.useState('');
+  const [category, setCategory] = React.useState('umum');
+  const [body, setBody] = React.useState('');
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
-  const fetchTemplates = useCallback(async () => {
+  const fetchTemplates = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/templates');
+      const res = await fetch('/api/templates', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setTemplates(data.templates || []);
+        setTemplates(data.templates ?? []);
       }
     } catch (err) {
       console.error('Fetch templates error:', err);
@@ -38,8 +53,8 @@ export default function TemplatesPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchTemplates();
+  React.useEffect(() => {
+    void fetchTemplates();
   }, [fetchTemplates]);
 
   const openNew = () => {
@@ -47,7 +62,7 @@ export default function TemplatesPage() {
     setName('');
     setCategory('umum');
     setBody('');
-    setShowModal(true);
+    setOpen(true);
   };
 
   const openEdit = (t: Template) => {
@@ -55,189 +70,201 @@ export default function TemplatesPage() {
     setName(t.name);
     setCategory(t.category);
     setBody(t.body);
-    setShowModal(true);
+    setOpen(true);
   };
 
   const handleSave = async () => {
     if (!name.trim() || !body.trim()) {
-      alert('Nama dan isi template wajib diisi.');
+      setNotice({ tone: 'err', text: 'Nama dan isi template wajib diisi.' });
       return;
     }
     setIsSaving(true);
     try {
-      const url = editing ? '/api/templates' : '/api/templates';
-      const method = editing ? 'PUT' : 'POST';
-      const payload = editing
-        ? { id: editing.id, name, category, body }
-        : { name, category, body };
-
-      const res = await fetch(url, {
-        method,
+      const res = await fetch('/api/templates', {
+        method: editing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(editing ? { id: editing.id, name, category, body } : { name, category, body }),
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(`Template "${name}" berhasil disimpan.`);
-        setShowModal(false);
-        fetchTemplates();
+        setNotice({ tone: 'ok', text: `Template "${name}" berhasil disimpan.` });
+        setOpen(false);
+        void fetchTemplates();
       } else {
-        alert(data.error || 'Gagal menyimpan template.');
+        setNotice({ tone: 'err', text: data.error || 'Gagal menyimpan template.' });
       }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
+    } catch (err) {
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Hapus template "${name}"?`)) return;
+  const handleDelete = async (id: number, templateName: string) => {
+    if (!window.confirm(`Hapus template "${templateName}"?`)) return;
     try {
       const res = await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setMessage(`Template "${name}" berhasil dihapus.`);
-        fetchTemplates();
+        setNotice({ tone: 'ok', text: `Template "${templateName}" berhasil dihapus.` });
+        void fetchTemplates();
       } else {
-        alert('Gagal menghapus template.');
+        setNotice({ tone: 'err', text: 'Gagal menghapus template.' });
       }
     } catch {
-      alert('Terjadi kesalahan saat menghapus.');
+      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
     }
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#f8fafc' }}>
-            📝 Template Pesan WhatsApp
-          </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Kelola library template pesan yang dapat digunakan ulang untuk broadcast dan kampanye.
-          </p>
-        </div>
-        <button
-          onClick={openNew}
-          style={{ background: '#0078d4', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-        >
-          ➕ Template Baru
-        </button>
-      </div>
+    <div className="mx-auto max-w-[1200px]">
+      <PageHeader
+        title="Template Pesan WhatsApp"
+        description="Kelola pustaka template pesan yang dapat dipakai ulang untuk broadcast dan kampanye."
+        actions={
+          <Button onClick={openNew}>
+            <Plus aria-hidden="true" />
+            Template Baru
+          </Button>
+        }
+      />
 
-      {message && (
-        <div style={{ padding: '12px 16px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', color: '#38bdf8', fontSize: '13px', marginBottom: '20px' }}>
-          {message}
+      {notice ? (
+        <div
+          role="status"
+          className={`mb-4 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+            notice.tone === 'ok'
+              ? 'border-chart-2/30 bg-chart-2/10 text-chart-2'
+              : 'border-destructive/30 bg-destructive/10 text-destructive'
+          }`}
+        >
+          <span className="flex-1">{notice.text}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="cursor-pointer opacity-70 hover:opacity-100"
+            aria-label="Tutup pesan"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
         </div>
-      )}
+      ) : null}
 
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Memuat template...</div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-56 w-full" />
+          ))}
+        </div>
       ) : templates.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b', background: '#1e293b', borderRadius: '10px', border: '1px solid #334155' }}>
-          Belum ada template. Klik "Template Baru" untuk membuat.
+        <div className="glass rounded-xl">
+          <EmptyState
+            icon={FileText}
+            title="Belum ada template"
+            description="Buat template pesan pertama agar dapat dipakai ulang di seluruh kampanye."
+            action={{ label: 'Template Baru', onClick: openNew }}
+          />
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))', gap: '16px' }}>
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {templates.map((t) => (
-            <div key={t.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '15px' }}>{t.name}</div>
-                  <span style={{ display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+            <li key={t.id} className="glass flex flex-col rounded-xl p-4">
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold text-foreground">{t.name}</h3>
+                  <span className="mt-1 inline-block rounded border border-chart-2/30 bg-chart-2/10 px-1.5 py-0.5 text-[10px] font-medium text-chart-2">
                     {t.category}
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
+                <div className="flex shrink-0 gap-0.5">
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
                     onClick={() => openEdit(t)}
-                    style={{ background: '#334155', border: 'none', color: '#cbd5e1', padding: '6px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}
+                    aria-label={`Edit template ${t.name}`}
                   >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => handleDelete(t.id, t.name)}
-                    style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', padding: '6px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}
+                    <Pencil aria-hidden="true" />
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => void handleDelete(t.id, t.name)}
+                    aria-label={`Hapus template ${t.name}`}
+                    className="text-muted-foreground hover:text-destructive"
                   >
-                    🗑️
-                  </button>
+                    <Trash2 aria-hidden="true" />
+                  </Button>
                 </div>
               </div>
-              <div style={{ background: '#0f172a', borderRadius: '6px', padding: '12px', fontSize: '12px', color: '#94a3b8', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+
+              <div className="tabular mb-3 max-h-28 flex-1 overflow-y-auto rounded-lg bg-background/50 p-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
                 {t.body}
               </div>
-              <div style={{ marginTop: '10px', fontSize: '11px', color: '#64748b' }}>
-                Diupdate: {new Date(t.updatedAt).toLocaleString('id-ID')}
-              </div>
-            </div>
+
+              <p className="tabular text-[11px] text-muted-foreground/80">
+                Diupdate {new Date(t.updatedAt).toLocaleString('id-ID')}
+              </p>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>
-                {editing ? 'Edit Template' : 'Template Baru'}
-              </h2>
-              <button onClick={() => setShowModal(false)} style={{ background: '#334155', border: 'none', color: '#cbd5e1', borderRadius: '6px', width: '32px', height: '32px', cursor: 'pointer', fontSize: '16px' }}>✕</button>
-            </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="glass-strong sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {editing ? 'Edit Template' : 'Template Baru'}
+            </DialogTitle>
+            <DialogDescription>
+              Gunakan tag <code className="tabular">{'{nama}'}</code>,{' '}
+              <code className="tabular">{'{link}'}</code>, dan spintax{' '}
+              <code className="tabular">{'{opsi1|opsi2}'}</code>.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>Nama Template</label>
-              <input
-                type="text"
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-name">Nama Template</Label>
+              <Input
+                id="tpl-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Contoh: Pengkinian Data Q4 2026"
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+                placeholder="Contoh: Pemutakhiran Data Q4 2026"
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>Kategori</label>
-              <input
-                type="text"
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-category">Kategori</Label>
+              <Input
+                id="tpl-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="Contoh: pengkinian, umum, pelatihan"
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+                placeholder="Contoh: pemutakhiran, umum, pelatihan"
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>Isi Template</label>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-body">Isi Template</Label>
               <textarea
+                id="tpl-body"
                 rows={8}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder="Gunakan {nama} untuk nama pegawai dan {link} untuk link portal. Spintax: {opsi1|opsi2}"
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', lineHeight: '1.5' }}
+                placeholder="Assalamualaikum {nama}, silakan perbarui data Anda melalui {link}."
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed resize-vertical outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
-              <div style={{ marginTop: '6px', fontSize: '11px', color: '#64748b' }}>
-                Tag: {'{nama}'} = nama pegawai, {'{link}'} = link portal, {'{opsi1|opsi2}'} = spintax acak
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                style={{ background: '#0078d4', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {isSaving ? 'Menyimpan...' : 'Simpan Template'}
-              </button>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{ background: '#334155', color: '#cbd5e1', border: 'none', padding: '10px 16px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
-              >
-                Batal
-              </button>
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={isSaving}>
+              {isSaving ? 'Menyimpan…' : 'Simpan Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

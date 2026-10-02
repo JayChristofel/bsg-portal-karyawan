@@ -1,6 +1,36 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  ClipboardList,
+  Eye,
+  Megaphone,
+  RefreshCw,
+  Send,
+  TrendingUp,
+  UserCheck,
+  Users,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+} from './components/ui';
 
 interface CampaignStats {
   id: number;
@@ -19,27 +49,33 @@ interface PegawaiStats {
 }
 
 export default function DashboardPage() {
-  const [campaigns, setCampaigns] = useState<CampaignStats[]>([]);
-  const [pegawaiStats, setPegawaiStats] = useState<PegawaiStats>({ total: 0, submitted: 0, notSubmitted: 0 });
-  const [isLoading, setIsLoading] = useState(true);
+  const [campaigns, setCampaigns] = React.useState<CampaignStats[]>([]);
+  const [pegawaiStats, setPegawaiStats] = React.useState<PegawaiStats>({
+    total: 0,
+    submitted: 0,
+    notSubmitted: 0,
+  });
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = React.useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const [campaignsRes, pegawaiRes] = await Promise.all([
-        fetch('/api/campaigns'),
-        fetch('/api/recipients'),
+        fetch('/api/campaigns', { cache: 'no-store' }),
+        fetch('/api/recipients', { cache: 'no-store' }),
       ]);
 
       if (campaignsRes.ok) {
         const data = await campaignsRes.json();
-        setCampaigns(data.campaigns || []);
+        setCampaigns(data.campaigns ?? []);
       }
 
       if (pegawaiRes.ok) {
         const data = await pegawaiRes.json();
-        const recipients = data.recipients || [];
-        const submitted = recipients.filter((r: any) => r.isSubmitted).length;
+        const recipients = data.recipients ?? [];
+        const submitted = recipients.filter((r: { isSubmitted?: boolean }) => r.isSubmitted).length;
         setPegawaiStats({
           total: recipients.length,
           submitted,
@@ -48,193 +84,253 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
+      setError('Gagal memuat data dashboard. Periksa koneksi lalu coba lagi.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
+  React.useEffect(() => {
+    void fetchData();
   }, [fetchData]);
 
   const totalRecipients = campaigns.reduce((sum, c) => sum + c.totalRecipients, 0);
   const totalSent = campaigns.reduce((sum, c) => sum + c.sentCount, 0);
   const totalRead = campaigns.reduce((sum, c) => sum + c.readCount, 0);
   const overallReadRate = totalRecipients > 0 ? Math.round((totalRead / totalRecipients) * 100) : 0;
-  const overallSubmitRate = pegawaiStats.total > 0 ? Math.round((pegawaiStats.submitted / pegawaiStats.total) * 100) : 0;
+  const overallSubmitRate =
+    pegawaiStats.total > 0 ? Math.round((pegawaiStats.submitted / pegawaiStats.total) * 100) : 0;
 
   const maxRecipients = Math.max(...campaigns.map((c) => c.totalRecipients), 1);
 
+  const metrics = [
+    { label: 'Total Kampanye', value: campaigns.length, icon: ClipboardList, hint: 'Sepanjang periode' },
+    { label: 'Total Penerima', value: totalRecipients, icon: Users, hint: 'Akumulasi semua kampanye' },
+    { label: 'Total Terkirim', value: totalSent, icon: Send, hint: 'Pesan keluar gateway' },
+    { label: 'Total Dibaca', value: totalRead, icon: Eye, hint: 'Terkonfirmasi dibaca' },
+    { label: 'Read Rate', value: `${overallReadRate}%`, icon: TrendingUp, hint: `${totalRead} dari ${totalRecipients}` },
+    { label: 'Submit Rate', value: `${overallSubmitRate}%`, icon: UserCheck, hint: `${pegawaiStats.submitted} sudah isi form` },
+  ];
+
   return (
-    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#f8fafc' }}>
-          📊 Dashboard Analytics
-        </h1>
-        <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-          Ringkasan performa kampanye dan tingkat respon pegawai.
-        </p>
+    <div className="mx-auto max-w-[1400px]">
+      <PageHeader
+        title="Dashboard Analytics"
+        description="Ringkasan performa kampanye dan tingkat respon pegawai."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={isLoading}>
+            <RefreshCw className={isLoading ? 'animate-spin' : undefined} aria-hidden="true" />
+            Perbarui
+          </Button>
+        }
+      />
+
+      {error ? (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {error}
+        </div>
+      ) : null}
+
+      {/* Metrics */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        {metrics.map((m) => (
+          <MetricCard
+            key={m.label}
+            label={m.label}
+            value={m.value}
+            icon={m.icon}
+            hint={m.hint}
+            loading={isLoading}
+          />
+        ))}
       </div>
 
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Memuat data...</div>
-      ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '14px', marginBottom: '28px' }}>
-            {[
-              { label: 'Total Kampanye', value: campaigns.length, icon: '📋', color: '#f8fafc' },
-              { label: 'Total Penerima', value: totalRecipients, icon: '👥', color: '#38bdf8' },
-              { label: 'Total Terkirim', value: totalSent, icon: '📤', color: '#38bdf8' },
-              { label: 'Total Dibaca', value: totalRead, icon: '👁️', color: '#4ade80' },
-              { label: 'Read Rate', value: `${overallReadRate}%`, icon: '📈', color: '#4ade80' },
-              { label: 'Submit Rate', value: `${overallSubmitRate}%`, icon: '🟢', color: '#34d399' },
-            ].map((s) => (
-              <div key={s.label} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '20px' }}>
-                <div style={{ fontSize: '24px', marginBottom: '6px' }}>{s.icon}</div>
-                <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>{s.label}</div>
-                <div style={{ fontSize: '28px', fontWeight: 700, color: s.color }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: '20px', marginBottom: '28px' }}>
-            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '20px' }}>
-              <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
-                Perbandingan Kampanye
-              </h3>
-              {campaigns.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>Belum ada kampanye.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {campaigns.map((c) => (
-                    <div key={c.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                        <span style={{ color: '#cbd5e1', fontWeight: 600 }}>{c.name}</span>
-                        <span style={{ color: '#64748b' }}>{c.readCount}/{c.totalRecipients} dibaca</span>
-                      </div>
-                      <div style={{ background: '#0f172a', borderRadius: '4px', height: '20px', overflow: 'hidden' }}>
-                        <div
-                          style={{
-                            height: '100%',
-                            width: `${(c.totalRecipients / maxRecipients) * 100}%`,
-                            background: 'linear-gradient(90deg, #0078d4, #38bdf8)',
-                            borderRadius: '4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            paddingLeft: '8px',
-                            fontSize: '11px',
-                            color: '#fff',
-                            fontWeight: 600,
-                            minWidth: 'fit-content',
-                          }}
-                        >
-                          {c.totalRecipients}
-                        </div>
+      {/* Charts */}
+      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <SectionCard
+          title="Perbandingan Kampanye"
+          description="Jumlah penerima per kampanye"
+          actions={
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/campaigns">
+                Kelola
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          }
+        >
+          {isLoading ? (
+            <div className="space-y-4" aria-busy="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-5 w-full" />
+                </div>
+              ))}
+            </div>
+          ) : campaigns.length === 0 ? (
+            <EmptyState
+              icon={Megaphone}
+              title="Belum ada kampanye"
+              description="Buat kampanye pertama untuk melihat perbandingan performa di sini."
+              action={{ label: 'Buat Kampanye', href: '/admin/campaigns' }}
+            />
+          ) : (
+            <ul className="space-y-3.5">
+              {campaigns.map((c) => {
+                const width = (c.totalRecipients / maxRecipients) * 100;
+                return (
+                  <li key={c.id}>
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                      <span className="truncate text-xs font-medium text-foreground">{c.name}</span>
+                      <span className="tabular shrink-0 text-[11px] text-muted-foreground">
+                        {c.readCount}/{c.totalRecipients} dibaca
+                      </span>
+                    </div>
+                    <div
+                      className="h-5 w-full overflow-hidden rounded bg-background/60"
+                      role="img"
+                      aria-label={`${c.name}: ${c.totalRecipients} penerima`}
+                    >
+                      <div
+                        className="flex h-full min-w-fit items-center rounded bg-linear-to-r from-primary to-chart-2 px-2 text-[11px] font-semibold text-white"
+                        style={{ width: `${width}%` }}
+                      >
+                        {c.totalRecipients}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </SectionCard>
 
-            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '20px' }}>
-              <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
-                Tingkat Respon Pegawai
-              </h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-                <div style={{ position: 'relative', width: '120px', height: '120px' }}>
-                  <svg width="120" height="120" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#334155" strokeWidth="12" />
+        <SectionCard title="Tingkat Respon Pegawai" description="Progres pengisian form pegawai">
+          {isLoading ? (
+            <div className="flex items-center gap-6" aria-busy="true">
+              <Skeleton className="size-32 rounded-full" />
+              <div className="flex-1 space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="relative size-32 shrink-0">
+                  <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden="true">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-border)" strokeWidth="12" />
                     <circle
                       cx="60"
                       cy="60"
                       r="50"
                       fill="none"
-                      stroke="#4ade80"
+                      stroke="var(--color-accent)"
                       strokeWidth="12"
-                      strokeDasharray={`${(overallSubmitRate / 100) * 314} 314`}
                       strokeLinecap="round"
-                      transform="rotate(-90 60 60)"
+                      strokeDasharray={`${(overallSubmitRate / 100) * 314} 314`}
                     />
                   </svg>
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '20px', fontWeight: 700, color: '#f8fafc' }}>{overallSubmitRate}%</span>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="tabular text-xl font-semibold text-foreground">
+                      {overallSubmitRate}%
+                    </span>
                   </div>
                 </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#4ade80' }} />
-                    <span style={{ fontSize: '13px', color: '#cbd5e1' }}>Sudah Isi Form: {pegawaiStats.submitted}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#334155' }} />
-                    <span style={{ fontSize: '13px', color: '#cbd5e1' }}>Belum Isi Form: {pegawaiStats.notSubmitted}</span>
-                  </div>
-                </div>
-              </div>
-              <div style={{ background: '#0f172a', borderRadius: '6px', padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
-                <div style={{ marginBottom: '6px' }}>
-                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>Read Rate:</span> {overallReadRate}% dari pesan yang dikirim telah dibaca
-                </div>
-                <div>
-                  <span style={{ color: '#4ade80', fontWeight: 600 }}>Total Penerima:</span> {totalRecipients} pegawai
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '20px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
-              Detail per Kampanye
-            </h3>
-            {campaigns.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>Belum ada kampanye.</div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #334155' }}>
-                      <th style={{ padding: '10px 12px', textAlign: 'left', color: '#94a3b8', fontWeight: 600 }}>Kampanye</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>Status</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>Total</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>Terkirim</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>Dibaca</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>Read Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campaigns.map((c) => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid #334155' }}>
-                        <td style={{ padding: '10px 12px', color: '#f8fafc', fontWeight: 600 }}>{c.name}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              background: c.status === 'sent' ? 'rgba(74, 222, 128, 0.15)' : c.status === 'sending' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.1)',
-                              color: c.status === 'sent' ? '#4ade80' : c.status === 'sending' ? '#38bdf8' : '#94a3b8',
-                            }}
-                          >
-                            {c.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#cbd5e1' }}>{c.totalRecipients}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#38bdf8' }}>{c.sentCount}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4ade80' }}>{c.readCount}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#f8fafc', fontWeight: 600 }}>
-                          {c.totalRecipients > 0 ? Math.round((c.readCount / c.totalRecipients) * 100) : 0}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ul className="min-w-0 flex-1 space-y-3">
+                  <li className="flex items-center gap-2.5">
+                    <span className="size-3 shrink-0 rounded-sm bg-accent" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 text-sm text-foreground">Sudah Isi Form</span>
+                    <span className="tabular text-sm font-semibold text-foreground">
+                      {pegawaiStats.submitted}
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="size-3 shrink-0 rounded-sm bg-border" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 text-sm text-foreground">Belum Isi Form</span>
+                    <span className="tabular text-sm font-semibold text-foreground">
+                      {pegawaiStats.notSubmitted}
+                    </span>
+                  </li>
+                </ul>
               </div>
-            )}
+
+              <dl className="mt-5 grid grid-cols-1 gap-3 rounded-lg bg-background/40 p-3 text-xs sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground">Read Rate</dt>
+                  <dd className="tabular mt-0.5 font-semibold text-chart-2">
+                    {overallReadRate}% dari pesan terkirim telah dibaca
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Total Penerima</dt>
+                  <dd className="tabular mt-0.5 font-semibold text-accent">
+                    {totalRecipients} pegawai
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
+        </SectionCard>
+      </div>
+
+      {/* Campaign table */}
+      <SectionCard
+        title="Detail per Kampanye"
+        description="Rincian performance setiap kampanye"
+        bodyClassName="p-0 sm:p-0"
+      >
+        {isLoading ? (
+          <div className="space-y-2 p-5" aria-busy="true">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-9 w-full" />
+            ))}
           </div>
-        </>
-      )}
+        ) : campaigns.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="Belum ada kampanye"
+            description="Rincian setiap kampanye akan tampil di tabel ini."
+            action={{ label: 'Buat Kampanye', href: '/admin/campaigns' }}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Kampanye</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Terkirim</TableHead>
+                  <TableHead className="text-right">Dibaca</TableHead>
+                  <TableHead className="text-right">Read Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaigns.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium text-foreground">{c.name}</TableCell>
+                    <TableCell className="text-center">
+                      <StatusBadge status={c.status} />
+                    </TableCell>
+                    <TableCell className="tabular text-right">{c.totalRecipients}</TableCell>
+                    <TableCell className="tabular text-right text-chart-2">{c.sentCount}</TableCell>
+                    <TableCell className="tabular text-right text-accent">{c.readCount}</TableCell>
+                    <TableCell className="tabular text-right font-semibold">
+                      {c.totalRecipients > 0 ? Math.round((c.readCount / c.totalRecipients) * 100) : 0}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

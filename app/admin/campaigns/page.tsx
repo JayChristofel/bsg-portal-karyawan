@@ -1,6 +1,39 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
+import {
+  CalendarClock,
+  CheckCircle2,
+  ClipboardList,
+  Eye,
+  Plus,
+  Rocket,
+  Send,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, PageHeader, StatusBadge } from '../components/ui';
 
 interface Campaign {
   id: number;
@@ -24,41 +57,25 @@ interface Template {
   body: string;
 }
 
-const statusColors: Record<string, string> = {
-  draft: '#94a3b8',
-  scheduled: '#facc15',
-  sending: '#38bdf8',
-  sent: '#4ade80',
-  cancelled: '#f87171',
-};
-
-const statusLabels: Record<string, string> = {
-  draft: 'Draft',
-  scheduled: 'Terjadwal',
-  sending: 'Mengirim',
-  sent: 'Selesai',
-  cancelled: 'Dibatalkan',
-};
-
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [name, setName] = useState('');
-  const [templateId, setTemplateId] = useState<string>('');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [sendingId, setSendingId] = useState<number | null>(null);
+  const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
+  const [templates, setTemplates] = React.useState<Template[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [open, setOpen] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [templateId, setTemplateId] = React.useState('none');
+  const [scheduledAt, setScheduledAt] = React.useState('');
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const [sendingId, setSendingId] = React.useState<number | null>(null);
 
-  const fetchCampaigns = useCallback(async () => {
+  const fetchCampaigns = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/campaigns');
+      const res = await fetch('/api/campaigns', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setCampaigns(data.campaigns || []);
+        setCampaigns(data.campaigns ?? []);
       }
     } catch (err) {
       console.error('Fetch campaigns error:', err);
@@ -67,26 +84,26 @@ export default function CampaignsPage() {
     }
   }, []);
 
-  const fetchTemplates = useCallback(async () => {
+  const fetchTemplates = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/templates');
+      const res = await fetch('/api/templates', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setTemplates(data.templates || []);
+        setTemplates(data.templates ?? []);
       }
     } catch (err) {
       console.error('Fetch templates error:', err);
     }
   }, []);
 
-  useEffect(() => {
-    fetchCampaigns();
-    fetchTemplates();
+  React.useEffect(() => {
+    void fetchCampaigns();
+    void fetchTemplates();
   }, [fetchCampaigns, fetchTemplates]);
 
   const handleSave = async () => {
     if (!name.trim()) {
-      alert('Nama kampanye wajib diisi.');
+      setNotice({ tone: 'err', text: 'Nama kampanye wajib diisi.' });
       return;
     }
     setIsSaving(true);
@@ -96,228 +113,297 @@ export default function CampaignsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          templateId: templateId ? Number(templateId) : null,
+          templateId: templateId !== 'none' ? Number(templateId) : null,
           scheduledAt: scheduledAt || null,
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(`Kampanye "${name}" berhasil dibuat.`);
-        setShowModal(false);
+        setNotice({ tone: 'ok', text: `Kampanye "${name}" berhasil dibuat.` });
+        setOpen(false);
         setName('');
-        setTemplateId('');
+        setTemplateId('none');
         setScheduledAt('');
-        fetchCampaigns();
+        void fetchCampaigns();
       } else {
-        alert(data.error || 'Gagal membuat kampanye.');
+        setNotice({ tone: 'err', text: data.error || 'Gagal membuat kampanye.' });
       }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
+    } catch (err) {
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleSend = async (id: number, name: string) => {
-    if (!confirm(`Kirim kampanye "${name}" sekarang?`)) return;
+  const handleSend = async (id: number, campaignName: string) => {
+    if (!window.confirm(`Kirim kampanye "${campaignName}" sekarang?`)) return;
     setSendingId(id);
     try {
       const res = await fetch(`/api/campaigns/${id}/send`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        setMessage(`Kampanye "${name}" selesai: ${data.successCount} berhasil, ${data.failCount} gagal.`);
-        fetchCampaigns();
+        setNotice({
+          tone: 'ok',
+          text: `Kampanye "${campaignName}" selesai: ${data.successCount} berhasil, ${data.failCount} gagal.`,
+        });
+        void fetchCampaigns();
       } else {
-        alert(data.error || 'Gagal mengirim kampanye.');
+        setNotice({ tone: 'err', text: data.error || 'Gagal mengirim kampanye.' });
       }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
+    } catch (err) {
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setSendingId(null);
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Hapus kampanye "${name}"?`)) return;
+  const handleDelete = async (id: number, campaignName: string) => {
+    if (!window.confirm(`Hapus kampanye "${campaignName}"?`)) return;
     try {
       const res = await fetch(`/api/campaigns?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setMessage(`Kampanye "${name}" berhasil dihapus.`);
-        fetchCampaigns();
+        setNotice({ tone: 'ok', text: `Kampanye "${campaignName}" berhasil dihapus.` });
+        void fetchCampaigns();
       } else {
-        alert('Gagal menghapus kampanye.');
+        setNotice({ tone: 'err', text: 'Gagal menghapus kampanye.' });
       }
     } catch {
-      alert('Terjadi kesalahan saat menghapus.');
+      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
     }
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#f8fafc' }}>
-            📢 Manajemen Kampanye
-          </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Buat kampanye broadcast, pilih template, jadwal kirim, dan pantau status pengiriman.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{ background: '#0078d4', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-        >
-          ➕ Kampanye Baru
-        </button>
-      </div>
+    <div className="mx-auto max-w-[1200px]">
+      <PageHeader
+        title="Manajemen Kampanye"
+        description="Buat kampanye broadcast, pilih template, jadwalkan kirim, dan pantau status pengiriman."
+        actions={
+          <Button onClick={() => setOpen(true)}>
+            <Plus aria-hidden="true" />
+            Kampanye Baru
+          </Button>
+        }
+      />
 
-      {message && (
-        <div style={{ padding: '12px 16px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', color: '#38bdf8', fontSize: '13px', marginBottom: '20px' }}>
-          {message}
+      {notice ? (
+        <div
+          role="status"
+          className={`mb-4 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+            notice.tone === 'ok'
+              ? 'border-chart-2/30 bg-chart-2/10 text-chart-2'
+              : 'border-destructive/30 bg-destructive/10 text-destructive'
+          }`}
+        >
+          <span className="flex-1">{notice.text}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="cursor-pointer opacity-70 hover:opacity-100"
+            aria-label="Tutup pesan"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
         </div>
-      )}
+      ) : null}
 
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Memuat kampanye...</div>
-      ) : campaigns.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#64748b', background: '#1e293b', borderRadius: '10px', border: '1px solid #334155' }}>
-          Belum ada kampanye. Klik "Kampanye Baru" untuk membuat.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {campaigns.map((c) => (
-            <div key={c.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: 700, color: '#f8fafc', fontSize: '16px' }}>{c.name}</span>
-                    <span
-                      style={{
-                        padding: '3px 10px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        background: `${statusColors[c.status] || '#94a3b8'}22`,
-                        color: statusColors[c.status] || '#94a3b8',
-                        border: `1px solid ${statusColors[c.status] || '#94a3b8'}44`,
-                      }}
-                    >
-                      {statusLabels[c.status] || c.status}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                    {c.templateName ? `Template: ${c.templateName}` : 'Tanpa template'}
-                    {c.scheduledAt && ` • Dijadwalkan: ${new Date(c.scheduledAt).toLocaleString('id-ID')}`}
-                    {c.sentAt && ` • Terkirim: ${new Date(c.sentAt).toLocaleString('id-ID')}`}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {(c.status === 'draft' || c.status === 'scheduled') && (
-                    <button
-                      onClick={() => handleSend(c.id, c.name)}
-                      disabled={sendingId === c.id}
-                      style={{ background: '#25d366', color: '#0f172a', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      {sendingId === c.id ? 'Mengirim...' : '🚀 Kirim'}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDelete(c.id, c.name)}
-                    style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '20px', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #334155' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>Total Penerima</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>{c.totalRecipients}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>Terkirim</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#38bdf8' }}>{c.sentCount}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>Dibaca</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#4ade80' }}>{c.readCount}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>Read Rate</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>
-                    {c.totalRecipients > 0 ? Math.round((c.readCount / c.totalRecipients) * 100) : 0}%
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div className="space-y-3" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-40 w-full" />
           ))}
         </div>
+      ) : campaigns.length === 0 ? (
+        <div className="glass rounded-xl">
+          <EmptyState
+            icon={ClipboardList}
+            title="Belum ada kampanye"
+            description="Buat kampanye pertama untuk mulai melakukan broadcast ke pegawai."
+            action={{ label: 'Kampanye Baru', onClick: () => setOpen(true) }}
+          />
+        </div>
+      ) : (
+        <ul className="grid grid-cols-1 gap-3">
+          {campaigns.map((c) => {
+            const readRate =
+              c.totalRecipients > 0 ? Math.round((c.readCount / c.totalRecipients) * 100) : 0;
+            const canSend = c.status === 'draft' || c.status === 'scheduled';
+
+            return (
+              <li key={c.id} className="glass rounded-xl p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-foreground">{c.name}</h3>
+                      <StatusBadge status={c.status} />
+                    </div>
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>
+                        Template:{' '}
+                        {c.templateName ? (
+                          <span className="text-foreground">{c.templateName}</span>
+                        ) : (
+                          <span className="text-muted-foreground/70">tanpa template</span>
+                        )}
+                      </span>
+                      {c.scheduledAt ? (
+                        <span className="flex items-center gap-1">
+                          <CalendarClock className="size-3" aria-hidden="true" />
+                          <span className="tabular">
+                            {new Date(c.scheduledAt).toLocaleString('id-ID')}
+                          </span>
+                        </span>
+                      ) : null}
+                      {c.sentAt ? (
+                        <span className="flex items-center gap-1">
+                          <CheckCircle2 className="size-3" aria-hidden="true" />
+                          <span className="tabular">
+                            {new Date(c.sentAt).toLocaleString('id-ID')}
+                          </span>
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    {canSend ? (
+                      <Button
+                        size="sm"
+                        onClick={() => void handleSend(c.id, c.name)}
+                        disabled={sendingId === c.id}
+                      >
+                        {sendingId === c.id ? (
+                          <Rocket className="size-3.5 animate-pulse" aria-hidden="true" />
+                        ) : (
+                          <Send aria-hidden="true" />
+                        )}
+                        {sendingId === c.id ? 'Mengirim…' : 'Kirim'}
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => void handleDelete(c.id, c.name)}
+                      aria-label={`Hapus kampanye ${c.name}`}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border/60 pt-4 sm:grid-cols-4">
+                  <div className="min-w-0">
+                    <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Users className="size-3" aria-hidden="true" />
+                      Penerima
+                    </dt>
+                    <dd className="tabular mt-0.5 text-lg font-semibold text-foreground">
+                      {c.totalRecipients}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Send className="size-3" aria-hidden="true" />
+                      Terkirim
+                    </dt>
+                    <dd className="tabular mt-0.5 text-lg font-semibold text-chart-2">
+                      {c.sentCount}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Eye className="size-3" aria-hidden="true" />
+                      Dibaca
+                    </dt>
+                    <dd className="tabular mt-0.5 text-lg font-semibold text-accent">
+                      {c.readCount}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-[11px] text-muted-foreground">Read Rate</dt>
+                    <dd className="mt-1 flex items-center gap-2">
+                      <span className="tabular text-lg font-semibold text-foreground">{readRate}%</span>
+                      <span
+                        className="h-1.5 flex-1 overflow-hidden rounded-full bg-background/60"
+                        aria-hidden="true"
+                      >
+                        <span
+                          className="block h-full rounded-full bg-accent"
+                          style={{ width: `${readRate}%` }}
+                        />
+                      </span>
+                    </dd>
+                  </div>
+                </dl>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', width: '100%', maxWidth: '500px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>Kampanye Baru</h2>
-              <button onClick={() => setShowModal(false)} style={{ background: '#334155', border: 'none', color: '#cbd5e1', borderRadius: '6px', width: '32px', height: '32px', cursor: 'pointer', fontSize: '16px' }}>✕</button>
-            </div>
+      {/* Create dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="glass-strong sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base">Kampanye Baru</DialogTitle>
+            <DialogDescription>
+              Pilih template pesan dan jadwalkan waktu kirim bila diperlukan.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>Nama Kampanye</label>
-              <input
-                type="text"
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="campaign-name">Nama Kampanye</Label>
+              <Input
+                id="campaign-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Contoh: Pengkinian Data Q4 2026"
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+                placeholder="Contoh: Pemutakhiran Data Q4 2026"
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>Template Pesan (Opsional)</label>
-              <select
-                value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-              >
-                <option value="">— Tanpa template —</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+            <div className="space-y-1.5">
+              <Label htmlFor="campaign-template">Template Pesan (Opsional)</Label>
+              <Select value={templateId} onValueChange={setTemplateId}>
+                <SelectTrigger id="campaign-template">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Tanpa template —</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>Jadwal Kirim (Opsional)</label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="campaign-schedule">Jadwal Kirim (Opsional)</Label>
+              <Input
+                id="campaign-schedule"
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
               />
-              <div style={{ marginTop: '4px', fontSize: '11px', color: '#64748b' }}>
+              <p className="text-[11px] text-muted-foreground">
                 Kosongkan untuk menyimpan sebagai draft.
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                style={{ background: '#0078d4', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {isSaving ? 'Menyimpan...' : 'Simpan Kampanye'}
-              </button>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{ background: '#334155', color: '#cbd5e1', border: 'none', padding: '10px 16px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
-              >
-                Batal
-              </button>
+              </p>
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={isSaving}>
+              {isSaving ? 'Menyimpan…' : 'Simpan Kampanye'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
