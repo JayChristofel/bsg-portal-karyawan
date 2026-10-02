@@ -41,6 +41,15 @@ export default function WhatsAppGatewayPage() {
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState<any>(null);
 
+  // Gateway config state
+  const [gatewayUrl, setGatewayUrl] = useState('');
+  const [gatewayDeviceId, setGatewayDeviceId] = useState('');
+  const [gatewayUsername, setGatewayUsername] = useState('');
+  const [gatewayPassword, setGatewayPassword] = useState('');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isTestingConfig, setIsTestingConfig] = useState(false);
+  const [configTestResult, setConfigTestResult] = useState<any>(null);
+
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchStatus = useCallback(async () => {
@@ -78,6 +87,21 @@ export default function WhatsAppGatewayPage() {
     }
   }, []);
 
+  const fetchConfig = useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/config');
+      if (res.ok) {
+        const data = await res.json();
+        setGatewayUrl(data.config?.baseUrl || '');
+        setGatewayDeviceId(data.config?.deviceId || '');
+        setGatewayUsername(data.config?.username || '');
+        setGatewayPassword(data.config?.password || '');
+      }
+    } catch (err) {
+      console.error('Fetch config error:', err);
+    }
+  }, []);
+
   const fetchQr = useCallback(async () => {
     setIsLoadingQr(true);
     setActionMessage(null);
@@ -105,7 +129,8 @@ export default function WhatsAppGatewayPage() {
   useEffect(() => {
     fetchStatus();
     fetchWebhookData();
-  }, [fetchStatus, fetchWebhookData]);
+    fetchConfig();
+  }, [fetchStatus, fetchWebhookData, fetchConfig]);
 
   // Countdown timer for QR
   useEffect(() => {
@@ -187,6 +212,81 @@ export default function WhatsAppGatewayPage() {
     }
   };
 
+  const handleSaveConfig = async () => {
+    if (!gatewayUrl.trim()) {
+      alert('URL gateway wajib diisi.');
+      return;
+    }
+    if (!gatewayDeviceId.trim()) {
+      alert('Device ID wajib diisi.');
+      return;
+    }
+    setIsSavingConfig(true);
+    setActionMessage(null);
+    setConfigTestResult(null);
+    try {
+      const res = await fetch('/api/whatsapp/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: gatewayUrl.trim(),
+          deviceId: gatewayDeviceId.trim(),
+          username: gatewayUsername.trim(),
+          password: gatewayPassword,
+        }),
+      });
+      const data = await res.json();
+      if (data.code === 'SUCCESS' || res.ok) {
+        setActionMessage('✅ Konfigurasi gateway berhasil disimpan.');
+        fetchStatus();
+      } else {
+        setActionMessage(`❌ Gagal menyimpan konfigurasi: ${data.error || data.message}`);
+      }
+    } catch (err: any) {
+      setActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  const handleTestConfig = async () => {
+    setIsTestingConfig(true);
+    setConfigTestResult(null);
+    try {
+      await fetch('/api/whatsapp/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: gatewayUrl.trim(),
+          deviceId: gatewayDeviceId.trim(),
+          username: gatewayUsername.trim(),
+          password: gatewayPassword,
+        }),
+      });
+
+      const res = await fetch('/api/whatsapp/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test' }),
+      });
+      const data = await res.json();
+      setConfigTestResult(data);
+
+      if (data.authOk) {
+        setActionMessage('✅ Koneksi & autentikasi gateway berhasil. Silakan pindai QR Code untuk mendaftarkan perangkat.');
+        fetchStatus();
+      } else {
+        const msg = data?.message || data?.error || 'respons tidak dikenal';
+        setActionMessage(`❌ Autentikasi gagal: ${msg}. Pastikan username/password Basic Auth benar.`);
+      }
+    } catch (err: any) {
+      setConfigTestResult({ error: err.message });
+      setActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsTestingConfig(false);
+    }
+  };
+
   const handleUseCurrentHost = () => {
     if (typeof window !== 'undefined') {
       const autoUrl = `${window.location.origin}/api/webhook/whatsapp`;
@@ -259,6 +359,127 @@ export default function WhatsAppGatewayPage() {
         </div>
       )}
 
+      {/* Gateway Configuration Card */}
+      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '24px', marginBottom: '28px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '8px' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#f8fafc' }}>
+            ⚙️ Konfigurasi Koneksi Gateway GOWA
+          </h2>
+        </div>
+        <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#94a3b8' }}>
+          Atur URL endpoint gateway, Device ID, dan kredensial HTTP Basic Auth. Perubahan tersimpan di database dan langsung dipakai oleh semua fitur WhatsApp.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+              Gateway Endpoint URL
+            </label>
+            <input
+              type="text"
+              placeholder="Contoh: https://107.23.128.93"
+              value={gatewayUrl}
+              onChange={(e) => setGatewayUrl(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+              Device ID
+            </label>
+            <input
+              type="text"
+              placeholder="Contoh: portal-pegawai"
+              value={gatewayDeviceId}
+              onChange={(e) => setGatewayDeviceId(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+              Basic Auth Username (Opsional)
+            </label>
+            <input
+              type="text"
+              placeholder="Kosongkan jika gateway tidak memakai Basic Auth"
+              value={gatewayUsername}
+              onChange={(e) => setGatewayUsername(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+              Basic Auth Password (Opsional)
+            </label>
+            <input
+              type="password"
+              placeholder="Kosongkan jika gateway tidak memakai Basic Auth"
+              value={gatewayPassword}
+              onChange={(e) => setGatewayPassword(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleSaveConfig}
+            disabled={isSavingConfig}
+            style={{
+              background: '#0078d4',
+              color: '#fff',
+              padding: '9px 18px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {isSavingConfig ? 'Menyimpan...' : '💾 Simpan Konfigurasi'}
+          </button>
+          <button
+            onClick={handleTestConfig}
+            disabled={isTestingConfig}
+            style={{
+              background: '#0f766e',
+              color: '#fff',
+              padding: '9px 18px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {isTestingConfig ? 'Menguji...' : '🔌 Tes Koneksi ke Gateway'}
+          </button>
+        </div>
+
+        {configTestResult && (
+          <div
+            style={{
+              marginTop: '16px',
+              background: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '6px',
+              padding: '12px',
+              fontSize: '12px',
+              color: '#cbd5e1',
+              fontFamily: 'monospace',
+              maxHeight: '200px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {typeof configTestResult === 'object' ? JSON.stringify(configTestResult, null, 2) : String(configTestResult)}
+          </div>
+        )}
+      </div>
+
       {/* Grid: Status & QR Scan */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '20px', marginBottom: '28px' }}>
         {/* Device Status Card */}
@@ -301,7 +522,7 @@ export default function WhatsAppGatewayPage() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '8px 0' }}>
               <span style={{ color: '#94a3b8' }}>Gateway Endpoint:</span>
-              <span style={{ color: '#cbd5e1' }}>https://107.23.128.93</span>
+              <span style={{ color: '#cbd5e1' }}>{gatewayUrl || 'https://107.23.128.93'}</span>
             </div>
           </div>
 

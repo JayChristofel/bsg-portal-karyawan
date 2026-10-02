@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS recipients (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 5. Table: settings (Konfigurasi aplikasi yang bisa diubah dari UI admin)
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_recipients_token ON recipients (token);
 
 -- 4. Table: events (Event Tracking: Link Dibuka & Mulai Mengisi)

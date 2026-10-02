@@ -68,3 +68,10 @@ export const webhookLogs = pgTable('webhook_logs', {
   payload: text('payload').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Key-value settings store (e.g. GOWA gateway connection config, editable from admin UI)
+export const settings = pgTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull().default(''),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
