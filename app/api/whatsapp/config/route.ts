@@ -41,10 +41,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (body.action === 'test') {
-      const config = await getGowaConfig();
-      const result = await listDevices(config);
-      const authOk = result?.code === 'SUCCESS' || result?.code === 'OK';
-      return NextResponse.json({ ...result, authOk });
+      try {
+        const config = await getGowaConfig();
+        const result = await listDevices(config);
+        const authOk = result?.code === 'SUCCESS' || result?.code === 'OK';
+        return NextResponse.json({ ...result, authOk });
+      } catch (testErr: any) {
+        console.error('WA config TEST error:', testErr?.message, '| cause:', testErr?.cause?.code, testErr?.cause?.message);
+        return NextResponse.json({
+          version: '2.1',
+          error: 'Gagal menguji koneksi ke gateway',
+          detail: testErr?.message,
+          cause: testErr?.cause?.code || testErr?.cause?.message,
+        }, { status: 500 });
+      }
     }
 
     const baseUrl = (body.baseUrl || '').trim();
@@ -75,7 +85,7 @@ export async function POST(req: NextRequest) {
         set: { value: password ? encrypt(password) : '', updatedAt: new Date() },
       });
 
-    return NextResponse.json({ code: 'SUCCESS', message: 'Konfigurasi gateway berhasil disimpan.' });
+    return NextResponse.json({ version: '2.1', code: 'SUCCESS', message: 'Konfigurasi gateway berhasil disimpan.' });
   } catch (error: any) {
     console.error('WA config POST error:', error);
     return NextResponse.json({ error: 'Gagal menyimpan konfigurasi gateway', detail: error?.message || String(error) }, { status: 500 });

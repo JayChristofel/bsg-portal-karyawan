@@ -1,5 +1,7 @@
 import { Agent } from 'undici';
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const gowaDispatcher = new Agent({
   connect: {
     rejectUnauthorized: false,
@@ -52,6 +54,15 @@ export async function getGowaConfig(): Promise<GowaConfig> {
 export async function saveGowaConfig(config: Partial<GowaConfig>) {
   const { db } = await import('@/db');
   const { settings } = await import('@/db/schema');
+  const { sql } = await import('drizzle-orm');
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   const entries: Record<string, string> = {};
   if (config.baseUrl !== undefined) entries[GOWA_CONFIG_KEYS.url] = config.baseUrl.trim();
@@ -84,12 +95,18 @@ function buildHeaders(config: GowaConfig, extra?: Record<string, string>): Recor
 
 async function gowaFetch(config: GowaConfig, path: string, options: RequestInit = {}) {
   const url = `${config.baseUrl}${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
-    dispatcher: gowaDispatcher,
-    cache: 'no-store',
-  } as RequestInit);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
+      dispatcher: gowaDispatcher,
+      cache: 'no-store',
+    } as RequestInit);
+  } catch (err: any) {
+    console.error('GOWA FETCH ERROR:', err?.message, '| cause:', err?.cause?.code, err?.cause?.message);
+    throw err;
+  }
   const text = await res.text();
   try {
     return JSON.parse(text);
