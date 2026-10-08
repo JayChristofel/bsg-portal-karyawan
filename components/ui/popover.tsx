@@ -29,7 +29,9 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "glass-strong text-popover-foreground z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-lg border p-4 shadow-lg outline-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          // Rendered through a portal, outside `.admin-root`, so it must rely on
+          // the shared token rather than the scoped `glass-strong` utility.
+          "bg-popover text-popover-foreground border-border z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-lg border shadow-lg outline-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className
         )}
         {...props}
