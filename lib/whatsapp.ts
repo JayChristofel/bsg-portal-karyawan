@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { gatewayFetch } from './gowa-tls';
+import { gatewayFetch, gatewayTlsMode } from './gowa-tls';
 
 export interface GowaConfig {
   baseUrl: string;
@@ -254,13 +254,18 @@ export async function requestQr(config?: GowaConfig): Promise<QrResult> {
   } catch (err: any) {
     const cause = err?.cause?.code || '';
     const tls = cause.includes('CERT') || cause.includes('SELF_SIGNED') || cause.includes('UNABLE_TO_VERIFY');
+    const mode = gatewayTlsMode();
     return {
       ok: false,
       reason: 'transport-error',
       code: tls ? 'TLS_ERROR' : 'NETWORK_ERROR',
       message: tls
-        ? `TLS verification failed for the gateway certificate (${cause}). Configure GOWA_CA_CERT.`
-        : `Could not reach the gateway: ${err?.message ?? 'unknown network error'}`,
+        ? `TLS verification failed for the gateway certificate (${cause || 'certificate rejected'}). ` +
+          `Current trust mode: ${mode}. ` +
+          (mode === 'system'
+            ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
+            : 'The configured CA did not match the certificate the gateway presented — it may have been rotated.')
+        : `Could not reach the gateway: ${err?.message ?? 'unknown network error'} (trust mode: ${mode})`,
     };
   }
 

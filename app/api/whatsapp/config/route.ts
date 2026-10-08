@@ -58,7 +58,11 @@ export async function POST(req: NextRequest) {
           {
             code: isTls ? 'TLS_ERROR' : 'NETWORK_ERROR',
             error: isTls
-              ? 'TLS verification failed for the gateway certificate. Set GOWA_CA_CERT to the gateway CA.'
+              ? `TLS verification failed for the gateway certificate (${cause}). ` +
+                `Trust mode: ${gatewayTlsMode()}. ` +
+                (gatewayTlsMode() === 'system'
+                  ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
+                  : 'The configured CA does not match the certificate being served — it may have been rotated.')
               : 'Could not reach the gateway.',
             detail: testErr?.message,
             cause: cause || null,
