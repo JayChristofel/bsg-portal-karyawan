@@ -13,7 +13,7 @@ async function checkAuth(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const session = await checkAuth(req);
   if (!session) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error('Fetch data pegawai error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal mengambil data dari database.' },
+      { success: false, error: 'Could not read data from the database.' },
       { status: 500 }
     );
   }
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await checkAuth(req);
   if (!session) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Manual insert error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal menambah data ke database.' },
+      { success: false, error: 'Could not add the record to the database.' },
       { status: 500 }
     );
   }

@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ campaigns: rows });
   } catch (error: any) {
     console.error('Campaigns GET error:', error);
-    return NextResponse.json({ error: 'Gagal memuat kampanye' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load campaigns' }, { status: 500 });
   }
 }
 
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ campaign });
   } catch (error: any) {
     console.error('Campaigns POST error:', error);
-    return NextResponse.json({ error: 'Gagal membuat kampanye' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not create the campaign' }, { status: 500 });
   }
 }
 
@@ -113,7 +113,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ campaign });
   } catch (error: any) {
     console.error('Campaigns PUT error:', error);
-    return NextResponse.json({ error: 'Gagal memperbarui kampanye' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not update the campaign' }, { status: 500 });
   }
 }
 
@@ -144,6 +144,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Campaigns DELETE error:', error);
-    return NextResponse.json({ error: 'Gagal menghapus kampanye' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not delete the campaign' }, { status: 500 });
   }
 }

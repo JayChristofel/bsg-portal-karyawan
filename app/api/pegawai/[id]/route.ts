@@ -16,7 +16,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await checkAuth(req))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   const { id } = await params;
@@ -53,14 +53,14 @@ export async function PUT(
       .returning();
 
     if (!updated) {
-      return NextResponse.json({ success: false, error: 'Data tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Record not found.' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Update error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal memperbarui data.' },
+      { success: false, error: 'Could not update the record.' },
       { status: 500 }
     );
   }
@@ -71,7 +71,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await checkAuth(req))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   const { id } = await params;
@@ -87,14 +87,14 @@ export async function DELETE(
       .returning();
 
     if (!deleted) {
-      return NextResponse.json({ success: false, error: 'Data tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Record not found.' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Delete error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal menghapus data.' },
+      { success: false, error: 'Could not delete the record.' },
       { status: 500 }
     );
   }

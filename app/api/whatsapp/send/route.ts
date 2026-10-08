@@ -73,6 +73,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('WA action error:', err);
-    return NextResponse.json({ code: 'ERROR', message: err?.message || 'Gagal mengirim ke WhatsApp Gateway.' }, { status: 500 });
+    return NextResponse.json({ code: 'ERROR', message: err?.message || 'Could not send via the WhatsApp Gateway.' }, { status: 500 });
   }
 }

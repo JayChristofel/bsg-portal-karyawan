@@ -51,14 +51,14 @@ export function Pagination({
   return (
     <div className="flex flex-col items-center justify-between gap-3 border-t border-border/50 px-4 py-3 sm:flex-row">
       <p className="text-xs text-muted-foreground">
-        Menampilkan <span className="tabular font-semibold text-foreground">{startItem}</span>–
-        <span className="tabular font-semibold text-foreground">{endItem}</span> dari{' '}
-        <span className="tabular font-semibold text-foreground">{totalItems}</span> data
+        Showing <span className="tabular font-semibold text-foreground">{startItem}</span>–
+        <span className="tabular font-semibold text-foreground">{endItem}</span> of{' '}
+        <span className="tabular font-semibold text-foreground">{totalItems}</span> records
       </p>
       <div className="flex items-center gap-2">
         {onPageSizeChange && (
           <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
-            <SelectTrigger className="h-8 w-20 text-xs" aria-label="Jumlah per halaman">
+            <SelectTrigger className="h-8 w-20 text-xs" aria-label="Rows per page">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -76,7 +76,7 @@ export function Pagination({
             variant="outline"
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage <= 1}
-            aria-label="Halaman sebelumnya"
+            aria-label="Previous page"
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -92,7 +92,7 @@ export function Pagination({
                 variant={page === currentPage ? 'default' : 'outline'}
                 onClick={() => onPageChange(page as number)}
                 className="h-8 min-w-8 px-2 text-xs"
-                aria-label={`Halaman ${page}`}
+                aria-label={`Page ${page}`}
                 aria-current={page === currentPage ? 'page' : undefined}
               >
                 {page}
@@ -104,7 +104,7 @@ export function Pagination({
             variant="outline"
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage >= totalPages}
-            aria-label="Halaman berikutnya"
+            aria-label="Next page"
           >
             <ChevronRight className="size-4" />
           </Button>

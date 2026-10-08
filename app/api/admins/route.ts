@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ admins: rows });
   } catch (error: any) {
     console.error('Admins GET error:', error);
-    return NextResponse.json({ error: 'Gagal memuat daftar admin' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load the admin list' }, { status: 500 });
   }
 }
 
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ admin: { id: admin.id, username: admin.username, createdAt: admin.createdAt } });
   } catch (error: any) {
     console.error('Admins POST error:', error);
-    return NextResponse.json({ error: 'Gagal membuat admin' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not create the admin' }, { status: 500 });
   }
 }
 
@@ -74,11 +74,11 @@ export async function DELETE(req: NextRequest) {
 
     const [admin] = await db.select().from(admins).where(eq(admins.id, id));
     if (!admin) {
-      return NextResponse.json({ error: 'Admin tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Admin not found.' }, { status: 404 });
     }
 
     if (admin.username === username) {
-      return NextResponse.json({ error: 'Tidak dapat menghapus akun sendiri.' }, { status: 400 });
+      return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 });
     }
 
     await db.delete(admins).where(eq(admins.id, id));
@@ -88,6 +88,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Admins DELETE error:', error);
-    return NextResponse.json({ error: 'Gagal menghapus admin' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not delete the admin' }, { status: 500 });
   }
 }

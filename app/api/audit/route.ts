@@ -27,6 +27,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ logs });
   } catch (error: any) {
     console.error('Audit GET error:', error);
-    return NextResponse.json({ error: 'Gagal memuat log audit' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load the audit log' }, { status: 500 });
   }
 }

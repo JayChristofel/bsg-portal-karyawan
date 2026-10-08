@@ -16,7 +16,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await checkAuth(req))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -53,7 +53,7 @@ export async function PATCH(
   } catch (error: any) {
     console.error('Update recipient error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal mengupdate data di database.' },
+      { success: false, error: 'Could not update the record in the database.' },
       { status: 500 }
     );
   }
@@ -64,7 +64,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await checkAuth(req))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -87,7 +87,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Delete recipient error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal menghapus data dari database.' },
+      { success: false, error: 'Could not delete the record from the database.' },
       { status: 500 }
     );
   }

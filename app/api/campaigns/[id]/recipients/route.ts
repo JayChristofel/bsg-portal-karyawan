@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const recipientIds: number[] = body.recipientIds || [];
 
     if (!recipientIds.length) {
-      return NextResponse.json({ error: 'Tidak ada penerima yang dipilih.' }, { status: 400 });
+      return NextResponse.json({ error: 'No recipients selected.' }, { status: 400 });
     }
 
     const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId));
@@ -42,6 +42,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ success: true, count: recipientIds.length });
   } catch (error: any) {
     console.error('Campaign recipients POST error:', error);
-    return NextResponse.json({ error: 'Gagal menambahkan penerima ke kampanye' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not add recipients to the campaign' }, { status: 500 });
   }
 }

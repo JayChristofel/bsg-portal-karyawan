@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Fetch webhook info error:', error);
-    return NextResponse.json({ error: 'Gagal memuat konfigurasi webhook' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load the webhook configuration' }, { status: 500 });
   }
 }
 
@@ -73,6 +73,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Update webhook error:', error);
-    return NextResponse.json({ error: 'Gagal mengupdate webhook di GOWA' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not update the webhook in GOWA' }, { status: 500 });
   }
 }

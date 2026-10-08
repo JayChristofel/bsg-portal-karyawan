@@ -125,7 +125,7 @@ export interface RecipientRow {
 }
 
 const DEFAULT_TEMPLATE =
-  '{Yth.|Kepada Yth.} Bapak/Ibu {nama},\n\nSehubungan dengan *pemutakhiran data jabatan pegawai Bank SulutGo*, harap kesediaan Bapak/Ibu untuk melakukan konfirmasi jabatan dan unit kerja melalui portal resmi berikut:\n\n{link}\n\nMohon konfirmasi dilakukan paling lambat *hari ini, pukul 16.00 WITA* untuk memastikan data jabatan dan unit kerja telah sesuai.\n\nTerima kasih atas kerja samanya.\n\n*Divisi SDM / Human Capital*\n*Bank SulutGo*';
+  '{Yth.|Dear Sir/Madam} {nama},\n\nRegarding the *update of Bank SulutGo employee position data*, we kindly ask you to confirm your position and work unit through the official portal below:\n\n{link}\n\nPlease complete the confirmation by *today, 4:00 PM WITA* so your position and work unit data are verified.\n\nThank you for your cooperation.\n\n*Human Resources Division*\n*Bank SulutGo*';
 
 /** Spintax: replaces {a|b|c} with one random pick; leaves {nama}/{link} intact. */
 function processSpintax(text: string): string {
@@ -153,16 +153,16 @@ function processSpintax(text: string): string {
 type DelayProfile = 'safe' | 'balanced' | 'fast';
 
 const WA_STATUS_LABEL: Record<string, string> = {
-  pending: 'Menunggu',
-  sent: 'Terkirim',
-  delivered: 'Diterima',
-  read: 'Dibaca',
+  pending: 'Pending',
+  sent: 'Sent',
+  delivered: 'Delivered',
+  read: 'Read',
 };
 
 const DELAY_META: Record<DelayProfile, { label: string; range: string }> = {
-  safe: { label: 'Aman', range: '4–8 detik acak' },
-  balanced: { label: 'Seimbang', range: '2,5–5 detik acak' },
-  fast: { label: 'Cepat', range: '2–3 detik' },
+  safe: { label: 'Safe', range: '4–8s random' },
+  balanced: { label: 'Balanced', range: '2.5–5s random' },
+  fast: { label: 'Fast', range: '2–3s' },
 };
 
 const TONE_OK: React.CSSProperties = { background: 'transparent', color: '#e9edef' };
@@ -231,7 +231,7 @@ export default function BroadcastPage() {
   const handlePullFromPegawai = async () => {
     if (
       !window.confirm(
-        'Tarik semua data pegawai yang ada di database ke dalam daftar broadcast WhatsApp ini?',
+        'Pull every employee already in the database into this WhatsApp broadcast list?',
       )
     )
       return;
@@ -244,13 +244,13 @@ export default function BroadcastPage() {
       });
       const json = await res.json();
       if (json.success) {
-        setNotice({ tone: 'ok', text: json.message || `Berhasil menarik ${json.count} pegawai.` });
+        setNotice({ tone: 'ok', text: json.message || `Pulled ${json.count} employees.` });
         void fetchData();
       } else {
-        setNotice({ tone: 'err', text: json.error || 'Gagal menarik data pegawai.' });
+        setNotice({ tone: 'err', text: json.error || 'Could not pull employee records.' });
       }
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan jaringan.' });
+      setNotice({ tone: 'err', text: 'A network error occurred.' });
     } finally {
       setIsGenerating(false);
     }
@@ -263,7 +263,7 @@ export default function BroadcastPage() {
       .filter(Boolean);
 
     if (!lines.length) {
-      setNotice({ tone: 'err', text: 'Masukkan minimal satu data pegawai.' });
+      setNotice({ tone: 'err', text: 'Enter at least one employee record.' });
       return;
     }
 
@@ -286,10 +286,10 @@ export default function BroadcastPage() {
       const json = await res.json();
       if (json.success) {
         setInputText('');
-        setNotice({ tone: 'ok', text: `Berhasil mendaftarkan ${json.count} penerima.` });
+        setNotice({ tone: 'ok', text: `Registered ${json.count} recipients.` });
         void fetchData();
       } else {
-        setNotice({ tone: 'err', text: json.error || 'Gagal mendaftarkan penerima broadcast.' });
+        setNotice({ tone: 'err', text: json.error || 'Could not register broadcast recipients.' });
       }
     } finally {
       setIsGenerating(false);
@@ -318,7 +318,7 @@ export default function BroadcastPage() {
           rawJson = parseCsv(text).slice(0, MAX_ROWS);
         } else {
           const buf = evt.target?.result;
-          if (!(buf instanceof ArrayBuffer)) throw new Error('Gagal membaca file.');
+          if (!(buf instanceof ArrayBuffer)) throw new Error('Could not read the file.');
           const wb = new ExcelJS.Workbook();
           await wb.xlsx.load(buf);
           const ws = wb.worksheets[0];
@@ -377,14 +377,14 @@ export default function BroadcastPage() {
         }
 
         if (parsed.length === 0) {
-          setNotice({ tone: 'err', text: 'Tidak ada data pegawai yang valid terbaca dari file.' });
+          setNotice({ tone: 'err', text: 'No valid employee records were found in the file.' });
           return;
         }
 
         setImportPreview(parsed);
         setShowImportModal(true);
       } catch (err) {
-        setNotice({ tone: 'err', text: `Gagal membaca file: ${(err as Error).message}` });
+        setNotice({ tone: 'err', text: `Could not read the file: ${(err as Error).message}` });
       }
     };
 
@@ -405,31 +405,31 @@ export default function BroadcastPage() {
       if (json.success) {
         setNotice({
           tone: 'ok',
-          text: `Berhasil mengimpor ${json.count} penerima dari file ${importFileName}.`,
+          text: `Imported ${json.count} recipients from ${importFileName}.`,
         });
         setShowImportModal(false);
         setImportPreview([]);
         setImportFileName(null);
         void fetchData();
       } else {
-        setNotice({ tone: 'err', text: json.error || 'Gagal menyimpan data impor.' });
+        setNotice({ tone: 'err', text: json.error || 'Could not save the imported data.' });
       }
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan jaringan saat menyimpan.' });
+      setNotice({ tone: 'err', text: 'A network error occurred while saving.' });
     } finally {
       setIsImporting(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Hapus penerima ini dari daftar broadcast?')) return;
+    if (!window.confirm('Remove this recipient from the broadcast list?')) return;
     try {
       const res = await fetch(`/api/recipients/${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) void fetchData();
-      else setNotice({ tone: 'err', text: json.error || 'Gagal menghapus.' });
+      else setNotice({ tone: 'err', text: json.error || 'Could not delete the recipient.' });
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
+      setNotice({ tone: 'err', text: 'An error occurred while deleting.' });
     }
   };
 
@@ -465,17 +465,17 @@ export default function BroadcastPage() {
       if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
         setNotice({
           tone: 'ok',
-          text: `Pesan WhatsApp berhasil dikirim ke ${row.label} (${targetPhone}).`,
+          text: `WhatsApp message sent to ${row.label} (${targetPhone}).`,
         });
         void fetchData();
       } else {
         setNotice({
           tone: 'err',
-          text: `Gagal mengirim: ${json.message || 'Periksa koneksi WhatsApp Gateway'}`,
+          text: `Send failed: ${json.message || 'check the WhatsApp Gateway connection'}`,
         });
       }
     } catch (err) {
-      setNotice({ tone: 'err', text: `Terjadi kesalahan: ${(err as Error).message}` });
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
     } finally {
       setSendingMap((prev) => ({ ...prev, [row.id]: false }));
     }
@@ -486,12 +486,12 @@ export default function BroadcastPage() {
     if (targets.length === 0) {
       setNotice({
         tone: 'err',
-        text: 'Tidak ada penerima dengan nomor WhatsApp yang berstatus Pending pada filter saat ini.',
+        text: 'No recipients with a WhatsApp number and Pending status match the current filters.',
       });
       return;
     }
 
-    const confirmMsg = `Kirim broadcast WhatsApp ke ${targets.length} penerima berstatus Pending?\n\nPengaturan Anti-Banned:\n- Profil Jeda: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'Aktif (istirahat 20s tiap 20 pesan)' : 'Nonaktif'}`;
+    const confirmMsg = `Send a WhatsApp broadcast to ${targets.length} recipients with status Pending?\n\nAnti-Ban settings:\n- Delay profile: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 messages)' : 'Off'}`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -526,7 +526,7 @@ export default function BroadcastPage() {
         for (let cd = 20; cd > 0; cd--) {
           setCooldownCountdown(cd);
           setBulkProgress(
-            `Anti-Spam Cooldown: Beristirahat ${cd} detik sebelum melanjutkan batch berikutnya…`,
+            `Anti-Spam Cooldown: resting ${cd}s before the next batch…`,
           );
           await new Promise((r) => setTimeout(r, 1000));
         }
@@ -544,14 +544,14 @@ export default function BroadcastPage() {
     setBulkProgress(null);
     setNotice({
       tone: 'ok',
-      text: `Broadcast selesai. Berhasil mengirim ke ${successCount} dari ${targets.length} penerima.`,
+      text: `Broadcast finished. Sent to ${successCount} of ${targets.length} recipients.`,
     });
     void fetchData();
   };
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Hapus ${selectedIds.size} penerima dari daftar broadcast?`)) return;
+    if (!window.confirm(`Remove ${selectedIds.size} recipients from the broadcast list?`)) return;
 
     setIsBulkDeleting(true);
     let deleted = 0;
@@ -568,7 +568,7 @@ export default function BroadcastPage() {
     setSelectedIds(new Set());
     setNotice({
       tone: 'ok',
-      text: `Berhasil menghapus ${deleted} dari ${selectedIds.size} penerima.`,
+      text: `Deleted ${deleted} of ${selectedIds.size} recipients.`,
     });
     void fetchData();
   };
@@ -596,7 +596,7 @@ export default function BroadcastPage() {
     setSelectedIds(new Set());
     setNotice({
       tone: 'ok',
-      text: `Berhasil mengubah cabang ${updated} penerima.`,
+      text: `Updated the branch for ${updated} recipients.`,
     });
     void fetchData();
   };
@@ -604,11 +604,11 @@ export default function BroadcastPage() {
   const handleBulkSendSelected = async () => {
     const targets = data.filter((r) => selectedIds.has(r.id) && r.phone && (r.waStatus === 'pending' || !r.waSentAt));
     if (targets.length === 0) {
-      setNotice({ tone: 'err', text: 'Tidak ada penerima terpilih dengan nomor WhatsApp berstatus Pending.' });
+      setNotice({ tone: 'err', text: 'None of the selected recipients have a WhatsApp number and Pending status.' });
       return;
     }
 
-    const confirmMsg = `Kirim WhatsApp ke ${targets.length} penerima terpilih?\n\nPengaturan Anti-Banned:\n- Profil Jeda: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'Aktif (istirahat 20s tiap 20 pesan)' : 'Nonaktif'}`;
+    const confirmMsg = `Send WhatsApp to ${targets.length} selected recipients?\n\nAnti-Ban settings:\n- Delay profile: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 messages)' : 'Off'}`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -660,7 +660,7 @@ export default function BroadcastPage() {
     setSelectedIds(new Set());
     setNotice({
       tone: 'ok',
-      text: `Broadcast selesai. Berhasil mengirim ke ${successCount} dari ${targets.length} penerima terpilih.`,
+      text: `Broadcast finished. Sent to ${successCount} of ${targets.length} selected recipients.`,
     });
     void fetchData();
   };
@@ -669,7 +669,7 @@ export default function BroadcastPage() {
     const selected = data.filter((r) => selectedIds.has(r.id));
     if (selected.length === 0) return;
 
-    const header = 'Nama,No. WhatsApp,Cabang,Status WA\n';
+    const header = 'Name,WhatsApp Number,Branch,WA Status\n';
     const rows = selected
       .map((r) => `"${r.label}","${r.phone || ''}","${r.cabang || ''}","${r.waStatus}"`)
       .join('\n');
@@ -677,7 +677,7 @@ export default function BroadcastPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `penerima_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `recipients_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setSelectedIds(new Set());
@@ -737,61 +737,61 @@ export default function BroadcastPage() {
     filterFields: [
       {
         key: 'cabang',
-        label: 'Cabang / unit kerja',
+        label: 'Branch / work unit',
         kind: 'select',
         options: cabangList.map((c) => ({ value: c, label: c })),
         match: (row, value) => row.cabang === value,
       },
       {
         key: 'waStatus',
-        label: 'Status WhatsApp',
+        label: 'WhatsApp status',
         kind: 'multi',
         options: waStatusOptions,
         match: (row, values) => values.includes(row.waStatus ?? 'pending'),
       },
       {
         key: 'phone',
-        label: 'Nomor WhatsApp',
+        label: 'WhatsApp number',
         kind: 'multi',
         options: [
-          { value: 'has', label: 'Sudah ada nomor' },
-          { value: 'none', label: 'Belum ada nomor' },
+          { value: 'has', label: 'Has number' },
+          { value: 'none', label: 'No number yet' },
         ],
         match: (row, values) =>
           values.some((v) => (v === 'has' ? Boolean(row.phone) : !row.phone)),
       },
       {
         key: 'form',
-        label: 'Pengisian form pegawai',
+        label: 'Employee form submission',
         kind: 'multi',
         options: [
-          { value: 'yes', label: 'Sudah isi form' },
-          { value: 'no', label: 'Belum isi form' },
+          { value: 'yes', label: 'Submitted' },
+          { value: 'no', label: 'Not submitted' },
         ],
         match: (row, values) =>
           values.some((v) => (v === 'yes' ? Boolean(row.isSubmitted) : !row.isSubmitted)),
       },
       {
         key: 'created',
-        label: 'Periode ditambahkan',
+        label: 'Date added',
         kind: 'date-range',
         dateOf: (row) => row.createdAt,
       },
       {
         key: 'sent',
-        label: 'Periode pesan terkirim',
+        label: 'Date sent',
         kind: 'date-range',
         dateOf: (row) => row.waSentAt,
       },
     ],
     sortFields: [
-      { key: 'label', label: 'Nama', value: (row) => row.label },
-      { key: 'created', label: 'Tanggal ditambahkan', value: (row) => row.createdAt },
-      { key: 'sent', label: 'Tanggal terkirim', value: (row) => row.waSentAt },
-      { key: 'cabang', label: 'Cabang', value: (row) => row.cabang },
+      { key: 'label', label: 'Name', value: (row) => row.label },
+      { key: 'created', label: 'Date added', value: (row) => row.createdAt },
+      { key: 'sent', label: 'Date sent', value: (row) => row.waSentAt },
+      { key: 'cabang', label: 'Branch', value: (row) => row.cabang },
       {
         key: 'status',
-        label: 'Status WhatsApp',
+        label: 'WhatsApp status',
         value: (row) => WA_STATUS_LABEL[row.waStatus] ?? row.waStatus,
       },
     ],
@@ -817,8 +817,8 @@ export default function BroadcastPage() {
       />
 
       <PageHeader
-        title="Broadcast WhatsApp"
-        description="Kelola penerima, atur anti-ban, dan kirim pesan massal dengan spintax."
+        title="Mass Messaging"
+        description="Manage recipients, tune anti-ban pacing, and send bulk messages with spintax."
         actions={
           <>
             <Button variant="outline" onClick={() => setShowTemplateModal(true)}>
@@ -874,12 +874,12 @@ export default function BroadcastPage() {
 
       {/* Metrics */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="Total Penerima" value={total} icon={Users} loading={isLoading} />
+        <MetricCard label="Total Recipients" value={total} icon={Users} loading={isLoading} />
         <MetricCard label="Pending" value={pendingCount} icon={Clock} loading={isLoading} />
-        <MetricCard label="Terkirim" value={sentCount} icon={Send} loading={isLoading} />
-        <MetricCard label="Dibaca" value={readCount} icon={Eye} loading={isLoading} />
+        <MetricCard label="Sent" value={sentCount} icon={Send} loading={isLoading} />
+        <MetricCard label="Read" value={readCount} icon={Eye} loading={isLoading} />
         <MetricCard label="Read Rate" value={`${readRate}%`} icon={Gauge} loading={isLoading} />
-        <MetricCard label="Sudah Isi Form" value={submittedCount} icon={UserCheck} hint={`${submitRate}%`} loading={isLoading} />
+        <MetricCard label="Submitted Form" value={submittedCount} icon={UserCheck} hint={`${submitRate}%`} loading={isLoading} />
       </div>
 
       {/* Anti-ban engine */}
@@ -951,8 +951,8 @@ export default function BroadcastPage() {
       {/* Registration */}
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SectionCard
-          title="Tarik dari Data Pegawai"
-          description="Masukkan seluruh pegawai yang sudah submit form ke daftar broadcast."
+          title="Pull from Employee Records"
+          description="Copy every employee who submitted the form into this broadcast list."
         >
           <Button onClick={() => void handlePullFromPegawai()} disabled={isGenerating}>
             {isGenerating ? (
@@ -960,13 +960,13 @@ export default function BroadcastPage() {
             ) : (
               <Building2 aria-hidden="true" />
             )}
-            Tarik Semua Data Pegawai
+            Pull All Employees
           </Button>
         </SectionCard>
 
         <SectionCard
-          title="Pendaftaran Manual"
-          description="Format satu baris per pegawai: Nama, No. WhatsApp, Cabang"
+          title="Manual Registration"
+          description="One employee per line: Name, WhatsApp Number, Branch"
         >
           <div className="space-y-3">
             <textarea
@@ -974,7 +974,7 @@ export default function BroadcastPage() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder={'Andi Pratama, 08123456789, Kantor Pusat\nBudi Santoso, 08129876543, KCP Manado'}
-              aria-label="Data penerima manual"
+              aria-label="Manual recipient data"
               className="tabular w-full resize-vertical rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
             <Button onClick={() => void handleRegisterManual()} disabled={isGenerating || !inputText.trim()}>
@@ -983,7 +983,7 @@ export default function BroadcastPage() {
               ) : (
                 <UserPlus aria-hidden="true" />
               )}
-              Daftarkan Manual
+              Register Manually
             </Button>
           </div>
         </SectionCard>
@@ -993,23 +993,23 @@ export default function BroadcastPage() {
       <Toolbar>
         <TableViewControls
           view={view}
-          searchPlaceholder="Cari nama, nomor, atau cabang…"
-          resultLabel="penerima"
+          searchPlaceholder="Search name, number, or branch…"
+          resultLabel="recipients"
         />
       </Toolbar>
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 ? (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3">
-          <span className="text-sm font-medium text-accent">{selectedIds.size} penerima dipilih</span>
+          <span className="text-sm font-medium text-accent">{selectedIds.size} recipients selected</span>
           <div className="ml-auto flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => void handleBulkSendSelected()} disabled={isBulkSending}>
               <Send className="size-3.5" aria-hidden="true" />
-              Kirim Terpilih
+              Send Selected
             </Button>
             <Button size="sm" variant="outline" onClick={() => setShowBulkEditCabang(true)} disabled={isBulkEditing}>
               <Building2 className="size-3.5" aria-hidden="true" />
-              Edit Cabang
+              Edit Branch
             </Button>
             <Button size="sm" variant="outline" onClick={() => handleBulkExport()}>
               <FileSpreadsheet className="size-3.5" aria-hidden="true" />
@@ -1021,10 +1021,10 @@ export default function BroadcastPage() {
               ) : (
                 <Trash2 className="size-3.5" aria-hidden="true" />
               )}
-              Hapus
+              Delete
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-              Batal
+              Cancel
             </Button>
           </div>
         </div>
@@ -1033,7 +1033,7 @@ export default function BroadcastPage() {
       {/* Recipients table */}
       <SectionCard
         title={`Daftar Penerima (${view.total})`}
-        description="Kirim pesan per penerima atau gunakan Broadcast Massal di atas"
+        description="Send per recipient, or use Mass Broadcast above"
         className="mt-4"
         bodyClassName="p-0 sm:p-0"
       >
@@ -1046,13 +1046,13 @@ export default function BroadcastPage() {
         ) : view.total === 0 ? (
           <EmptyState
             icon={Megaphone}
-            title={view.isFiltered ? 'Tidak ditemukan penerima yang cocok' : 'Belum ada penerima'}
+            title={view.isFiltered ? 'No recipients match these filters' : 'No recipients yet'}
             description={
               view.isFiltered
-                ? 'Coba ubah kata kunci, filter, atau periode pencarian.'
-                : 'Tarik dari data pegawai, daftarkan manual, atau import dari file Excel/CSV.'
+                ? 'Try adjusting the search, filters, or date period.'
+                : 'Pull from employee records, register manually, or import an Excel/CSV file.'
             }
-            action={view.isFiltered ? { label: 'Reset Filter', onClick: view.reset } : undefined}
+            action={view.isFiltered ? { label: 'Reset Filters', onClick: view.reset } : undefined}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -1065,15 +1065,15 @@ export default function BroadcastPage() {
                       checked={view.rows.length > 0 && selectedIds.size === view.rows.length}
                       onChange={() => toggleSelectAll()}
                       className="size-4 cursor-pointer accent-[var(--accent)]"
-                      aria-label="Pilih semua"
+                      aria-label="Select all"
                     />
                   </TableHead>
-                  <TableHead>Nama</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>No. WhatsApp</TableHead>
-                  <TableHead>Cabang</TableHead>
+                  <TableHead>Branch</TableHead>
                   <TableHead>Status WA</TableHead>
                   <TableHead>Form</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1092,7 +1092,7 @@ export default function BroadcastPage() {
                       </TableCell>
                       <TableCell className="font-medium text-foreground">{row.label}</TableCell>
                       <TableCell className="tabular text-chart-2">
-                        {row.phone || <span className="text-muted-foreground">— belum ada</span>}
+                        {row.phone || <span className="text-muted-foreground">— none</span>}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{row.cabang || '-'}</TableCell>
                       <TableCell>
@@ -1107,7 +1107,7 @@ export default function BroadcastPage() {
                             Sudah
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Belum</span>
+                          <span className="text-xs text-muted-foreground">No</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
@@ -1129,7 +1129,7 @@ export default function BroadcastPage() {
                             size="icon-sm"
                             variant="ghost"
                             onClick={() => void handleDelete(row.id)}
-                            aria-label={`Hapus ${row.label}`}
+                            aria-label={`Delete ${row.label}`}
                             className="text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 aria-hidden="true" />
@@ -1260,7 +1260,7 @@ export default function BroadcastPage() {
                   value={mockupSampleName}
                   onChange={(e) => setMockupSampleName(e.target.value)}
                   className="h-7 max-w-48 text-xs"
-                  aria-label="Contoh nama target untuk pratinjau"
+                  aria-label="Sample target name for the preview"
                 />
               </div>
             </div>
@@ -1272,7 +1272,7 @@ export default function BroadcastPage() {
             </Button>
             <Button onClick={() => setShowTemplateModal(false)}>
               <Plus aria-hidden="true" />
-              Selesai
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1282,23 +1282,23 @@ export default function BroadcastPage() {
       <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
         <DialogContent className="glass-strong max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Konfirmasi Import Data File</DialogTitle>
+            <DialogTitle className="text-base">Confirm File Import</DialogTitle>
             <DialogDescription>
-              File: {importFileName} · Terdeteksi: {importPreview.length} pegawai
+              File: {importFileName} · Detected: {importPreview.length} employees
             </DialogDescription>
           </DialogHeader>
 
           <p className="text-xs text-muted-foreground">
-            Berikut pratinjau 5 data pertama yang akan ditambahkan ke daftar broadcast.
+            Preview of the first 5 records that will be added to the broadcast list.
           </p>
 
           <div className="overflow-hidden rounded-lg border border-border/60">
             <Table>
               <TableHeader className="bg-background/40">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>Nama Pegawai</TableHead>
+                  <TableHead>Employee Name</TableHead>
                   <TableHead>No. WhatsApp</TableHead>
-                  <TableHead>Cabang / Unit</TableHead>
+                  <TableHead>Branch / Unit</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1313,14 +1313,14 @@ export default function BroadcastPage() {
             </Table>
             {importPreview.length > 5 ? (
               <p className="border-t border-border/60 bg-background/60 py-2 text-center text-[11px] text-muted-foreground">
-                …dan {importPreview.length - 5} pegawai lainnya
+                …and {importPreview.length - 5} more employees
               </p>
             ) : null}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowImportModal(false)}>
-              Batal
+              Cancel
             </Button>
             <Button onClick={() => void handleSaveImport()} disabled={isImporting}>
               {isImporting ? (
@@ -1328,7 +1328,7 @@ export default function BroadcastPage() {
               ) : (
                 <FileSpreadsheet aria-hidden="true" />
               )}
-              {isImporting ? 'Mengimpor…' : `Impor ${importPreview.length} Pegawai`}
+              {isImporting ? 'Importing…' : `Import ${importPreview.length} Employees`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1338,22 +1338,22 @@ export default function BroadcastPage() {
       <Dialog open={showBulkEditCabang} onOpenChange={setShowBulkEditCabang}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Cabang Massal</DialogTitle>
+            <DialogTitle>Bulk Edit Branch</DialogTitle>
             <DialogDescription>
-              Ubah cabang untuk {selectedIds.size} penerima yang dipilih.
+              Change the branch for {selectedIds.size} selected recipients.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
               value={bulkEditCabangValue}
               onChange={(e) => setBulkEditCabangValue(e.target.value)}
-              placeholder="Nama cabang baru (contoh: KCP Manado)"
-              aria-label="Cabang baru"
+              placeholder="New branch name (e.g. KCP Manado)"
+              aria-label="New branch name"
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBulkEditCabang(false)}>
-              Batal
+              Cancel
             </Button>
             <Button onClick={() => void handleBulkEditCabang()} disabled={isBulkEditing || !bulkEditCabangValue.trim()}>
               {isBulkEditing ? (

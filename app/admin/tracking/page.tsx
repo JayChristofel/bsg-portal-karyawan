@@ -69,11 +69,11 @@ interface Campaign {
 const REFRESH_MS = 8000;
 
 const STATUS_FILTERS = [
-  { value: 'all', label: 'Semua Status' },
-  { value: 'pending', label: 'Menunggu' },
-  { value: 'sent', label: 'Terkirim' },
-  { value: 'delivered', label: 'Diterima' },
-  { value: 'read', label: 'Dibaca' },
+  { value: 'all', label: 'All Statuses' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'delivered', label: 'Delivered' },
+  { value: 'read', label: 'Read' },
 ] as const;
 
 const DOT_COLOR: Record<string, string> = {
@@ -84,10 +84,10 @@ const DOT_COLOR: Record<string, string> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: 'Menunggu',
-  sent: 'Terkirim',
-  delivered: 'Diterima',
-  read: 'Dibaca',
+  pending: 'Pending',
+  sent: 'Sent',
+  delivered: 'Delivered',
+  read: 'Read',
 };
 
 export default function TrackingPage() {
@@ -207,16 +207,16 @@ export default function TrackingPage() {
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
-        title="Tracking Status Pengiriman"
-        description="Pantau status pengiriman WhatsApp per kampanye dan per penerima."
+        title="Delivery Tracking"
+        description="Monitor WhatsApp delivery status per campaign and per recipient."
         actions={
           <>
             <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
-              <SelectTrigger className="w-full sm:w-56" aria-label="Filter kampanye">
+              <SelectTrigger className="w-full sm:w-56" aria-label="Filter campaign">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Kampanye</SelectItem>
+                <SelectItem value="all">All Campaigns</SelectItem>
                 {campaigns.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
                     {c.name}
@@ -251,11 +251,11 @@ export default function TrackingPage() {
 
       {/* Metrics */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-        <MetricCard label="Total Penerima" value={stats.total} icon={Users} loading={isLoading} />
-        <MetricCard label="Menunggu" value={stats.pending} icon={Clock} loading={isLoading} />
-        <MetricCard label="Terkirim" value={stats.sent} icon={Send} loading={isLoading} />
-        <MetricCard label="Dibaca" value={stats.read} icon={Eye} loading={isLoading} />
-        <MetricCard label="Sudah Isi Form" value={stats.submitted} icon={UserCheck} loading={isLoading} />
+        <MetricCard label="Total Recipients" value={stats.total} icon={Users} loading={isLoading} />
+        <MetricCard label="Pending" value={stats.pending} icon={Clock} loading={isLoading} />
+        <MetricCard label="Sent" value={stats.sent} icon={Send} loading={isLoading} />
+        <MetricCard label="Read" value={stats.read} icon={Eye} loading={isLoading} />
+        <MetricCard label="Submitted Form" value={stats.submitted} icon={UserCheck} loading={isLoading} />
       </div>
 
       {/* Filters + live controls */}
@@ -269,9 +269,9 @@ export default function TrackingPage() {
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nama, nomor, atau cabang…"
+              placeholder="Search name, number, or branch…"
               className="pl-9"
-              aria-label="Cari penerima"
+              aria-label="Search recipients"
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -294,10 +294,10 @@ export default function TrackingPage() {
             size="sm"
             onClick={() => setIsLive((v) => !v)}
             aria-pressed={isLive}
-            aria-label={isLive ? 'Jeda pembaruan otomatis' : 'Lanjutkan pembaruan otomatis'}
+            aria-label={isLive ? 'Pause automatic refresh' : 'Resume automatic refresh'}
           >
             {isLive ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            {isLive ? 'Jeda' : 'Lanjut'}
+            {isLive ? 'Pause' : 'Resume'}
           </Button>
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span
@@ -306,7 +306,7 @@ export default function TrackingPage() {
               }
               aria-hidden="true"
             />
-            {isLive ? 'Live' : 'Dijeda'}
+            {isLive ? 'Live' : 'Paused'}
             {lastUpdated ? ` · ${lastUpdated.toLocaleTimeString('id-ID')}` : ''}
           </p>
         </div>
@@ -316,7 +316,7 @@ export default function TrackingPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <SectionCard
           title={`Daftar Penerima (${filteredRecipients.length})`}
-          description="Klik penerima untuk melihat timeline status"
+          description="Click a recipient to see their status timeline"
           bodyClassName="p-0 sm:p-0"
         >
           {isLoading ? (
@@ -328,11 +328,11 @@ export default function TrackingPage() {
           ) : filteredRecipients.length === 0 ? (
             <EmptyState
               icon={Users}
-              title="Tidak ada penerima"
+              title="No recipients"
               description={
                 searchQuery || statusFilter !== 'all'
-                  ? 'Coba ubah pencarian atau filter status.'
-                  : 'Belum ada penerima pada kampanye ini.'
+                  ? 'Try a different search or status filter.'
+                  : 'No recipients in this campaign yet.'
               }
             />
           ) : (
@@ -367,11 +367,11 @@ export default function TrackingPage() {
         </SectionCard>
 
         <SectionCard
-          title="Timeline Status"
+          title="Status Timeline"
           description={
             selectedRecipient
               ? selectedRecipient.label
-              : 'Riwayat perubahan status pengiriman'
+              : 'Delivery status change history'
           }
         >
           {isLoadingHistory ? (
@@ -383,14 +383,14 @@ export default function TrackingPage() {
           ) : !selectedRecipient ? (
             <EmptyState
               icon={Clock}
-              title="Belum ada penerima dipilih"
-              description="Pilih salah satu penerima dari daftar untuk melihat riwayat status pengirimannya."
+              title="No recipient selected"
+              description="Select a recipient from the list to see their delivery history."
             />
           ) : history.length === 0 ? (
             <EmptyState
               icon={Clock}
-              title="Belum ada riwayat"
-              description="Penerima ini belum memiliki perubahan status tercatat."
+              title="No history yet"
+              description="No status changes recorded for this recipient."
             />
           ) : (
             <ol className="relative max-h-[520px] space-y-5 overflow-y-auto pl-6">
@@ -428,7 +428,7 @@ export default function TrackingPage() {
 
       <p className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground">
         <Download className="size-3" aria-hidden="true" />
-        Export mengikuti filter kampanye yang dipilih
+        Export follows the selected campaign filter
       </p>
     </div>
   );

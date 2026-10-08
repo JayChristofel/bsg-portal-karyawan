@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .where(and(eq(recipients.campaignId, campaignId), ne(recipients.waStatus, 'read')));
 
     if (targets.length === 0) {
-      return NextResponse.json({ error: 'Tidak ada penerima yang perlu dikirim.' }, { status: 400 });
+      return NextResponse.json({ error: 'No recipients left to send.' }, { status: 400 });
     }
 
     await db.update(campaigns).set({ status: 'sending', updatedAt: new Date() }).where(eq(campaigns.id, campaignId));
@@ -93,6 +93,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   } catch (error: any) {
     console.error('Campaign send error:', error);
-    return NextResponse.json({ error: 'Gagal mengirim kampanye', detail: error?.message }, { status: 500 });
+    return NextResponse.json({ error: 'Could not send the campaign', detail: error?.message }, { status: 500 });
   }
 }

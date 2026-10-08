@@ -14,7 +14,7 @@ async function checkAuth(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   if (!(await checkAuth(req))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error('Fetch recipients error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal mengambil data dari database.' },
+      { success: false, error: 'Could not read data from the database.' },
       { status: 500 }
     );
   }
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (!(await checkAuth(req))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Create recipient/send error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal memproses permintaan.' },
+      { success: false, error: 'Could not process the request.' },
       { status: 500 }
     );
   }

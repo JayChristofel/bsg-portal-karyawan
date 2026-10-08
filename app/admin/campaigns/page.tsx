@@ -126,7 +126,7 @@ export default function CampaignsPage() {
         setScheduledAt('');
         void fetchCampaigns();
       } else {
-        setNotice({ tone: 'err', text: data.error || 'Gagal membuat kampanye.' });
+        setNotice({ tone: 'err', text: data.error || 'Could not create the campaign.' });
       }
     } catch (err) {
       setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
@@ -148,7 +148,7 @@ export default function CampaignsPage() {
         });
         void fetchCampaigns();
       } else {
-        setNotice({ tone: 'err', text: data.error || 'Gagal mengirim kampanye.' });
+        setNotice({ tone: 'err', text: data.error || 'Could not send the campaign.' });
       }
     } catch (err) {
       setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
@@ -165,7 +165,7 @@ export default function CampaignsPage() {
         setNotice({ tone: 'ok', text: `Kampanye "${campaignName}" berhasil dihapus.` });
         void fetchCampaigns();
       } else {
-        setNotice({ tone: 'err', text: 'Gagal menghapus kampanye.' });
+        setNotice({ tone: 'err', text: 'Could not delete the campaign.' });
       }
     } catch {
       setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
@@ -175,7 +175,7 @@ export default function CampaignsPage() {
   return (
     <div className="mx-auto max-w-[1200px]">
       <PageHeader
-        title="Manajemen Kampanye"
+        title="Campaign Management"
         description="Buat kampanye broadcast, pilih template, jadwalkan kirim, dan pantau status pengiriman."
         actions={
           <Button onClick={() => setOpen(true)}>
@@ -199,7 +199,7 @@ export default function CampaignsPage() {
             type="button"
             onClick={() => setNotice(null)}
             className="cursor-pointer opacity-70 hover:opacity-100"
-            aria-label="Tutup pesan"
+            aria-label="Dismiss message"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -216,9 +216,9 @@ export default function CampaignsPage() {
         <div className="glass rounded-xl">
           <EmptyState
             icon={ClipboardList}
-            title="Belum ada kampanye"
+            title="No campaigns yet"
             description="Buat kampanye pertama untuk mulai melakukan broadcast ke pegawai."
-            action={{ label: 'Kampanye Baru', onClick: () => setOpen(true) }}
+            action={{ label: 'New Campaign', onClick: () => setOpen(true) }}
           />
         </div>
       ) : (
@@ -276,7 +276,7 @@ export default function CampaignsPage() {
                         ) : (
                           <Send aria-hidden="true" />
                         )}
-                        {sendingId === c.id ? 'Mengirim…' : 'Kirim'}
+                        {sendingId === c.id ? 'Sending…' : 'Send'}
                       </Button>
                     ) : null}
                     <Button
@@ -346,7 +346,7 @@ export default function CampaignsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="glass-strong sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">Kampanye Baru</DialogTitle>
+            <DialogTitle className="text-base">New Campaign</DialogTitle>
             <DialogDescription>
               Pilih template pesan dan jadwalkan waktu kirim bila diperlukan.
             </DialogDescription>
@@ -354,7 +354,7 @@ export default function CampaignsPage() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="campaign-name">Nama Kampanye</Label>
+              <Label htmlFor="campaign-name">Campaign Name</Label>
               <Input
                 id="campaign-name"
                 value={name}
@@ -364,7 +364,7 @@ export default function CampaignsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="campaign-template">Template Pesan (Opsional)</Label>
+              <Label htmlFor="campaign-template">Message Template (optional)</Label>
               <Select value={templateId} onValueChange={setTemplateId}>
                 <SelectTrigger id="campaign-template">
                   <SelectValue />
@@ -381,7 +381,7 @@ export default function CampaignsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="campaign-schedule">Jadwal Kirim (Opsional)</Label>
+              <Label htmlFor="campaign-schedule">Scheduled Send (optional)</Label>
               <Input
                 id="campaign-schedule"
                 type="datetime-local"
@@ -399,7 +399,7 @@ export default function CampaignsPage() {
               Batal
             </Button>
             <Button onClick={() => void handleSave()} disabled={isSaving}>
-              {isSaving ? 'Menyimpan…' : 'Simpan Kampanye'}
+              {isSaving ? 'Saving…' : 'Save Campaign'}
             </Button>
           </DialogFooter>
         </DialogContent>

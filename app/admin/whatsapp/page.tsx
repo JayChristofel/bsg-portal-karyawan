@@ -176,17 +176,31 @@ export default function WhatsAppGatewayPage() {
     setNotice(null);
     try {
       const res = await fetch('/api/whatsapp/qr');
+      const data = await res.json();
+
       if (res.ok) {
-        const data = await res.json();
-        let link: string | null = data?.results?.qr_link ?? data?.results?.qr_url ?? null;
-        if (link?.startsWith('http://')) link = link.replace('http://', 'https://');
-        setQrUrl(link);
-        setQrCountdown(data?.results?.qr_duration || 30);
-      } else {
-        setNotice({ tone: 'err', text: 'Gagal mengambil QR. Pastikan server GOWA aktif.' });
+        // Same-origin proxy path returned by the API; no scheme rewriting here,
+        // since the gateway URL may legitimately be plain HTTP.
+        setQrUrl(data.qrLink ?? null);
+        setQrCountdown(data.qrDuration || 30);
+        return;
       }
+
+      if (data?.alreadyConnected) {
+        // Healthy gateway, device already paired — not a failure.
+        setQrUrl(null);
+        setNotice({ tone: 'ok', text: data.message });
+        return;
+      }
+
+      setQrUrl(null);
+      setNotice({
+        tone: 'err',
+        text: data?.error || 'Could not load the QR code from the gateway.',
+      });
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat memuat QR Code.' });
+      setQrUrl(null);
+      setNotice({ tone: 'err', text: 'Unexpected error while loading the QR code.' });
     } finally {
       setIsLoadingQr(false);
     }
@@ -218,7 +232,7 @@ export default function WhatsAppGatewayPage() {
   }, [qrUrl, isConnected, fetchQr]);
 
   const handleReconnect = async () => {
-    setNotice({ tone: 'info', text: 'Meminta reconnect ke perangkat…' });
+    setNotice({ tone: 'info', text: 'Requesting device reconnect…' });
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -229,13 +243,13 @@ export default function WhatsAppGatewayPage() {
       setNotice({ tone: 'ok', text: data.message || 'Perintah reconnect terkirim.' });
       void fetchStatus();
     } catch {
-      setNotice({ tone: 'err', text: 'Gagal menghubungi gateway untuk reconnect.' });
+      setNotice({ tone: 'err', text: 'Could not reach the gateway to reconnect.' });
     }
   };
 
   const handleLogoutDevice = async () => {
     if (!window.confirm('Putuskan tautan WhatsApp dari perangkat portal-pegawai?')) return;
-    setNotice({ tone: 'info', text: 'Memutuskan perangkat…' });
+    setNotice({ tone: 'info', text: 'Logging the device out…' });
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -247,7 +261,7 @@ export default function WhatsAppGatewayPage() {
       setQrUrl(null);
       void fetchStatus();
     } catch {
-      setNotice({ tone: 'err', text: 'Gagal logout perangkat.' });
+      setNotice({ tone: 'err', text: 'Could not log the device out.' });
     }
   };
 
@@ -266,7 +280,7 @@ export default function WhatsAppGatewayPage() {
       });
       const data = await res.json();
       if (data.code === 'SUCCESS' || res.ok) {
-        setNotice({ tone: 'ok', text: 'Konfigurasi webhook berhasil disimpan ke GOWA.' });
+        setNotice({ tone: 'ok', text: 'Webhook configuration saved to GOWA.' });
         void fetchWebhookData();
       } else {
         setNotice({
@@ -306,7 +320,7 @@ export default function WhatsAppGatewayPage() {
       });
       const data = await res.json();
       if (data.code === 'SUCCESS' || res.ok) {
-        setNotice({ tone: 'ok', text: 'Konfigurasi gateway berhasil disimpan.' });
+        setNotice({ tone: 'ok', text: 'Gateway configuration saved.' });
         void fetchStatus();
       } else {
         setNotice({
@@ -347,7 +361,7 @@ export default function WhatsAppGatewayPage() {
       if (data.authOk) {
         setNotice({
           tone: 'ok',
-          text: 'Koneksi & autentikasi gateway berhasil. Silakan pindai QR Code untuk mendaftarkan perangkat.',
+          text: 'Gateway connection and authentication succeeded. Scan the QR code to register the device.',
         });
         void fetchStatus();
       } else {
@@ -384,7 +398,7 @@ export default function WhatsAppGatewayPage() {
       });
       setSendResult(await res.json());
     } catch (err) {
-      setSendResult({ error: (err as Error).message || 'Gagal mengirim pesan' });
+      setSendResult({ error: (err as Error).message || 'Failed to send message' });
     } finally {
       setIsSending(false);
     }
@@ -430,8 +444,8 @@ export default function WhatsAppGatewayPage() {
 
       {/* ── Gateway configuration ─────────────────────────────── */}
       <SectionCard
-        title="Konfigurasi Koneksi Gateway GOWA"
-        description="Atur URL endpoint, Device ID, dan kredensial HTTP Basic Auth. Tersimpan di database dan langsung dipakai semua fitur WhatsApp."
+        title="GOWA Gateway Connection Settings"
+        description="Set the endpoint URL, Device ID, and HTTP Basic Auth credentials. Stored in the database and used by every WhatsApp feature."
         className="mb-4"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -450,17 +464,17 @@ export default function WhatsAppGatewayPage() {
             onChange={setGatewayDeviceId}
           />
           <Field
-            label="Basic Auth Username (Opsional)"
+            label="Basic Auth Username (optional)"
             htmlFor="gw-user"
-            placeholder="Kosongkan jika gateway tanpa Basic Auth"
+            placeholder="Leave blank if the gateway has no Basic Auth"
             value={gatewayUsername}
             onChange={setGatewayUsername}
             autoComplete="off"
           />
           <Field
-            label="Basic Auth Password (Opsional)"
+            label="Basic Auth Password (optional)"
             htmlFor="gw-pass"
-            placeholder="Kosongkan jika gateway tanpa Basic Auth"
+            placeholder="Leave blank if the gateway has no Basic Auth"
             value={gatewayPassword}
             onChange={setGatewayPassword}
             type="password"
@@ -471,11 +485,11 @@ export default function WhatsAppGatewayPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={() => void handleSaveConfig()} disabled={isSavingConfig}>
             <Save aria-hidden="true" />
-            {isSavingConfig ? 'Menyimpan…' : 'Simpan Konfigurasi'}
+            {isSavingConfig ? 'Saving…' : 'Save Configuration'}
           </Button>
           <Button variant="outline" onClick={() => void handleTestConfig()} disabled={isTestingConfig}>
             <PlugZap aria-hidden="true" />
-            {isTestingConfig ? 'Menguji…' : 'Tes Koneksi'}
+            {isTestingConfig ? 'Testing…' : 'Test Connection'}
           </Button>
         </div>
 
@@ -489,7 +503,7 @@ export default function WhatsAppGatewayPage() {
       {/* ── Device status + QR ────────────────────────────────── */}
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SectionCard
-          title="Status Perangkat WhatsApp"
+          title="WhatsApp Device Status"
           actions={
             <Badge
               variant="outline"
@@ -513,7 +527,7 @@ export default function WhatsAppGatewayPage() {
                 )}
                 aria-hidden="true"
               />
-              {isLoadingStatus ? 'Memeriksa' : isConnected ? 'Terhubung' : 'Terputus'}
+              {isLoadingStatus ? 'Checking' : isConnected ? 'Connected' : 'Disconnected'}
             </Badge>
           }
         >
@@ -521,12 +535,12 @@ export default function WhatsAppGatewayPage() {
             {[
               { label: 'Device ID', value: status?.device_id || 'portal-pegawai', mono: true },
               {
-                label: 'Status Login',
-                value: status?.is_logged_in ? 'Logged In' : 'Belum Login',
+                label: 'Login Status',
+                value: status?.is_logged_in ? 'Logged In' : 'Not Signed In',
                 tone: status?.is_logged_in ? 'ok' : 'err',
               },
               {
-                label: 'Status Koneksi Soket',
+                label: 'Socket Connection Status',
                 value: status?.is_connected ? 'Connected' : 'Disconnected',
                 tone: status?.is_connected ? 'ok' : 'err',
               },
@@ -573,7 +587,7 @@ export default function WhatsAppGatewayPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Pindai QR Code WhatsApp Web">
+        <SectionCard title="Scan the WhatsApp Web QR Code">
           {isConnected ? (
             <div className="flex flex-col items-center px-4 py-10 text-center">
               <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-accent/15">
@@ -589,7 +603,7 @@ export default function WhatsAppGatewayPage() {
             <div className="flex flex-col items-center">
               <div className="rounded-xl bg-white p-3 shadow-xl shadow-black/40">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrUrl} alt="WhatsApp QR Code untuk penautan perangkat" className="size-52" />
+                <img src={qrUrl} alt="WhatsApp QR code for linking the device" className="size-52" />
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
                 Kadaluarsa dalam{' '}
@@ -597,7 +611,7 @@ export default function WhatsAppGatewayPage() {
               </p>
               <Button size="sm" variant="ghost" className="mt-2" onClick={() => void fetchQr()}>
                 <RefreshCw aria-hidden="true" />
-                Refresh QR Sekarang
+                Refresh QR Now
               </Button>
             </div>
           ) : (
@@ -606,11 +620,11 @@ export default function WhatsAppGatewayPage() {
                 <Smartphone className="size-7 text-muted-foreground" aria-hidden="true" />
               </span>
               <p className="max-w-xs text-xs text-muted-foreground">
-                Klik tombol di bawah untuk meminta QR Code autentikasi dari WhatsApp.
+                Use the button below to request an authentication QR from WhatsApp.
               </p>
               <Button className="mt-4" onClick={() => void fetchQr()} disabled={isLoadingQr}>
                 <QrCode aria-hidden="true" />
-                {isLoadingQr ? 'Memuat QR Code…' : 'Tampilkan QR Code'}
+                {isLoadingQr ? 'Loading QR Code…' : 'Show QR Code'}
               </Button>
             </div>
           )}
@@ -618,16 +632,16 @@ export default function WhatsAppGatewayPage() {
           <div className="mt-4 rounded-lg border border-border/60 bg-background/40 p-3.5">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <Info className="size-3.5 text-accent" aria-hidden="true" />
-              Petunjuk Menautkan Perangkat
+              Device Linking Instructions
             </p>
             <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-muted-foreground">
-              <li>Buka aplikasi WhatsApp di smartphone Anda.</li>
+              <li>Open WhatsApp on your phone.</li>
               <li>
-                Ketuk <b className="text-foreground">Menu (titik tiga)</b> atau{' '}
-                <b className="text-foreground">Pengaturan</b> → <b className="text-foreground">Perangkat Tertaut</b>.
+                Tap <b className="text-foreground">Menu</b> or{' '}
+                <b className="text-foreground">Settings</b> → <b className="text-foreground">Linked Device</b>.
               </li>
               <li>
-                Ketuk <b className="text-foreground">Tautkan Perangkat</b> lalu arahkan kamera ke QR Code di atas.
+                Tap <b className="text-foreground">Link Device</b>, then point your camera at the QR code above.
               </li>
             </ol>
           </div>
@@ -636,8 +650,8 @@ export default function WhatsAppGatewayPage() {
 
       {/* ── Webhook ──────────────────────────────────────────── */}
       <SectionCard
-        title="Konfigurasi Webhook GOWA"
-        description="GOWA mengirim event WhatsApp (status koneksi, pesan masuk, dll.) via HTTP POST ke endpoint ini."
+        title="GOWA Webhook Settings"
+        description="GOWA sends WhatsApp events (connection status, incoming messages, etc.) to this endpoint via HTTP POST."
         className="mb-4"
         actions={
           <Button size="sm" variant="outline" onClick={handleUseCurrentHost}>
@@ -655,15 +669,15 @@ export default function WhatsAppGatewayPage() {
             onChange={setWebhookUrl}
           />
           <Field
-            label="Webhook Secret Key (Opsional)"
+            label="Webhook Secret Key (optional)"
             htmlFor="wh-secret"
-            placeholder="Kunci rahasia HMAC SHA-256"
+            placeholder="HMAC SHA-256 secret key"
             value={webhookSecret}
             onChange={setWebhookSecret}
             autoComplete="off"
           />
           <Field
-            label="Filter Events (Opsional)"
+            label="Filter Events (optional)"
             htmlFor="wh-events"
             placeholder="message,connection,message.ack"
             value={webhookEvents}
@@ -675,7 +689,7 @@ export default function WhatsAppGatewayPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button onClick={() => void handleSaveWebhook()} disabled={isSavingWebhook}>
             <Save aria-hidden="true" />
-            {isSavingWebhook ? 'Menyimpan…' : 'Simpan Konfigurasi Webhook'}
+            {isSavingWebhook ? 'Saving…' : 'Save Webhook Configuration'}
           </Button>
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <Webhook className="size-3" aria-hidden="true" />
@@ -736,20 +750,20 @@ export default function WhatsAppGatewayPage() {
 
       {/* ── Test send ────────────────────────────────────────── */}
       <SectionCard
-        title="Uji Coba Pengiriman Pesan"
+        title="Test Message Delivery"
         description="Kirim pesan percobaan untuk memastikan koneksi WhatsApp Gateway berfungsi."
       >
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <div className="space-y-4">
             <Field
-              label="Nomor WhatsApp Tujuan"
+              label="Target WhatsApp Number"
               htmlFor="test-phone"
               placeholder="08123456789 atau 628123456789"
               value={testPhone}
               onChange={setTestPhone}
             />
             <div className="space-y-1.5">
-              <Label htmlFor="test-msg">Isi Pesan</Label>
+              <Label htmlFor="test-msg">Message Body</Label>
               <textarea
                 id="test-msg"
                 rows={6}
@@ -760,7 +774,7 @@ export default function WhatsAppGatewayPage() {
             </div>
             <Button onClick={() => void handleTestSend()} disabled={isSending}>
               <Send aria-hidden="true" />
-              {isSending ? 'Mengirim…' : 'Kirim Pesan Uji Coba'}
+              {isSending ? 'Sending…' : 'Send Test Message'}
             </Button>
           </div>
 
@@ -773,7 +787,7 @@ export default function WhatsAppGatewayPage() {
               content={
                 sendResult
                   ? JSON.stringify(sendResult, null, 2)
-                  : '// Log respons pengiriman akan muncul di sini...'
+                  : '// Delivery response log will appear here...'
               }
             />
           </div>

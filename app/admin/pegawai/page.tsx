@@ -173,25 +173,25 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
             <DialogHeader>
               <DialogTitle className="text-base">{row.name}</DialogTitle>
               <DialogDescription>
-                Audit lingkungan &amp; identitas · Record ID #{row.id}
+                Environment &amp; identity audit · Record ID #{row.id}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3">
               <DetailSection
                 icon={<User className="size-3.5" />}
-                title="Identitas Kepegawaian"
+                title="Employment Identity"
                 items={[
-                  { label: 'NIP', value: row.nip, mono: true },
-                  { label: 'Kantor Cabang', value: row.cabang || '-' },
-                  { label: 'Jabatan sesuai SK', value: row.jabatan_sk || '-' },
-                  { label: 'Jabatan Saat Ini', value: row.jabatan_sekarang || '-' },
+                  { label: 'Employee ID', value: row.nip, mono: true },
+                  { label: 'Branch Office', value: row.cabang || '-' },
+                  { label: 'Position per SK', value: row.jabatan_sk || '-' },
+                  { label: 'Current Position', value: row.jabatan_sekarang || '-' },
                 ]}
               />
 
               <DetailSection
                 icon={<Monitor className="size-3.5" />}
-                title="Perangkat & Browser"
+                title="Device & Browser"
                 items={[
                   { label: 'Device Type', value: row.device_type || 'Desktop' },
                   { label: 'Operating System', value: row.os || '-' },
@@ -204,7 +204,7 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
 
               <DetailSection
                 icon={<Globe className="size-3.5" />}
-                title="Jaringan & Geolokasi"
+                title="Network & Geolocation"
                 items={[
                   { label: 'IP Address', value: row.ip_address || '-', mono: true },
                   { label: 'ASN / ISP', value: row.asn_isp || '-' },
@@ -215,9 +215,9 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
 
               <DetailSection
                 icon={<Clock className="size-3.5" />}
-                title="Aktivitas & Waktu"
+                title="Activity & Timing"
                 items={[
-                  { label: 'Waktu Submit', value: row.created_at },
+                  { label: 'Submitted At', value: row.created_at },
                   { label: 'Time on Page', value: `${row.time_on_page ?? 0} detik` },
                   { label: 'Page Path', value: row.page_path || '/', mono: true },
                   { label: 'Session ID', value: row.session_id || '-', mono: true },
@@ -284,7 +284,7 @@ export default function PegawaiPage() {
       !addForm.jabatan_sekarang.trim() ||
       !addForm.cabang.trim()
     ) {
-      setError('Semua kolom wajib diisi.');
+      setError('All fields are required.');
       return;
     }
 
@@ -302,10 +302,10 @@ export default function PegawaiPage() {
         setAddOpen(false);
         void fetchData();
       } else {
-        setError(json.error || 'Gagal menambah data.');
+        setError(json.error || 'Could not add the record.');
       }
     } catch {
-      setError('Terjadi kesalahan jaringan.');
+      setError('A network error occurred.');
     } finally {
       setIsSaving(false);
     }
@@ -336,17 +336,17 @@ export default function PegawaiPage() {
         setEditingId(null);
         void fetchData();
       } else {
-        setError(json.error || 'Gagal menyimpan perubahan.');
+        setError(json.error || 'Could not save the changes.');
       }
     } catch {
-      setError('Terjadi kesalahan jaringan.');
+      setError('A network error occurred.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus data pegawai ini?')) return;
+    if (!window.confirm('Are you sure you want to delete this employee record?')) return;
     setError(null);
     try {
       const res = await fetch(`/api/pegawai/${id}`, { method: 'DELETE' });
@@ -354,10 +354,10 @@ export default function PegawaiPage() {
       if (json.success) {
         void fetchData();
       } else {
-        setError(json.error || 'Gagal menghapus.');
+        setError(json.error || 'Could not delete the record.');
       }
     } catch {
-      setError('Terjadi kesalahan jaringan.');
+      setError('A network error occurred.');
     }
   };
 
@@ -397,14 +397,14 @@ export default function PegawaiPage() {
     filterFields: [
       {
         key: 'cabang',
-        label: 'Kantor cabang',
+        label: 'Branch',
         kind: 'select',
         options: distinct((r) => r.cabang).map((c) => ({ value: c, label: c })),
         match: (row, value) => row.cabang === value,
       },
       {
         key: 'device',
-        label: 'Tipe perangkat',
+        label: 'Device type',
         kind: 'multi',
         options: [
           { value: 'mobile', label: 'Mobile' },
@@ -419,7 +419,7 @@ export default function PegawaiPage() {
       },
       {
         key: 'os',
-        label: 'Sistem operasi',
+        label: 'Operating system',
         kind: 'select',
         options: distinct((r) => r.os).map((o) => ({ value: o, label: o })),
         match: (row, value) => row.os === value,
@@ -433,28 +433,28 @@ export default function PegawaiPage() {
       },
       {
         key: 'event',
-        label: 'Jenis aktivitas',
+        label: 'Activity type',
         kind: 'select',
         options: distinct((r) => r.event).map((e) => ({ value: e, label: e })),
         match: (row, value) => row.event === value,
       },
       {
         key: 'submitted',
-        label: 'Periode pengisian form',
+        label: 'Submission period',
         kind: 'date-range',
         dateOf: (row) => row.created_at,
       },
     ],
     sortFields: [
-      { key: 'created', label: 'Waktu submit', value: (row) => row.created_at },
-      { key: 'name', label: 'Nama lengkap', value: (row) => row.name },
-      { key: 'nip', label: 'NIP', value: (row) => row.nip },
+      { key: 'created', label: 'Submit time', value: (row) => row.created_at },
+      { key: 'name', label: 'Full name', value: (row) => row.name },
+      { key: 'nip', label: 'Employee ID', value: (row) => row.nip },
       {
         key: 'jabatan',
-        label: 'Jabatan',
+        label: 'Position',
         value: (row) => row.jabatan_sekarang ?? row.jabatan_sk,
       },
-      { key: 'cabang', label: 'Kantor cabang', value: (row) => row.cabang },
+      { key: 'cabang', label: 'Branch', value: (row) => row.cabang },
     ],
     defaultSortKey: 'created',
     defaultSortDir: 'desc',
@@ -469,8 +469,8 @@ export default function PegawaiPage() {
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
-        title="Data Pegawai & Audit Lingkungan"
-        description="Kolom sensitif terenkripsi AES-256-GCM, dilengkapi audit perangkat, jaringan, dan waktu pengisian."
+        title="Employee Records & Environment Audit"
+        description="Sensitive columns are AES-256-GCM encrypted, with device, network, and completion-time auditing."
         actions={
           <>
             <Button onClick={() => setAddOpen(true)}>
@@ -480,7 +480,7 @@ export default function PegawaiPage() {
             <Button asChild variant="outline">
               <a href="/api/export.csv" download>
                 <Download aria-hidden="true" />
-                Unduh Rekap CSV
+                Download Summary CSV
               </a>
             </Button>
           </>
@@ -489,15 +489,15 @@ export default function PegawaiPage() {
 
       {/* Metrics */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <MetricCard label="Total Data" value={data.length} icon={Users} loading={isLoading} hint="Seluruh submission" />
-        <MetricCard label="Cabang Terdata" value={cabangCount} icon={MapPin} loading={isLoading} hint="Kantor cabang" />
-        <MetricCard label="Akses Mobile" value={mobileCount} icon={Smartphone} loading={isLoading} hint="Dari perangkat ponsel" />
+        <MetricCard label="Total Records" value={data.length} icon={Users} loading={isLoading} hint="All submissions" />
+        <MetricCard label="Branches Recorded" value={cabangCount} icon={MapPin} loading={isLoading} hint="Kantor cabang" />
+        <MetricCard label="Mobile Access" value={mobileCount} icon={Smartphone} loading={isLoading} hint="From mobile devices" />
         <MetricCard
-          label="Tersaring"
+          label="Filtered"
           value={view.total}
           icon={Search}
           loading={isLoading}
-          hint={view.isFiltered ? 'Dari filter aktif' : 'Seluruh data'}
+          hint={view.isFiltered ? 'From active filters' : 'All records'}
         />
       </div>
 
@@ -511,7 +511,7 @@ export default function PegawaiPage() {
             type="button"
             onClick={() => setError(null)}
             className="cursor-pointer opacity-70 hover:opacity-100"
-            aria-label="Tutup pesan error"
+            aria-label="Dismiss error message"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -522,8 +522,8 @@ export default function PegawaiPage() {
       <Toolbar>
         <TableViewControls
           view={view}
-          searchPlaceholder="Cari nama, NIP, jabatan, IP, perangkat…"
-          resultLabel="data pegawai"
+          searchPlaceholder="Search name, NIP, position, IP, device…"
+          resultLabel="employee records"
         />
       </Toolbar>
 
@@ -538,16 +538,16 @@ export default function PegawaiPage() {
         ) : view.total === 0 ? (
           <EmptyState
             icon={Users}
-            title={view.isFiltered ? 'Tidak ditemukan data yang cocok' : 'Belum ada data pegawai'}
+            title={view.isFiltered ? 'No records match these filters' : 'No employee records yet'}
             description={
               view.isFiltered
-                ? 'Coba ubah kata kunci, filter, atau periode pencarian.'
-                : 'Tambahkan data pegawai pertama untuk memulai.'
+                ? 'Try adjusting the search, filters, or date period.'
+                : 'Add the first employee record to get started.'
             }
             action={
               view.isFiltered
-                ? { label: 'Reset Filter', onClick: view.reset }
-                : { label: 'Tambah Data', onClick: () => setAddOpen(true) }
+                ? { label: 'Reset Filters', onClick: view.reset }
+                : { label: 'Add Record', onClick: () => setAddOpen(true) }
             }
           />
         ) : (
@@ -556,14 +556,14 @@ export default function PegawaiPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-12">#</TableHead>
-                  <TableHead>Waktu</TableHead>
-                  <TableHead>Nama Lengkap</TableHead>
-                  <TableHead>NIP</TableHead>
-                  <TableHead>Jabatan</TableHead>
-                  <TableHead>Kantor Cabang</TableHead>
-                  <TableHead>Perangkat</TableHead>
-                  <TableHead>Jaringan / Lokasi</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Full Name</TableHead>
+                  <TableHead>Employee ID</TableHead>
+                  <TableHead>Position</TableHead>
+                  <TableHead>Branch Office</TableHead>
+                  <TableHead>Device</TableHead>
+                  <TableHead>Network / Location</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -589,7 +589,7 @@ export default function PegawaiPage() {
                             value={editForm.name}
                             onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                             className="h-8 min-w-32"
-                            aria-label="Nama"
+                            aria-label="Name"
                           />
                         ) : (
                           <span className="font-medium text-foreground">{row.name}</span>
@@ -602,7 +602,7 @@ export default function PegawaiPage() {
                             value={editForm.nip}
                             onChange={(e) => setEditForm({ ...editForm, nip: e.target.value })}
                             className="tabular h-8 min-w-40"
-                            aria-label="NIP"
+                            aria-label="Employee ID"
                           />
                         ) : (
                           <code className="tabular rounded bg-background/60 px-1.5 py-0.5 text-xs text-chart-2">
@@ -619,16 +619,16 @@ export default function PegawaiPage() {
                               onChange={(e) =>
                                 setEditForm({ ...editForm, jabatan_sekarang: e.target.value })
                               }
-                              placeholder="Jabatan Sekarang"
+                              placeholder="Current position"
                               className="h-8"
-                              aria-label="Jabatan Sekarang"
+                              aria-label="Current position"
                             />
                             <Input
                               value={editForm.jabatan_sk}
                               onChange={(e) => setEditForm({ ...editForm, jabatan_sk: e.target.value })}
-                              placeholder="Jabatan SK"
+                              placeholder="SK position"
                               className="h-8"
-                              aria-label="Jabatan SK"
+                              aria-label="SK position"
                             />
                           </div>
                         ) : (
@@ -645,8 +645,8 @@ export default function PegawaiPage() {
                             value={editForm.cabang}
                             onValueChange={(v) => setEditForm({ ...editForm, cabang: v })}
                           >
-                            <SelectTrigger className="h-8 min-w-40" aria-label="Kantor Cabang">
-                              <SelectValue placeholder="Pilih cabang" />
+                            <SelectTrigger className="h-8 min-w-40" aria-label="Branch office">
+                              <SelectValue placeholder="Select branch" />
                             </SelectTrigger>
                             <SelectContent>
                               {CABANG_OPTIONS.map(([grp, items]) => (
@@ -699,7 +699,7 @@ export default function PegawaiPage() {
                               size="icon-sm"
                               variant="ghost"
                               onClick={() => setEditingId(null)}
-                              aria-label="Batal edit"
+                              aria-label="Cancel edit"
                             >
                               <X aria-hidden="true" />
                             </Button>
@@ -710,8 +710,8 @@ export default function PegawaiPage() {
                               size="icon-sm"
                               variant="ghost"
                               onClick={() => setDetailRow(row)}
-                              title="Lihat rincian audit lengkap"
-                              aria-label={`Lihat rincian audit ${row.name}`}
+                              title="View full audit details"
+                              aria-label={`View audit details for ${row.name}`}
                             >
                               <Search aria-hidden="true" />
                             </Button>
@@ -719,8 +719,8 @@ export default function PegawaiPage() {
                               size="icon-sm"
                               variant="ghost"
                               onClick={() => handleStartEdit(row)}
-                              title="Edit data pegawai"
-                              aria-label={`Edit data ${row.name}`}
+                              title="Edit employee record"
+                              aria-label={`Edit ${row.name}`}
                             >
                               <Pencil aria-hidden="true" />
                             </Button>
@@ -728,8 +728,8 @@ export default function PegawaiPage() {
                               size="icon-sm"
                               variant="ghost"
                               onClick={() => void handleDelete(row.id)}
-                              title="Hapus data"
-                              aria-label={`Hapus data ${row.name}`}
+                              title="Delete record"
+                              aria-label={`Delete ${row.name}`}
                               className="text-muted-foreground hover:text-destructive"
                             >
                               <Trash2 aria-hidden="true" />
@@ -760,19 +760,19 @@ export default function PegawaiPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="glass-strong sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Tambah Data Pegawai Baru</DialogTitle>
+            <DialogTitle className="text-base">Add New Employee Record</DialogTitle>
             <DialogDescription>
-              Isi seluruh kolom. Data akan dienkripsi sebelum disimpan.
+              Fill in every field. Data is encrypted before storage.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Nama Lengkap" htmlFor="add-name">
+            <Field label="Full Name" htmlFor="add-name">
               <Input
                 id="add-name"
                 value={addForm.name}
                 onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-                placeholder="Contoh: Andi Pratama"
+                placeholder="e.g. Andi Pratama"
               />
             </Field>
             <Field label="NIP" htmlFor="add-nip">
@@ -784,15 +784,15 @@ export default function PegawaiPage() {
                 className="tabular"
               />
             </Field>
-            <Field label="Jabatan SK" htmlFor="add-jabatan-sk">
+            <Field label="SK Position" htmlFor="add-jabatan-sk">
               <Input
                 id="add-jabatan-sk"
                 value={addForm.jabatan_sk}
                 onChange={(e) => setAddForm({ ...addForm, jabatan_sk: e.target.value })}
-                placeholder="Jabatan sesuai SK"
+                placeholder="Position per SK"
               />
             </Field>
-            <Field label="Jabatan Sekarang" htmlFor="add-jabatan-sekarang">
+            <Field label="Current Position" htmlFor="add-jabatan-sekarang">
               <Input
                 id="add-jabatan-sekarang"
                 value={addForm.jabatan_sekarang}
@@ -805,7 +805,7 @@ export default function PegawaiPage() {
                 value={addForm.cabang}
                 onValueChange={(v) => setAddForm({ ...addForm, cabang: v })}
               >
-                <SelectTrigger aria-label="Pilih kantor cabang">
+                <SelectTrigger aria-label="Select branch office">
                   <SelectValue placeholder="-- Pilih Kantor Cabang --" />
                 </SelectTrigger>
                 <SelectContent>
@@ -829,7 +829,7 @@ export default function PegawaiPage() {
               Batal
             </Button>
             <Button onClick={() => void handleAdd()} disabled={isSaving}>
-              Simpan Pegawai
+              Save Employee
             </Button>
           </DialogFooter>
         </DialogContent>

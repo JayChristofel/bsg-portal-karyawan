@@ -31,7 +31,7 @@ function escapeCsvCell(cell: string | number | null | undefined): string {
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token || !(await verifySessionToken(token))) {
-    return NextResponse.json({ success: false, error: 'Belum login.' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error('Export CSV error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal mengekspor CSV.' },
+      { success: false, error: 'Could not export CSV.' },
       { status: 500 }
     );
   }

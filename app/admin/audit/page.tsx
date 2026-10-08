@@ -52,17 +52,17 @@ const ACTION_STYLE: Record<string, string> = {
 
 const ACTION_LABEL: Record<string, string> = {
   login: 'Login',
-  send_message: 'Kirim Pesan',
-  send_campaign: 'Kirim Kampanye',
-  save_template: 'Simpan Template',
-  update_template: 'Ubah Template',
-  delete_template: 'Hapus Template',
-  create_campaign: 'Buat Kampanye',
-  update_campaign: 'Ubah Kampanye',
-  delete_campaign: 'Hapus Kampanye',
-  create_admin: 'Buat Admin',
-  delete_admin: 'Hapus Admin',
-  assign_recipients: 'Tambah Penerima',
+  send_message: 'Send Message',
+  send_campaign: 'Send Campaign',
+  save_template: 'Save Template',
+  update_template: 'Update Template',
+  delete_template: 'Delete Template',
+  create_campaign: 'Create Campaign',
+  update_campaign: 'Update Campaign',
+  delete_campaign: 'Delete Campaign',
+  create_admin: 'Create Admin',
+  delete_admin: 'Delete Admin',
+  assign_recipients: 'Add Recipient',
 };
 
 const FALLBACK_STYLE = 'border-muted-foreground/30 bg-muted/40 text-muted-foreground';
@@ -114,7 +114,7 @@ export default function AuditPage() {
     filterFields: [
       {
         key: 'action',
-        label: 'Jenis aksi',
+        label: 'Action type',
         kind: 'multi',
         options: actionOptions,
         match: (row, values) => values.includes(row.action),
@@ -128,14 +128,14 @@ export default function AuditPage() {
       },
       {
         key: 'created',
-        label: 'Periode waktu',
+        label: 'Time period',
         kind: 'date-range',
         dateOf: (row) => row.createdAt,
       },
     ],
     sortFields: [
-      { key: 'created', label: 'Waktu', value: (row) => row.createdAt },
-      { key: 'action', label: 'Jenis aksi', value: (row) => ACTION_LABEL[row.action] ?? row.action },
+      { key: 'created', label: 'Time', value: (row) => row.createdAt },
+      { key: 'action', label: 'Action type', value: (row) => ACTION_LABEL[row.action] ?? row.action },
       { key: 'admin', label: 'Administrator', value: (row) => row.adminUsername },
       { key: 'ip', label: 'IP Address', value: (row) => row.ipAddress },
     ],
@@ -152,7 +152,7 @@ export default function AuditPage() {
     <div className="mx-auto max-w-[1200px]">
       <PageHeader
         title="Audit Log"
-        description="Jejak aktivitas administrator untuk keamanan dan akuntabilitas."
+        description="Administrator activity trail for security and accountability."
         actions={
           <Button variant="outline" onClick={() => void fetchLogs()}>
             <RefreshCw aria-hidden="true" />
@@ -162,14 +162,14 @@ export default function AuditPage() {
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-        <MetricCard label="Entri Dimuat" value={logs.length} icon={ScrollText} loading={isLoading} />
-        <MetricCard label="Admin Terlibat" value={uniqueAdmins.length} icon={ShieldCheck} loading={isLoading} />
+        <MetricCard label="Entries Loaded" value={logs.length} icon={ScrollText} loading={isLoading} />
+        <MetricCard label="Admins Involved" value={uniqueAdmins.length} icon={ShieldCheck} loading={isLoading} />
         <MetricCard
-          label="Aksi Destruktif"
+          label="Destructive Actions"
           value={destructiveCount}
           icon={ShieldAlert}
           loading={isLoading}
-          hint="Penghapusan data"
+          hint="Data deletions"
         />
       </div>
 
@@ -177,17 +177,17 @@ export default function AuditPage() {
         <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <TableViewControls
             view={view}
-            searchPlaceholder="Cari admin, detail, atau IP…"
-            resultLabel="entri log"
+            searchPlaceholder="Search admin, detail, or IP…"
+            resultLabel="log entries"
           />
           <Select value={limit} onValueChange={setLimit}>
-            <SelectTrigger className="w-full sm:w-40" aria-label="Muat jumlah entri">
+            <SelectTrigger className="w-full sm:w-40" aria-label="Number of entries to load">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {['20', '50', '100', '200', '500'].map((n) => (
                 <SelectItem key={n} value={n}>
-                  {n} entri
+                  {n} entries
                 </SelectItem>
               ))}
             </SelectContent>
@@ -205,11 +205,11 @@ export default function AuditPage() {
         ) : view.total === 0 ? (
           <EmptyState
             icon={ScrollText}
-            title={view.isFiltered ? 'Tidak ditemukan log yang cocok' : 'Belum ada log aktivitas'}
+            title={view.isFiltered ? 'No logs match these filters' : 'No activity logged yet'}
             description={
               view.isFiltered
-                ? 'Coba ubah kata kunci, jenis aksi, atau periode waktu.'
-                : 'Setiap login dan perubahan data admin akan tercatat di sini.'
+                ? 'Try adjusting the search, action type, or time period.'
+                : 'Every login and admin data change is recorded here.'
             }
             action={view.isFiltered ? { label: 'Reset Filter', onClick: view.reset } : undefined}
           />
@@ -218,9 +218,9 @@ export default function AuditPage() {
             <Table>
               <TableHeader className="bg-background/40">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-44">Aksi</TableHead>
+                  <TableHead className="w-44">Actions</TableHead>
                   <TableHead>Detail</TableHead>
-                  <TableHead className="hidden md:table-cell">Waktu</TableHead>
+                  <TableHead className="hidden md:table-cell">Time</TableHead>
                   <TableHead className="hidden lg:table-cell">IP</TableHead>
                 </TableRow>
               </TableHeader>

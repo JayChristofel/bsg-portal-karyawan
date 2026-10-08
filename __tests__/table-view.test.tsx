@@ -170,7 +170,7 @@ describe('TableViewControls — select filter', () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole('button', { name: /halaman berikutnya/i }));
+    await user.click(screen.getByRole('button', { name: /next page/i }));
     expect(screen.getByTestId('page')).toHaveTextContent('2');
 
     await openPanel(user);
@@ -291,7 +291,7 @@ describe('TableViewControls — pagination', () => {
     expect(screen.getByTestId('page')).toHaveTextContent('1');
     expect(screen.queryByText('Citra')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /halaman berikutnya/i }));
+    await user.click(screen.getByRole('button', { name: /next page/i }));
     expect(screen.getByTestId('page')).toHaveTextContent('2');
     expect(screen.getByText('Citra')).toBeInTheDocument();
   });
@@ -300,7 +300,7 @@ describe('TableViewControls — pagination', () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole('button', { name: /halaman berikutnya/i }));
+    await user.click(screen.getByRole('button', { name: /next page/i }));
     expect(screen.getByTestId('page')).toHaveTextContent('2');
 
     await openPanel(user);
@@ -314,8 +314,8 @@ describe('TableViewControls — pagination', () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole('button', { name: /halaman berikutnya/i }));
-    await pickOption(user, /jumlah per halaman/i, '10');
+    await user.click(screen.getByRole('button', { name: /next page/i }));
+    await pickOption(user, /rows per page/i, '10');
 
     expect(screen.getByTestId('page')).toHaveTextContent('1');
     expect(visibleNames()).toEqual(['Andi', 'Budi', 'Citra']);

@@ -88,7 +88,7 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
-      setError('Gagal memuat data dashboard. Periksa koneksi lalu coba lagi.');
+      setError('Could not load dashboard data. Check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -121,24 +121,24 @@ export default function DashboardPage() {
     filterFields: [
       {
         key: 'status',
-        label: 'Status kampanye',
+        label: 'Campaign status',
         kind: 'multi',
         options: campaignStatusOptions,
         match: (row, values) => values.includes(row.status),
       },
       {
         key: 'created',
-        label: 'Periode pembuatan',
+        label: 'Creation period',
         kind: 'date-range',
         dateOf: (row) => row.createdAt,
       },
     ],
     sortFields: [
-      { key: 'name', label: 'Nama kampanye', value: (row) => row.name },
-      { key: 'created', label: 'Tanggal dibuat', value: (row) => row.createdAt },
-      { key: 'total', label: 'Total penerima', value: (row) => row.totalRecipients },
-      { key: 'sent', label: 'Terkirim', value: (row) => row.sentCount },
-      { key: 'read', label: 'Dibaca', value: (row) => row.readCount },
+      { key: 'name', label: 'Campaign name', value: (row) => row.name },
+      { key: 'created', label: 'Date created', value: (row) => row.createdAt },
+      { key: 'total', label: 'Total recipients', value: (row) => row.totalRecipients },
+      { key: 'sent', label: 'Sent', value: (row) => row.sentCount },
+      { key: 'read', label: 'Read', value: (row) => row.readCount },
       { key: 'rate', label: 'Read rate', value: (row) => readRateOf(row) },
     ],
     defaultSortKey: 'created',
@@ -146,19 +146,19 @@ export default function DashboardPage() {
   });
 
   const metrics = [
-    { label: 'Total Kampanye', value: campaigns.length, icon: ClipboardList, hint: 'Sepanjang periode' },
-    { label: 'Total Penerima', value: totalRecipients, icon: Users, hint: 'Akumulasi semua kampanye' },
-    { label: 'Total Terkirim', value: totalSent, icon: Send, hint: 'Pesan keluar gateway' },
-    { label: 'Total Dibaca', value: totalRead, icon: Eye, hint: 'Terkonfirmasi dibaca' },
+    { label: 'Total Campaigns', value: campaigns.length, icon: ClipboardList, hint: 'All time' },
+    { label: 'Total Recipients', value: totalRecipients, icon: Users, hint: 'Across all campaigns' },
+    { label: 'Total Sent', value: totalSent, icon: Send, hint: 'Messages out of the gateway' },
+    { label: 'Total Read', value: totalRead, icon: Eye, hint: 'Confirmed read' },
     { label: 'Read Rate', value: `${overallReadRate}%`, icon: TrendingUp, hint: `${totalRead} dari ${totalRecipients}` },
-    { label: 'Submit Rate', value: `${overallSubmitRate}%`, icon: UserCheck, hint: `${pegawaiStats.submitted} sudah isi form` },
+    { label: 'Submit Rate', value: `${overallSubmitRate}%`, icon: UserCheck, hint: `${pegawaiStats.submitted} submitted the form` },
   ];
 
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Dashboard Analytics"
-        description="Ringkasan performa kampanye dan tingkat respon pegawai."
+        description="Campaign performance and employee response summary."
         actions={
           <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={isLoading}>
             <RefreshCw className={isLoading ? 'animate-spin' : undefined} aria-hidden="true" />
@@ -193,8 +193,8 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
         <SectionCard
-          title="Perbandingan Kampanye"
-          description="Jumlah penerima per kampanye"
+          title="Campaign Comparison"
+          description="Recipients per campaign"
           actions={
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin/campaigns">
@@ -216,9 +216,9 @@ export default function DashboardPage() {
           ) : campaigns.length === 0 ? (
             <EmptyState
               icon={Megaphone}
-              title="Belum ada kampanye"
-              description="Buat kampanye pertama untuk melihat perbandingan performa di sini."
-              action={{ label: 'Buat Kampanye', href: '/admin/campaigns' }}
+              title="No campaigns yet"
+              description="Create your first campaign to compare performance here."
+              action={{ label: 'Create Campaign', href: '/admin/campaigns' }}
             />
           ) : (
             <ul className="space-y-3.5">
@@ -229,7 +229,7 @@ export default function DashboardPage() {
                     <div className="mb-1.5 flex items-baseline justify-between gap-3">
                       <span className="truncate text-xs font-medium text-foreground">{c.name}</span>
                       <span className="tabular shrink-0 text-[11px] text-muted-foreground">
-                        {c.readCount}/{c.totalRecipients} dibaca
+                        {c.readCount}/{c.totalRecipients} read
                       </span>
                     </div>
                     <div
@@ -251,7 +251,7 @@ export default function DashboardPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Tingkat Respon Pegawai" description="Progres pengisian form pegawai">
+        <SectionCard title="Employee Response Rate" description="Employee form completion progress">
           {isLoading ? (
             <div className="flex items-center gap-6" aria-busy="true">
               <Skeleton className="size-32 rounded-full" />
@@ -287,14 +287,14 @@ export default function DashboardPage() {
                 <ul className="min-w-0 flex-1 space-y-3">
                   <li className="flex items-center gap-2.5">
                     <span className="size-3 shrink-0 rounded-sm bg-accent" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 text-sm text-foreground">Sudah Isi Form</span>
+                    <span className="min-w-0 flex-1 text-sm text-foreground">Submitted</span>
                     <span className="tabular text-sm font-semibold text-foreground">
                       {pegawaiStats.submitted}
                     </span>
                   </li>
                   <li className="flex items-center gap-2.5">
                     <span className="size-3 shrink-0 rounded-sm bg-border" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 text-sm text-foreground">Belum Isi Form</span>
+                    <span className="min-w-0 flex-1 text-sm text-foreground">Not Submitted</span>
                     <span className="tabular text-sm font-semibold text-foreground">
                       {pegawaiStats.notSubmitted}
                     </span>
@@ -306,13 +306,13 @@ export default function DashboardPage() {
                 <div>
                   <dt className="text-muted-foreground">Read Rate</dt>
                   <dd className="tabular mt-0.5 font-semibold text-chart-2">
-                    {overallReadRate}% dari pesan terkirim telah dibaca
+                    {overallReadRate}% of sent messages were read
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Total Penerima</dt>
+                  <dt className="text-muted-foreground">Recipients</dt>
                   <dd className="tabular mt-0.5 font-semibold text-accent">
-                    {totalRecipients} pegawai
+                    {totalRecipients} employees
                   </dd>
                 </div>
               </dl>
@@ -325,14 +325,14 @@ export default function DashboardPage() {
       <Toolbar>
         <TableViewControls
           view={view}
-          searchPlaceholder="Cari nama kampanye…"
-          resultLabel="kampanye"
+          searchPlaceholder="Search campaigns…"
+          resultLabel="campaigns"
         />
       </Toolbar>
 
       <SectionCard
-        title="Detail per Kampanye"
-        description="Rincian performance setiap kampanye"
+        title="Campaign Detail"
+        description="Performance breakdown per campaign"
         bodyClassName="p-0 sm:p-0"
       >
         {isLoading ? (
@@ -344,16 +344,16 @@ export default function DashboardPage() {
         ) : view.total === 0 ? (
           <EmptyState
             icon={ClipboardList}
-            title={view.isFiltered ? 'Tidak ditemukan kampanye yang cocok' : 'Belum ada kampanye'}
+            title={view.isFiltered ? 'No campaigns match the current filters' : 'No campaigns yet'}
             description={
               view.isFiltered
-                ? 'Coba ubah kata kunci, status, atau periode pembuatan.'
-                : 'Rincian setiap kampanye akan tampil di tabel ini.'
+                ? 'Try adjusting the search, status, or creation period.'
+                : 'Each campaign will be listed in this table.'
             }
             action={
               view.isFiltered
-                ? { label: 'Reset Filter', onClick: view.reset }
-                : { label: 'Buat Kampanye', href: '/admin/campaigns' }
+                ? { label: 'Reset Filters', onClick: view.reset }
+                : { label: 'Create Campaign', href: '/admin/campaigns' }
             }
           />
         ) : (
@@ -361,11 +361,11 @@ export default function DashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>Kampanye</TableHead>
+                  <TableHead>Campaign</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Terkirim</TableHead>
-                  <TableHead className="text-right">Dibaca</TableHead>
+                  <TableHead className="text-right">Sent</TableHead>
+                  <TableHead className="text-right">Read</TableHead>
                   <TableHead className="text-right">Read Rate</TableHead>
                 </TableRow>
               </TableHeader>

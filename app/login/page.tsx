@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Lock } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,10 +27,10 @@ export default function LoginPage() {
       if (data.success) {
         router.push(data.redirect || '/admin');
       } else {
-        setError(data.error || 'Login gagal.');
+        setError(data.error || 'Login failed.');
       }
     } catch {
-      setError('Terjadi kesalahan jaringan. Coba lagi.');
+      setError('A network error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -65,10 +66,19 @@ export default function LoginPage() {
           padding: 32px 28px;
         }
         h1 {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
           font-size: 18px;
           color: #0f172a;
           margin: 0 0 20px;
           text-align: center;
+        }
+        h1 svg {
+          width: 18px;
+          height: 18px;
+          color: #059669;
         }
         label {
           display: block;
@@ -118,7 +128,10 @@ export default function LoginPage() {
 
       <div className="login-page-container">
         <form className="box" onSubmit={handleSubmit}>
-          <h1>🔒 Login Admin</h1>
+          <h1>
+            <Lock aria-hidden="true" />
+            Admin Login
+          </h1>
           {error && <div className="error">{error}</div>}
           <label htmlFor="username">Username</label>
           <input
@@ -140,7 +153,7 @@ export default function LoginPage() {
             required
           />
           <button type="submit" disabled={isLoading}>
-            {isLoading ? 'Memverifikasi...' : 'Login'}
+            {isLoading ? 'Verifying…' : 'Login'}
           </button>
         </form>
       </div>

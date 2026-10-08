@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { getQRCode } from '@/lib/whatsapp';
+import { requestQr } from '@/lib/whatsapp';
+import { gatewayTlsMode } from '@/lib/gowa-tls';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -9,10 +10,48 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await getQRCode();
-    return NextResponse.json(result);
+    const result = await requestQr();
+
+    if (result.ok) {
+      return NextResponse.json({
+        code: 'SUCCESS',
+        // The image is served through /api/whatsapp/qr/image so the browser
+        // never needs to reach the gateway (which requires Basic Auth).
+        qrLink: `/api/whatsapp/qr/image?src=${encodeURIComponent(result.qrLink)}`,
+        qrDuration: result.qrDuration,
+        tlsMode: gatewayTlsMode(),
+      });
+    }
+
+    if (result.reason === 'already-logged-in') {
+      // Not an error: the gateway is healthy and the device is paired.
+      return NextResponse.json(
+        {
+          code: 'ALREADY_LOGGED_IN',
+          alreadyConnected: true,
+          message: result.message,
+          tlsMode: gatewayTlsMode(),
+        },
+        { status: 409 },
+      );
+    }
+
+    if (result.reason === 'transport-error') {
+      return NextResponse.json(
+        { code: result.code, error: result.message, tlsMode: gatewayTlsMode() },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json(
+      { code: result.code, error: result.message, tlsMode: gatewayTlsMode() },
+      { status: 502 },
+    );
   } catch (err) {
     console.error('WA QR error:', err);
-    return NextResponse.json({ code: 'ERROR', message: 'Gagal mengambil QR Code dari WhatsApp Gateway.' }, { status: 500 });
+    return NextResponse.json(
+      { code: 'ERROR', error: 'Unexpected error while fetching the QR code from the WhatsApp Gateway.' },
+      { status: 500 },
+    );
   }
 }

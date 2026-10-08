@@ -35,6 +35,17 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+
+  /**
+   * The gateway CA is read at runtime via readFileSync with a dynamic path, so
+   * Next's output file tracing cannot detect it. Without this the file is
+   * missing from the Vercel serverless bundle and gateway TLS falls back to
+   * system trust, which rejects the self-signed certificate.
+   */
+  outputFileTracingIncludes: {
+    '*': ['./certs/**/*.pem'],
+  },
+
   async headers() {
     return [
       {

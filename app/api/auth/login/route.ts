@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json(
-      { success: false, error: 'Body harus berupa JSON yang valid.' },
+      { success: false, error: 'Request body must be valid JSON.' },
       { status: 400 }
     );
   }
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     resetRateLimit(accountKey);
 
     const token = await createSessionToken(admin.username);
-    await logAudit(admin.username, 'login', 'Login berhasil', clientIp);
+    await logAudit(admin.username, 'login', 'Login successful', clientIp);
 
     const response = NextResponse.json({ success: true, redirect: '/admin' });
     response.cookies.set({

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { gatewayFetch } from './gowa-tls';
 
 export interface GowaConfig {
   baseUrl: string;
@@ -42,15 +43,15 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
   try {
     parsed = new URL(rawUrl.trim());
   } catch {
-    return { ok: false, error: 'URL gateway tidak valid.' };
+    return { ok: false, error: 'Invalid gateway URL.' };
   }
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return { ok: false, error: 'URL gateway hanya boleh memakai http atau https.' };
+    return { ok: false, error: 'Gateway URL must use http or https.' };
   }
 
   if (parsed.username || parsed.password) {
-    return { ok: false, error: 'URL gateway tidak boleh memuat kredensial.' };
+    return { ok: false, error: 'Gateway URL must not contain credentials.' };
   }
 
   if (process.env.GOWA_ALLOW_PRIVATE_HOSTS !== '1' && isPrivateHostname(parsed.hostname)) {
@@ -191,7 +192,9 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
   const url = `${config.baseUrl}${path}`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    // Routed through the scoped dispatcher so the self-signed gateway
+    // certificate can be pinned without weakening TLS for other hosts.
+    res = await gatewayFetch(url, {
       ...options,
       headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
       cache: 'no-store',
@@ -202,7 +205,9 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
   }
   const text = await res.text();
   try {
-    return JSON.parse(text);
+    // Preserve the HTTP status so callers can distinguish an expected
+    // rejection (e.g. ALREADY_LOGGED_IN) from a transport failure.
+    return { ...JSON.parse(text), status: res.status };
   } catch {
     return { code: res.status === 200 ? 'OK' : 'ERROR', message: text, status: res.status };
   }
@@ -218,9 +223,73 @@ export async function listDevices(config?: GowaConfig) {
   return gowaFetch(cfg, '/devices', { headers: {} });
 }
 
-export async function getQRCode(config?: GowaConfig): Promise<{ code: string; results?: { qr_url?: string; qr_link?: string; code?: string; qr_duration?: number } }> {
+export async function getQRCode(config?: GowaConfig): Promise<{ code: string; results?: { qr_url?: string; qr_link?: string; code?: string; qr_duration?: number }; status?: number }> {
   const cfg = config || (await getGowaConfig());
   return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/login`);
+}
+
+export type QrResult =
+  | { ok: true; qrLink: string; qrDuration: number }
+  | {
+      ok: false;
+      reason: 'already-logged-in' | 'transport-error' | 'gateway-error';
+      status?: number;
+      code?: string;
+      message: string;
+    };
+
+/**
+ * Requests a pairing QR and classifies the outcome.
+ *
+ * A paired device answers 400 ALREADY_LOGGED_IN. That is a healthy gateway, so
+ * it must not be reported as a connection failure — previously this surfaced as
+ * "make sure the GOWA server is running", which sent admins down the wrong path.
+ */
+export async function requestQr(config?: GowaConfig): Promise<QrResult> {
+  const cfg = config || (await getGowaConfig());
+
+  let raw: { code?: string; message?: string; status?: number; results?: { qr_link?: string; qr_url?: string; qr_duration?: number } };
+  try {
+    raw = await getQRCode(cfg);
+  } catch (err: any) {
+    const cause = err?.cause?.code || '';
+    const tls = cause.includes('CERT') || cause.includes('SELF_SIGNED') || cause.includes('UNABLE_TO_VERIFY');
+    return {
+      ok: false,
+      reason: 'transport-error',
+      code: tls ? 'TLS_ERROR' : 'NETWORK_ERROR',
+      message: tls
+        ? `TLS verification failed for the gateway certificate (${cause}). Configure GOWA_CA_CERT.`
+        : `Could not reach the gateway: ${err?.message ?? 'unknown network error'}`,
+    };
+  }
+
+  if (raw?.code === 'ALREADY_LOGGED_IN') {
+    return {
+      ok: false,
+      reason: 'already-logged-in',
+      status: raw.status,
+      code: raw.code,
+      message: 'Device is already paired. Disconnect it first if you want to re-pair.',
+    };
+  }
+
+  const link = raw?.results?.qr_link || raw?.results?.qr_url;
+  if (!link) {
+    return {
+      ok: false,
+      reason: 'gateway-error',
+      status: raw?.status,
+      code: raw?.code,
+      message: raw?.message || 'Gateway did not return a QR code.',
+    };
+  }
+
+  return {
+    ok: true,
+    qrLink: link,
+    qrDuration: raw?.results?.qr_duration || 30,
+  };
 }
 
 export async function reconnectDevice(config?: GowaConfig) {

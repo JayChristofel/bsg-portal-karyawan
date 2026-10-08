@@ -251,10 +251,10 @@ export function TableViewControls<T>({
                               id={`tv-${field.key}`}
                               className="h-9"
                             >
-                              <SelectValue placeholder="Semua" />
+                              <SelectValue placeholder="All" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="__all__">Semua</SelectItem>
+                              <SelectItem value="__all__">All</SelectItem>
                               {field.options.map((option) => (
                                 <SelectItem
                                   key={option.value}

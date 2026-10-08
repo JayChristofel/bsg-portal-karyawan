@@ -118,49 +118,49 @@ const STATUS_META: Record<
 > = {
   /* Message delivery */
   pending: {
-    label: 'Menunggu',
+    label: 'Pending',
     icon: Clock,
     className: 'border-muted-foreground/30 bg-muted/40 text-muted-foreground',
   },
   sent: {
-    label: 'Terkirim',
+    label: 'Sent',
     icon: Send,
     className: 'border-blue-400/30 bg-blue-400/10 text-blue-300',
   },
   delivered: {
-    label: 'Diterima',
+    label: 'Delivered',
     icon: CheckCircle2,
     className: 'border-accent/30 bg-accent/10 text-accent',
   },
   read: {
-    label: 'Dibaca',
+    label: 'Read',
     icon: CheckCircle2,
     className: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200',
   },
   failed: {
-    label: 'Gagal',
+    label: 'Failed',
     icon: AlertCircle,
     className: 'border-destructive/30 bg-destructive/10 text-destructive',
   },
 
   /* Campaign lifecycle */
   draft: {
-    label: 'Draf',
+    label: 'Draft',
     icon: FileText,
     className: 'border-muted-foreground/30 bg-muted/40 text-muted-foreground',
   },
   scheduled: {
-    label: 'Terjadwal',
+    label: 'Scheduled',
     icon: Clock,
     className: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
   },
   sending: {
-    label: 'Mengirim',
+    label: 'Sending',
     icon: Send,
     className: 'border-blue-400/30 bg-blue-400/10 text-blue-300',
   },
   completed: {
-    label: 'Selesai',
+    label: 'Completed',
     icon: CheckCircle2,
     className: 'border-accent/30 bg-accent/10 text-accent',
   },
@@ -170,7 +170,7 @@ const STATUS_META: Record<
     className: 'border-accent/30 bg-accent/10 text-accent',
   },
   inactive: {
-    label: 'Nonaktif',
+    label: 'Disabled',
     icon: AlertCircle,
     className: 'border-muted-foreground/30 bg-muted/40 text-muted-foreground',
   },

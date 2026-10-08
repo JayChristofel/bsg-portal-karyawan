@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Submit error:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal menyimpan data ke database.' },
+      { success: false, error: 'Could not save the record to the database.' },
       { status: 500 }
     );
   }

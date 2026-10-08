@@ -68,14 +68,14 @@ export default function AdminsPage() {
     filterFields: [
       {
         key: 'created',
-        label: 'Periode pembuatan',
+        label: 'Creation period',
         kind: 'date-range',
         dateOf: (row) => row.createdAt,
       },
     ],
     sortFields: [
       { key: 'username', label: 'Username', value: (row) => row.username },
-      { key: 'created', label: 'Tanggal dibuat', value: (row) => row.createdAt },
+      { key: 'created', label: 'Date created', value: (row) => row.createdAt },
     ],
     defaultSortKey: 'created',
     defaultSortDir: 'desc',
@@ -83,7 +83,7 @@ export default function AdminsPage() {
 
   const handleSave = async () => {
     if (!username.trim() || !password.trim()) {
-      setNotice({ tone: 'err', text: 'Username dan password wajib diisi.' });
+      setNotice({ tone: 'err', text: 'Username and password are required.' });
       return;
     }
     if (password.length < 8) {
@@ -99,13 +99,13 @@ export default function AdminsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Admin "${username}" berhasil dibuat.` });
+        setNotice({ tone: 'ok', text: `Admin "${username}" was created.` });
         setOpen(false);
         setUsername('');
         setPassword('');
         void fetchAdmins();
       } else {
-        setNotice({ tone: 'err', text: data.error || 'Gagal membuat admin.' });
+        setNotice({ tone: 'err', text: data.error || 'Could not create the admin.' });
       }
     } catch (err) {
       setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
@@ -115,26 +115,26 @@ export default function AdminsPage() {
   };
 
   const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Hapus admin "${name}"?`)) return;
+    if (!window.confirm(`Delete admin "${name}"?`)) return;
     try {
       const res = await fetch(`/api/admins?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Admin "${name}" berhasil dihapus.` });
+        setNotice({ tone: 'ok', text: `Admin "${name}" was deleted.` });
         void fetchAdmins();
       } else {
         const data = await res.json();
-        setNotice({ tone: 'err', text: data.error || 'Gagal menghapus admin.' });
+        setNotice({ tone: 'err', text: data.error || 'Could not delete the admin.' });
       }
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
+      setNotice({ tone: 'err', text: 'An error occurred while deleting.' });
     }
   };
 
   return (
     <div className="mx-auto max-w-[900px]">
       <PageHeader
-        title="Manajemen Admin"
-        description="Kelola akun administrator yang dapat mengakses panel admin."
+        title="Admin Accounts"
+        description="Manage the administrator accounts that can access this panel."
         actions={
           <Button onClick={() => setOpen(true)}>
             <Plus aria-hidden="true" />
@@ -144,13 +144,13 @@ export default function AdminsPage() {
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4">
-        <MetricCard label="Total Admin" value={admins.length} icon={UserCog} loading={isLoading} />
+        <MetricCard label="Total Admins" value={admins.length} icon={UserCog} loading={isLoading} />
         <MetricCard
           label="Status"
-          value="Aktif"
+          value="Active"
           icon={ShieldCheck}
           loading={isLoading}
-          hint="Semua akun dapat login"
+          hint="All accounts can sign in"
         />
       </div>
 
@@ -168,7 +168,7 @@ export default function AdminsPage() {
             type="button"
             onClick={() => setNotice(null)}
             className="cursor-pointer opacity-70 hover:opacity-100"
-            aria-label="Tutup pesan"
+            aria-label="Dismiss message"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -178,8 +178,8 @@ export default function AdminsPage() {
       <Toolbar>
         <TableViewControls
           view={view}
-          searchPlaceholder="Cari username…"
-          resultLabel="akun admin"
+          searchPlaceholder="Search username…"
+          resultLabel="admin accounts"
         />
       </Toolbar>
 
@@ -193,16 +193,16 @@ export default function AdminsPage() {
         ) : view.total === 0 ? (
           <EmptyState
             icon={UserCog}
-            title={view.isFiltered ? 'Tidak ditemukan akun yang cocok' : 'Belum ada akun admin'}
+            title={view.isFiltered ? 'No accounts match these filters' : 'No admin accounts yet'}
             description={
               view.isFiltered
-                ? 'Coba ubah kata kunci pencarian atau filter di atas.'
-                : 'Tambahkan akun administrator pertama untuk mengakses panel ini.'
+                ? 'Try adjusting the search or filters above.'
+                : 'Add the first administrator account to access this panel.'
             }
             action={
               view.isFiltered
-                ? { label: 'Reset Filter', onClick: view.reset }
-                : { label: 'Admin Baru', onClick: () => setOpen(true) }
+                ? { label: 'Reset Filters', onClick: view.reset }
+                : { label: 'New Admin', onClick: () => setOpen(true) }
             }
           />
         ) : (
@@ -211,8 +211,8 @@ export default function AdminsPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Username</TableHead>
-                  <TableHead>Tanggal Dibuat</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                  <TableHead>Date Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -254,7 +254,7 @@ export default function AdminsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="glass-strong sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base">Admin Baru</DialogTitle>
+            <DialogTitle className="text-base">New Admin</DialogTitle>
             <DialogDescription>
               Buat akun administrator baru. Password minimal 8 karakter.
             </DialogDescription>
@@ -267,7 +267,7 @@ export default function AdminsPage() {
                 id="admin-username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Masukkan username"
+                placeholder="Enter a username"
                 autoComplete="off"
               />
             </div>
@@ -289,7 +289,7 @@ export default function AdminsPage() {
               Batal
             </Button>
             <Button onClick={() => void handleSave()} disabled={isSaving}>
-              {isSaving ? 'Menyimpan…' : 'Simpan Admin'}
+              {isSaving ? 'Saving…' : 'Create Admin'}
             </Button>
           </DialogFooter>
         </DialogContent>

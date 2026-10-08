@@ -13,6 +13,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     console.error('WA status error:', err);
-    return NextResponse.json({ code: 'ERROR', message: 'Gagal menghubungi WhatsApp Gateway.' }, { status: 500 });
+    return NextResponse.json({ code: 'ERROR', message: 'Could not reach the WhatsApp Gateway.' }, { status: 500 });
   }
 }

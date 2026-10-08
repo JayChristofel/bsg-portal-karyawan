@@ -125,6 +125,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Export error:', error);
-    return NextResponse.json({ error: 'Gagal mengekspor data' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not export the data' }, { status: 500 });
   }
 }

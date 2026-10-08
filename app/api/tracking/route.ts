@@ -53,6 +53,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ recipients: rows });
   } catch (error: any) {
     console.error('Tracking GET error:', error);
-    return NextResponse.json({ error: 'Gagal memuat data tracking' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load tracking data' }, { status: 500 });
   }
 }

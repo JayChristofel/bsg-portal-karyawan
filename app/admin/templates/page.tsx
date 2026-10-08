@@ -91,7 +91,7 @@ export default function TemplatesPage() {
         setOpen(false);
         void fetchTemplates();
       } else {
-        setNotice({ tone: 'err', text: data.error || 'Gagal menyimpan template.' });
+        setNotice({ tone: 'err', text: data.error || 'Could not save the template.' });
       }
     } catch (err) {
       setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
@@ -108,7 +108,7 @@ export default function TemplatesPage() {
         setNotice({ tone: 'ok', text: `Template "${templateName}" berhasil dihapus.` });
         void fetchTemplates();
       } else {
-        setNotice({ tone: 'err', text: 'Gagal menghapus template.' });
+        setNotice({ tone: 'err', text: 'Could not delete the template.' });
       }
     } catch {
       setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
@@ -118,7 +118,7 @@ export default function TemplatesPage() {
   return (
     <div className="mx-auto max-w-[1200px]">
       <PageHeader
-        title="Template Pesan WhatsApp"
+        title="WhatsApp Message Templates"
         description="Kelola pustaka template pesan yang dapat dipakai ulang untuk broadcast dan kampanye."
         actions={
           <Button onClick={openNew}>
@@ -142,7 +142,7 @@ export default function TemplatesPage() {
             type="button"
             onClick={() => setNotice(null)}
             className="cursor-pointer opacity-70 hover:opacity-100"
-            aria-label="Tutup pesan"
+            aria-label="Dismiss message"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -159,9 +159,9 @@ export default function TemplatesPage() {
         <div className="glass rounded-xl">
           <EmptyState
             icon={FileText}
-            title="Belum ada template"
+            title="No templates yet"
             description="Buat template pesan pertama agar dapat dipakai ulang di seluruh kampanye."
-            action={{ label: 'Template Baru', onClick: openNew }}
+            action={{ label: 'New Template', onClick: openNew }}
           />
         </div>
       ) : (
@@ -212,7 +212,7 @@ export default function TemplatesPage() {
         <DialogContent className="glass-strong sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-base">
-              {editing ? 'Edit Template' : 'Template Baru'}
+              {editing ? 'Edit Template' : 'New Template'}
             </DialogTitle>
             <DialogDescription>
               Gunakan tag <code className="tabular">{'{nama}'}</code>,{' '}
@@ -223,7 +223,7 @@ export default function TemplatesPage() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="tpl-name">Nama Template</Label>
+              <Label htmlFor="tpl-name">Template Name</Label>
               <Input
                 id="tpl-name"
                 value={name}
@@ -233,7 +233,7 @@ export default function TemplatesPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="tpl-category">Kategori</Label>
+              <Label htmlFor="tpl-category">Category</Label>
               <Input
                 id="tpl-category"
                 value={category}
@@ -243,13 +243,13 @@ export default function TemplatesPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="tpl-body">Isi Template</Label>
+              <Label htmlFor="tpl-body">Template Body</Label>
               <textarea
                 id="tpl-body"
                 rows={8}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder="Assalamualaikum {nama}, silakan perbarui data Anda melalui {link}."
+                placeholder="Hello {nama}, please update your details via {link}."
                 className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed resize-vertical outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>
@@ -260,7 +260,7 @@ export default function TemplatesPage() {
               Batal
             </Button>
             <Button onClick={() => void handleSave()} disabled={isSaving}>
-              {isSaving ? 'Menyimpan…' : 'Simpan Template'}
+              {isSaving ? 'Saving…' : 'Save Template'}
             </Button>
           </DialogFooter>
         </DialogContent>

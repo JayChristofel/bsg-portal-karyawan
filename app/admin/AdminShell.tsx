@@ -50,7 +50,7 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    title: 'Ringkasan',
+    title: 'Overview',
     items: [
       {
         label: 'Overview',
@@ -58,14 +58,14 @@ const NAV_SECTIONS: NavSection[] = [
         href: '/admin',
         icon: LayoutDashboard,
         exact: true,
-        description: 'Metrik, tren, dan aktivitas terbaru',
+        description: 'Metrics, trends, and recent activity',
       },
       {
-        label: 'Data Pegawai',
-        short: 'Pegawai',
+        label: 'Employees',
+        short: 'Employees',
         href: '/admin/pegawai',
         icon: Users,
-        description: 'Kelola dan ekspor data pegawai',
+        description: 'Manage and export employee records',
       },
     ],
   },
@@ -73,58 +73,58 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'Broadcast',
     items: [
       {
-        label: 'Broadcast WhatsApp',
-        short: 'Broadcast',
+        label: 'Mass Messaging',
+        short: 'Mass Msg',
         href: '/admin/campaign',
         icon: Megaphone,
-        description: 'Kirim pesan massal ke pegawai',
+        description: 'Send bulk messages to employees',
       },
       {
-        label: 'Kampanye',
-        short: 'Kampanye',
+        label: 'Campaigns',
+        short: 'Campaigns',
         href: '/admin/campaigns',
         icon: ClipboardList,
-        description: 'Kelola kampanye terjadwal',
+        description: 'Manage scheduled campaigns',
       },
       {
-        label: 'Template Pesan',
-        short: 'Template',
+        label: 'Message Templates',
+        short: 'Templates',
         href: '/admin/templates',
         icon: FileText,
-        description: 'Pustaka template pesan',
+        description: 'Reusable message template library',
       },
       {
-        label: 'Tracking Status',
+        label: 'Delivery Tracking',
         short: 'Tracking',
         href: '/admin/tracking',
         icon: Activity,
-        description: 'Pantau status pengiriman real-time',
+        description: 'Monitor real-time delivery status',
       },
     ],
   },
   {
-    title: 'Sistem',
+    title: 'System',
     items: [
       {
         label: 'WhatsApp Gateway',
         short: 'Gateway',
         href: '/admin/whatsapp',
         icon: Smartphone,
-        description: 'Konfigurasi koneksi gateway',
+        description: 'Configure the gateway connection',
       },
       {
-        label: 'Manajemen Admin',
-        short: 'Admin',
+        label: 'Admin Accounts',
+        short: 'Admins',
         href: '/admin/admins',
         icon: UserCog,
-        description: 'Kelola akun administrator',
+        description: 'Manage administrator accounts',
       },
       {
         label: 'Audit Log',
         short: 'Audit',
         href: '/admin/audit',
         icon: ScrollText,
-        description: 'Riwayat aktivitas admin',
+        description: 'Administrator activity history',
       },
     ],
   },
@@ -137,17 +137,17 @@ type GatewayState = 'connected' | 'disconnected' | 'checking';
 
 const GATEWAY_META: Record<GatewayState, { label: string; dot: string; badge: string }> = {
   connected: {
-    label: 'Aktif',
+    label: 'Online',
     dot: 'bg-emerald-400',
     badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
   },
   checking: {
-    label: 'Memeriksa',
+    label: 'Checking',
     dot: 'bg-amber-400 animate-pulse',
     badge: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
   },
   disconnected: {
-    label: 'Terputus',
+    label: 'Offline',
     dot: 'bg-red-400',
     badge: 'border-red-400/30 bg-red-400/10 text-red-300',
   },
@@ -282,7 +282,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Navigasi utama">
+      <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Main navigation">
         {NAV_SECTIONS.map((section) => (
           <div key={section.title} className="mb-4 last:mb-0">
             <p
@@ -348,7 +348,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               collapsed && 'lg:hidden',
             )}
           >
-            Akses Cepat
+            Quick Access
           </p>
           <ul className="space-y-0.5" role="list">
             <li>
@@ -356,7 +356,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 href="/"
                 target="_blank"
                 rel="noreferrer"
-                title={collapsed ? 'Buka Form Publik' : undefined}
+                title={collapsed ? 'Open Public Form' : undefined}
                 className={cn(
                   'flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
                   'text-[13px] font-medium text-muted-foreground',
@@ -365,14 +365,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 )}
               >
                 <Globe className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className={cn('truncate', collapsed && 'lg:hidden')}>Form Publik</span>
+                <span className={cn('truncate', collapsed && 'lg:hidden')}>Public Form</span>
               </a>
             </li>
             <li>
               <a
                 href="/api/export.csv"
                 download
-                title={collapsed ? 'Export CSV Pegawai' : undefined}
+                title={collapsed ? 'Export Employees CSV' : undefined}
                 className={cn(
                   'flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
                   'text-[13px] font-medium text-muted-foreground',
@@ -458,11 +458,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <p className="truncate text-[13px] font-semibold text-foreground">Administrator</p>
           <p className="truncate text-[10px] text-muted-foreground">
             {lastChecked
-              ? `Cek terakhir ${lastChecked.toLocaleTimeString('id-ID', {
+              ? `Checked ${lastChecked.toLocaleTimeString('id-ID', {
                   hour: '2-digit',
                   minute: '2-digit',
                 })}`
-              : 'Memeriksa…'}
+              : 'Checking…'}
           </p>
         </div>
 
@@ -494,7 +494,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <button
           type="button"
           onClick={toggleCollapsed}
-          aria-label={collapsed ? 'Perlebar sidebar' : 'Perkecil sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
             'absolute -right-3 top-[4.25rem] z-50 hidden',
             'size-6 cursor-pointer items-center justify-center rounded-full',
@@ -564,10 +564,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           {/* Page title */}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold text-foreground">
-              {activeItem?.label ?? 'Dashboard Admin'}
+              {activeItem?.label ?? 'Admin Dashboard'}
             </h1>
             <p className="hidden truncate text-xs text-muted-foreground sm:block">
-              {activeItem?.description ?? 'Portal Pegawai — Divisi SDM'}
+              {activeItem?.description ?? 'Employee Portal — Human Resources'}
             </p>
           </div>
 
@@ -588,7 +588,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             variant="outline"
             size="icon-sm"
             onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
             className="shrink-0 cursor-pointer border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
           >
