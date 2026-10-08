@@ -21,6 +21,9 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
+import { Pagination } from '@/components/ui/pagination';
+import { TableViewControls } from '@/components/ui/table-view-controls';
+import { useTableView } from '@/lib/table-view';
 
 interface AuditLog {
   id: number;
@@ -67,14 +70,12 @@ const FALLBACK_STYLE = 'border-muted-foreground/30 bg-muted/40 text-muted-foregr
 export default function AuditPage() {
   const [logs, setLogs] = React.useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [adminFilter, setAdminFilter] = React.useState('all');
   const [limit, setLimit] = React.useState('50');
 
   const fetchLogs = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ limit });
-      if (adminFilter !== 'all') params.set('admin', adminFilter);
       const res = await fetch(`/api/audit?${params}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
@@ -85,7 +86,7 @@ export default function AuditPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [adminFilter, limit]);
+  }, [limit]);
 
   React.useEffect(() => {
     void fetchLogs();
@@ -95,6 +96,52 @@ export default function AuditPage() {
     () => Array.from(new Set(logs.map((l) => l.adminUsername))).sort(),
     [logs],
   );
+
+  const actionOptions = React.useMemo(() => {
+    const present = new Set(logs.map((l) => l.action));
+    return Array.from(present)
+      .sort()
+      .map((action) => ({ value: action, label: ACTION_LABEL[action] ?? action }));
+  }, [logs]);
+
+  const view = useTableView<AuditLog>({
+    rows: logs,
+    searchFn: (row, q) =>
+      row.adminUsername.toLowerCase().includes(q) ||
+      (row.detail ?? '').toLowerCase().includes(q) ||
+      (row.ipAddress ?? '').toLowerCase().includes(q) ||
+      row.action.toLowerCase().includes(q),
+    filterFields: [
+      {
+        key: 'action',
+        label: 'Jenis aksi',
+        kind: 'multi',
+        options: actionOptions,
+        match: (row, values) => values.includes(row.action),
+      },
+      {
+        key: 'admin',
+        label: 'Administrator',
+        kind: 'select',
+        options: uniqueAdmins.map((a) => ({ value: a, label: a })),
+        match: (row, value) => row.adminUsername === value,
+      },
+      {
+        key: 'created',
+        label: 'Periode waktu',
+        kind: 'date-range',
+        dateOf: (row) => row.createdAt,
+      },
+    ],
+    sortFields: [
+      { key: 'created', label: 'Waktu', value: (row) => row.createdAt },
+      { key: 'action', label: 'Jenis aksi', value: (row) => ACTION_LABEL[row.action] ?? row.action },
+      { key: 'admin', label: 'Administrator', value: (row) => row.adminUsername },
+      { key: 'ip', label: 'IP Address', value: (row) => row.ipAddress },
+    ],
+    defaultSortKey: 'created',
+    defaultSortDir: 'desc',
+  });
 
   const destructiveCount = React.useMemo(
     () => logs.filter((l) => l.action.startsWith('delete')).length,
@@ -127,26 +174,18 @@ export default function AuditPage() {
       </div>
 
       <Toolbar>
-        <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-          <Select value={adminFilter} onValueChange={setAdminFilter}>
-            <SelectTrigger className="sm:w-56" aria-label="Filter admin">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Admin</SelectItem>
-              {uniqueAdmins.map((a) => (
-                <SelectItem key={a} value={a}>
-                  {a}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TableViewControls
+            view={view}
+            searchPlaceholder="Cari admin, detail, atau IP…"
+            resultLabel="entri log"
+          />
           <Select value={limit} onValueChange={setLimit}>
-            <SelectTrigger className="sm:w-40" aria-label="Jumlah entri">
+            <SelectTrigger className="w-full sm:w-40" aria-label="Muat jumlah entri">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {['20', '50', '100', '200'].map((n) => (
+              {['20', '50', '100', '200', '500'].map((n) => (
                 <SelectItem key={n} value={n}>
                   {n} entri
                 </SelectItem>
@@ -163,11 +202,16 @@ export default function AuditPage() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : logs.length === 0 ? (
+        ) : view.total === 0 ? (
           <EmptyState
             icon={ScrollText}
-            title="Belum ada log aktivitas"
-            description="Setiap login dan perubahan data admin akan tercatat di sini."
+            title={view.isFiltered ? 'Tidak ditemukan log yang cocok' : 'Belum ada log aktivitas'}
+            description={
+              view.isFiltered
+                ? 'Coba ubah kata kunci, jenis aksi, atau periode waktu.'
+                : 'Setiap login dan perubahan data admin akan tercatat di sini.'
+            }
+            action={view.isFiltered ? { label: 'Reset Filter', onClick: view.reset } : undefined}
           />
         ) : (
           <div className="max-h-[600px] overflow-auto">
@@ -181,7 +225,7 @@ export default function AuditPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {logs.map((log) => (
+                {view.pageRows.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell>
                       <span
@@ -212,6 +256,16 @@ export default function AuditPage() {
               </TableBody>
             </Table>
           </div>
+        )}
+        {view.total > 0 && (
+          <Pagination
+            currentPage={view.page}
+            totalPages={view.totalPages}
+            totalItems={view.total}
+            pageSize={view.pageSize}
+            onPageChange={view.setPage}
+            onPageSizeChange={view.setPageSize}
+          />
         )}
       </SectionCard>
     </div>

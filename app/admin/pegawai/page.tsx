@@ -48,6 +48,9 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
+import { Pagination } from '@/components/ui/pagination';
+import { TableViewControls } from '@/components/ui/table-view-controls';
+import { useTableView } from '@/lib/table-view';
 
 interface PegawaiRow {
   id: number;
@@ -248,8 +251,6 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
 export default function PegawaiPage() {
   const [data, setData] = React.useState<PegawaiRow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [search, setSearch] = React.useState('');
-  const [selectedCabang, setSelectedCabang] = React.useState('all');
   const [detailRow, setDetailRow] = React.useState<PegawaiRow | null>(null);
 
   const [addOpen, setAddOpen] = React.useState(false);
@@ -365,39 +366,110 @@ export default function PegawaiPage() {
     [data],
   );
 
-  const filteredData = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data.filter((row) => {
-      const matchSearch = q
-        ? (
-            row.name +
-            ' ' +
-            row.nip +
-            ' ' +
-            row.jabatan_sk +
-            ' ' +
-            row.jabatan_sekarang +
-            ' ' +
-            (row.ip_address ?? '') +
-            ' ' +
-            (row.os ?? '') +
-            ' ' +
-            (row.device_type ?? '')
-          )
-            .toLowerCase()
-            .includes(q)
-        : true;
-      const matchCabang = selectedCabang === 'all' ? true : row.cabang === selectedCabang;
-      return matchSearch && matchCabang;
-    });
-  }, [data, search, selectedCabang]);
+  const isMobileRow = (row: PegawaiRow) =>
+    (row.device_type ?? '').toLowerCase().includes('mobile');
+
+  const distinct = React.useCallback(
+    (pick: (row: PegawaiRow) => string | null) =>
+      Array.from(new Set(data.map(pick).filter((v): v is string => Boolean(v)))).sort(),
+    [data],
+  );
+
+  const view = useTableView<PegawaiRow>({
+    rows: data,
+    searchFn: (row, q) =>
+      (
+        row.name +
+        ' ' +
+        row.nip +
+        ' ' +
+        row.jabatan_sk +
+        ' ' +
+        row.jabatan_sekarang +
+        ' ' +
+        (row.cabang ?? '') +
+        ' ' +
+        (row.ip_address ?? '') +
+        ' ' +
+        (row.os ?? '') +
+        ' ' +
+        (row.browser ?? '') +
+        ' ' +
+        (row.device_type ?? '')
+      )
+        .toLowerCase()
+        .includes(q),
+    filterFields: [
+      {
+        key: 'cabang',
+        label: 'Kantor cabang',
+        kind: 'select',
+        options: distinct((r) => r.cabang).map((c) => ({ value: c, label: c })),
+        match: (row, value) => row.cabang === value,
+      },
+      {
+        key: 'device',
+        label: 'Tipe perangkat',
+        kind: 'multi',
+        options: [
+          { value: 'mobile', label: 'Mobile' },
+          { value: 'desktop', label: 'Desktop' },
+        ],
+        match: (row, values) =>
+          values.some((v) =>
+            v === 'mobile'
+              ? isMobileRow(row)
+              : !isMobileRow(row) && Boolean(row.device_type),
+          ),
+      },
+      {
+        key: 'os',
+        label: 'Sistem operasi',
+        kind: 'select',
+        options: distinct((r) => r.os).map((o) => ({ value: o, label: o })),
+        match: (row, value) => row.os === value,
+      },
+      {
+        key: 'browser',
+        label: 'Browser',
+        kind: 'select',
+        options: distinct((r) => r.browser).map((b) => ({ value: b, label: b })),
+        match: (row, value) => row.browser === value,
+      },
+      {
+        key: 'event',
+        label: 'Jenis aktivitas',
+        kind: 'select',
+        options: distinct((r) => r.event).map((e) => ({ value: e, label: e })),
+        match: (row, value) => row.event === value,
+      },
+      {
+        key: 'submitted',
+        label: 'Periode pengisian form',
+        kind: 'date-range',
+        dateOf: (row) => row.created_at,
+      },
+    ],
+    sortFields: [
+      { key: 'created', label: 'Waktu submit', value: (row) => row.created_at },
+      { key: 'name', label: 'Nama lengkap', value: (row) => row.name },
+      { key: 'nip', label: 'NIP', value: (row) => row.nip },
+      {
+        key: 'jabatan',
+        label: 'Jabatan',
+        value: (row) => row.jabatan_sekarang ?? row.jabatan_sk,
+      },
+      { key: 'cabang', label: 'Kantor cabang', value: (row) => row.cabang },
+    ],
+    defaultSortKey: 'created',
+    defaultSortDir: 'desc',
+  });
 
   const mobileCount = React.useMemo(
     () => data.filter((r) => (r.device_type || '').toLowerCase().includes('mobile')).length,
     [data],
   );
   const cabangCount = React.useMemo(() => new Set(data.map((d) => d.cabang).filter(Boolean)).size, [data]);
-  const isFiltered = search.trim() !== '' || selectedCabang !== 'all';
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -427,10 +499,10 @@ export default function PegawaiPage() {
         <MetricCard label="Akses Mobile" value={mobileCount} icon={Smartphone} loading={isLoading} hint="Dari perangkat ponsel" />
         <MetricCard
           label="Tersaring"
-          value={filteredData.length}
+          value={view.total}
           icon={Search}
           loading={isLoading}
-          hint={isFiltered ? 'Dari filter aktif' : 'Seluruh data'}
+          hint={view.isFiltered ? 'Dari filter aktif' : 'Seluruh data'}
         />
       </div>
 
@@ -453,38 +525,11 @@ export default function PegawaiPage() {
 
       {/* Filters */}
       <Toolbar>
-        <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1 sm:max-w-sm">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nama, NIP, jabatan, IP, perangkat…"
-              className="pl-9"
-              aria-label="Cari data pegawai"
-            />
-          </div>
-          <Select value={selectedCabang} onValueChange={setSelectedCabang}>
-            <SelectTrigger className="sm:w-64" aria-label="Filter kantor cabang">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Cabang ({data.length})</SelectItem>
-              {cabangList.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Menampilkan <span className="tabular font-semibold text-foreground">{filteredData.length}</span>{' '}
-          dari <span className="tabular">{data.length}</span> data
-        </p>
+        <TableViewControls
+          view={view}
+          searchPlaceholder="Cari nama, NIP, jabatan, IP, perangkat…"
+          resultLabel="data pegawai"
+        />
       </Toolbar>
 
       {/* Table */}
@@ -495,24 +540,18 @@ export default function PegawaiPage() {
               <Skeleton key={i} className="h-11 w-full" />
             ))}
           </div>
-        ) : filteredData.length === 0 ? (
+        ) : view.total === 0 ? (
           <EmptyState
             icon={Users}
-            title={isFiltered ? 'Tidak ditemukan data yang cocok' : 'Belum ada data pegawai'}
+            title={view.isFiltered ? 'Tidak ditemukan data yang cocok' : 'Belum ada data pegawai'}
             description={
-              isFiltered
-                ? 'Coba ubah kata kunci pencarian atau filter cabang.'
+              view.isFiltered
+                ? 'Coba ubah kata kunci, filter, atau periode pencarian.'
                 : 'Tambahkan data pegawai pertama untuk memulai.'
             }
             action={
-              isFiltered
-                ? {
-                    label: 'Reset Filter',
-                    onClick: () => {
-                      setSearch('');
-                      setSelectedCabang('all');
-                    },
-                  }
+              view.isFiltered
+                ? { label: 'Reset Filter', onClick: view.reset }
                 : { label: 'Tambah Data', onClick: () => setAddOpen(true) }
             }
           />
@@ -533,9 +572,9 @@ export default function PegawaiPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map((row) => {
+                {view.pageRows.map((row) => {
                   const isEditing = editingId === row.id;
-                  const isMobile = (row.device_type || '').toLowerCase().includes('mobile');
+                  const isMobile = isMobileRow(row);
                   const DeviceIcon = isMobile ? Smartphone : Laptop;
 
                   return (
@@ -709,6 +748,16 @@ export default function PegawaiPage() {
               </TableBody>
             </Table>
           </div>
+        )}
+        {view.total > 0 && (
+          <Pagination
+            currentPage={view.page}
+            totalPages={view.totalPages}
+            totalItems={view.total}
+            pageSize={view.pageSize}
+            onPageChange={view.setPage}
+            onPageSizeChange={view.setPageSize}
+          />
         )}
       </SectionCard>
 

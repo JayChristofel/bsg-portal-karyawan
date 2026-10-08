@@ -30,7 +30,11 @@ import {
   PageHeader,
   SectionCard,
   StatusBadge,
+  Toolbar,
 } from './components/ui';
+import { Pagination } from '@/components/ui/pagination';
+import { TableViewControls } from '@/components/ui/table-view-controls';
+import { useTableView } from '@/lib/table-view';
 
 interface CampaignStats {
   id: number;
@@ -102,6 +106,44 @@ export default function DashboardPage() {
     pegawaiStats.total > 0 ? Math.round((pegawaiStats.submitted / pegawaiStats.total) * 100) : 0;
 
   const maxRecipients = Math.max(...campaigns.map((c) => c.totalRecipients), 1);
+
+  const campaignStatusOptions = React.useMemo(() => {
+    const present = new Set(campaigns.map((c) => c.status));
+    return Array.from(present).sort().map((s) => ({ value: s, label: s }));
+  }, [campaigns]);
+
+  const readRateOf = (c: CampaignStats) =>
+    c.totalRecipients > 0 ? (c.readCount / c.totalRecipients) * 100 : 0;
+
+  const view = useTableView<CampaignStats>({
+    rows: campaigns,
+    searchFn: (row, q) => row.name.toLowerCase().includes(q),
+    filterFields: [
+      {
+        key: 'status',
+        label: 'Status kampanye',
+        kind: 'multi',
+        options: campaignStatusOptions,
+        match: (row, values) => values.includes(row.status),
+      },
+      {
+        key: 'created',
+        label: 'Periode pembuatan',
+        kind: 'date-range',
+        dateOf: (row) => row.createdAt,
+      },
+    ],
+    sortFields: [
+      { key: 'name', label: 'Nama kampanye', value: (row) => row.name },
+      { key: 'created', label: 'Tanggal dibuat', value: (row) => row.createdAt },
+      { key: 'total', label: 'Total penerima', value: (row) => row.totalRecipients },
+      { key: 'sent', label: 'Terkirim', value: (row) => row.sentCount },
+      { key: 'read', label: 'Dibaca', value: (row) => row.readCount },
+      { key: 'rate', label: 'Read rate', value: (row) => readRateOf(row) },
+    ],
+    defaultSortKey: 'created',
+    defaultSortDir: 'desc',
+  });
 
   const metrics = [
     { label: 'Total Kampanye', value: campaigns.length, icon: ClipboardList, hint: 'Sepanjang periode' },
@@ -280,6 +322,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Campaign table */}
+      <Toolbar>
+        <TableViewControls
+          view={view}
+          searchPlaceholder="Cari nama kampanye…"
+          resultLabel="kampanye"
+        />
+      </Toolbar>
+
       <SectionCard
         title="Detail per Kampanye"
         description="Rincian performance setiap kampanye"
@@ -291,12 +341,20 @@ export default function DashboardPage() {
               <Skeleton key={i} className="h-9 w-full" />
             ))}
           </div>
-        ) : campaigns.length === 0 ? (
+        ) : view.total === 0 ? (
           <EmptyState
             icon={ClipboardList}
-            title="Belum ada kampanye"
-            description="Rincian setiap kampanye akan tampil di tabel ini."
-            action={{ label: 'Buat Kampanye', href: '/admin/campaigns' }}
+            title={view.isFiltered ? 'Tidak ditemukan kampanye yang cocok' : 'Belum ada kampanye'}
+            description={
+              view.isFiltered
+                ? 'Coba ubah kata kunci, status, atau periode pembuatan.'
+                : 'Rincian setiap kampanye akan tampil di tabel ini.'
+            }
+            action={
+              view.isFiltered
+                ? { label: 'Reset Filter', onClick: view.reset }
+                : { label: 'Buat Kampanye', href: '/admin/campaigns' }
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -312,7 +370,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {campaigns.map((c) => (
+                {view.pageRows.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium text-foreground">{c.name}</TableCell>
                     <TableCell className="text-center">
@@ -322,13 +380,23 @@ export default function DashboardPage() {
                     <TableCell className="tabular text-right text-chart-2">{c.sentCount}</TableCell>
                     <TableCell className="tabular text-right text-accent">{c.readCount}</TableCell>
                     <TableCell className="tabular text-right font-semibold">
-                      {c.totalRecipients > 0 ? Math.round((c.readCount / c.totalRecipients) * 100) : 0}%
+                      {Math.round(readRateOf(c))}%
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+        )}
+        {view.total > 0 && (
+          <Pagination
+            currentPage={view.page}
+            totalPages={view.totalPages}
+            totalItems={view.total}
+            pageSize={view.pageSize}
+            onPageChange={view.setPage}
+            onPageSizeChange={view.setPageSize}
+          />
         )}
       </SectionCard>
     </div>

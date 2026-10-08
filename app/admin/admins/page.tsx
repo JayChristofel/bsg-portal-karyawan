@@ -23,7 +23,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, MetricCard, PageHeader, SectionCard } from '../components/ui';
+import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
+import { Pagination } from '@/components/ui/pagination';
+import { TableViewControls } from '@/components/ui/table-view-controls';
+import { useTableView } from '@/lib/table-view';
 
 interface Admin {
   id: number;
@@ -58,6 +61,25 @@ export default function AdminsPage() {
   React.useEffect(() => {
     void fetchAdmins();
   }, [fetchAdmins]);
+
+  const view = useTableView<Admin>({
+    rows: admins,
+    searchFn: (row, q) => row.username.toLowerCase().includes(q),
+    filterFields: [
+      {
+        key: 'created',
+        label: 'Periode pembuatan',
+        kind: 'date-range',
+        dateOf: (row) => row.createdAt,
+      },
+    ],
+    sortFields: [
+      { key: 'username', label: 'Username', value: (row) => row.username },
+      { key: 'created', label: 'Tanggal dibuat', value: (row) => row.createdAt },
+    ],
+    defaultSortKey: 'created',
+    defaultSortDir: 'desc',
+  });
 
   const handleSave = async () => {
     if (!username.trim() || !password.trim()) {
@@ -153,6 +175,14 @@ export default function AdminsPage() {
         </div>
       ) : null}
 
+      <Toolbar>
+        <TableViewControls
+          view={view}
+          searchPlaceholder="Cari username…"
+          resultLabel="akun admin"
+        />
+      </Toolbar>
+
       <SectionCard bodyClassName="p-0 sm:p-0">
         {isLoading ? (
           <div className="space-y-2 p-5" aria-busy="true">
@@ -160,12 +190,20 @@ export default function AdminsPage() {
               <Skeleton key={i} className="h-11 w-full" />
             ))}
           </div>
-        ) : admins.length === 0 ? (
+        ) : view.total === 0 ? (
           <EmptyState
             icon={UserCog}
-            title="Belum ada akun admin"
-            description="Tambahkan akun administrator pertama untuk mengakses panel ini."
-            action={{ label: 'Admin Baru', onClick: () => setOpen(true) }}
+            title={view.isFiltered ? 'Tidak ditemukan akun yang cocok' : 'Belum ada akun admin'}
+            description={
+              view.isFiltered
+                ? 'Coba ubah kata kunci pencarian atau filter di atas.'
+                : 'Tambahkan akun administrator pertama untuk mengakses panel ini.'
+            }
+            action={
+              view.isFiltered
+                ? { label: 'Reset Filter', onClick: view.reset }
+                : { label: 'Admin Baru', onClick: () => setOpen(true) }
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -178,7 +216,7 @@ export default function AdminsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {admins.map((a) => (
+                {view.pageRows.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="font-medium text-foreground">{a.username}</TableCell>
                     <TableCell className="tabular text-muted-foreground">
@@ -200,6 +238,16 @@ export default function AdminsPage() {
               </TableBody>
             </Table>
           </div>
+        )}
+        {view.total > 0 && (
+          <Pagination
+            currentPage={view.page}
+            totalPages={view.totalPages}
+            totalItems={view.total}
+            pageSize={view.pageSize}
+            onPageChange={view.setPage}
+            onPageSizeChange={view.setPageSize}
+          />
         )}
       </SectionCard>
 

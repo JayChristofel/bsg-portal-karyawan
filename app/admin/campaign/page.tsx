@@ -105,7 +105,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, MetricCard, PageHeader, SectionCard, StatusBadge } from '../components/ui';
+import { EmptyState, MetricCard, PageHeader, SectionCard, StatusBadge, Toolbar } from '../components/ui';
+import { Pagination } from '@/components/ui/pagination';
+import { TableViewControls } from '@/components/ui/table-view-controls';
+import { useTableView } from '@/lib/table-view';
 import { cn } from '@/lib/utils';
 
 export interface RecipientRow {
@@ -149,16 +152,13 @@ function processSpintax(text: string): string {
 }
 
 type DelayProfile = 'safe' | 'balanced' | 'fast';
-type FilterTab = 'all' | 'pending' | 'sent' | 'read' | 'submitted' | 'not_submitted';
 
-const TABS: { value: FilterTab; label: string }[] = [
-  { value: 'all', label: 'Semua' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'sent', label: 'Terkirim' },
-  { value: 'read', label: 'Dibaca' },
-  { value: 'submitted', label: 'Sudah Isi Form' },
-  { value: 'not_submitted', label: 'Belum Isi Form' },
-];
+const WA_STATUS_LABEL: Record<string, string> = {
+  pending: 'Menunggu',
+  sent: 'Terkirim',
+  delivered: 'Diterima',
+  read: 'Dibaca',
+};
 
 const DELAY_META: Record<DelayProfile, { label: string; range: string }> = {
   safe: { label: 'Aman', range: '4–8 detik acak' },
@@ -181,10 +181,6 @@ export default function BroadcastPage() {
   const [enableCooldown, setEnableCooldown] = React.useState(true);
   const [cooldownCountdown, setCooldownCountdown] = React.useState<number | null>(null);
 
-  const [activeTab, setActiveTab] = React.useState<FilterTab>('all');
-  const [selectedCabang, setSelectedCabang] = React.useState('all');
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [phoneFilter, setPhoneFilter] = React.useState<'all' | 'has_phone' | 'no_phone'>('all');
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
   const [showBulkEditCabang, setShowBulkEditCabang] = React.useState(false);
   const [bulkEditCabangValue, setBulkEditCabangValue] = React.useState('');
@@ -487,7 +483,7 @@ export default function BroadcastPage() {
   };
 
   const handleBulkSendWA = async () => {
-    const targets = filteredData.filter((r) => r.phone && (r.waStatus === 'pending' || !r.waSentAt));
+    const targets = view.rows.filter((r) => r.phone && (r.waStatus === 'pending' || !r.waSentAt));
     if (targets.length === 0) {
       setNotice({
         tone: 'err',
@@ -689,10 +685,10 @@ export default function BroadcastPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredData.length) {
+    if (selectedIds.size === view.rows.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredData.map((r) => r.id)));
+      setSelectedIds(new Set(view.rows.map((r) => r.id)));
     }
   };
 
@@ -720,34 +716,93 @@ export default function BroadcastPage() {
     [data],
   );
 
-  const filteredData = React.useMemo(
-    () =>
-      data.filter((row) => {
-        if (activeTab === 'pending' && row.waStatus && row.waStatus !== 'pending') return false;
-        if (activeTab === 'sent' && row.waStatus !== 'sent' && row.waStatus !== 'delivered') return false;
-        if (activeTab === 'read' && row.waStatus !== 'read') return false;
-        if (activeTab === 'submitted' && !row.isSubmitted) return false;
-        if (activeTab === 'not_submitted' && row.isSubmitted) return false;
-        if (selectedCabang !== 'all' && row.cabang !== selectedCabang) return false;
-        if (phoneFilter === 'has_phone' && !row.phone) return false;
-        if (phoneFilter === 'no_phone' && row.phone) return false;
+  const waStatusOptions = React.useMemo(() => {
+    const present = new Set(data.map((r) => r.waStatus ?? 'pending'));
+    return Array.from(present)
+      .sort()
+      .map((s) => ({ value: s, label: WA_STATUS_LABEL[s] ?? s }));
+  }, [data]);
 
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return (
-            row.label.toLowerCase().includes(q) ||
-            (row.phone || '').toLowerCase().includes(q) ||
-            (row.cabang || '').toLowerCase().includes(q)
-          );
-        }
-        return true;
-      }),
-    [data, activeTab, selectedCabang, searchQuery, phoneFilter],
-  );
+  const view = useTableView<RecipientRow>({
+    rows: data,
+    searchFn: (row, q) =>
+      (
+        row.label +
+        ' ' +
+        (row.phone ?? '') +
+        ' ' +
+        (row.cabang ?? '')
+      )
+        .toLowerCase()
+        .includes(q),
+    filterFields: [
+      {
+        key: 'cabang',
+        label: 'Cabang / unit kerja',
+        kind: 'select',
+        options: cabangList.map((c) => ({ value: c, label: c })),
+        match: (row, value) => row.cabang === value,
+      },
+      {
+        key: 'waStatus',
+        label: 'Status WhatsApp',
+        kind: 'multi',
+        options: waStatusOptions,
+        match: (row, values) => values.includes(row.waStatus ?? 'pending'),
+      },
+      {
+        key: 'phone',
+        label: 'Nomor WhatsApp',
+        kind: 'multi',
+        options: [
+          { value: 'has', label: 'Sudah ada nomor' },
+          { value: 'none', label: 'Belum ada nomor' },
+        ],
+        match: (row, values) =>
+          values.some((v) => (v === 'has' ? Boolean(row.phone) : !row.phone)),
+      },
+      {
+        key: 'form',
+        label: 'Pengisian form pegawai',
+        kind: 'multi',
+        options: [
+          { value: 'yes', label: 'Sudah isi form' },
+          { value: 'no', label: 'Belum isi form' },
+        ],
+        match: (row, values) =>
+          values.some((v) => (v === 'yes' ? Boolean(row.isSubmitted) : !row.isSubmitted)),
+      },
+      {
+        key: 'created',
+        label: 'Periode ditambahkan',
+        kind: 'date-range',
+        dateOf: (row) => row.createdAt,
+      },
+      {
+        key: 'sent',
+        label: 'Periode pesan terkirim',
+        kind: 'date-range',
+        dateOf: (row) => row.waSentAt,
+      },
+    ],
+    sortFields: [
+      { key: 'label', label: 'Nama', value: (row) => row.label },
+      { key: 'created', label: 'Tanggal ditambahkan', value: (row) => row.createdAt },
+      { key: 'sent', label: 'Tanggal terkirim', value: (row) => row.waSentAt },
+      { key: 'cabang', label: 'Cabang', value: (row) => row.cabang },
+      {
+        key: 'status',
+        label: 'Status WhatsApp',
+        value: (row) => WA_STATUS_LABEL[row.waStatus] ?? row.waStatus,
+      },
+    ],
+    defaultSortKey: 'created',
+    defaultSortDir: 'desc',
+  });
 
   const pendingTargets = React.useMemo(
-    () => filteredData.filter((r) => r.phone && (r.waStatus === 'pending' || !r.waSentAt)).length,
-    [filteredData],
+    () => view.rows.filter((r) => r.phone && (r.waStatus === 'pending' || !r.waSentAt)).length,
+    [view.rows],
   );
 
   return (
@@ -935,69 +990,14 @@ export default function BroadcastPage() {
         </SectionCard>
       </div>
 
-      {/* Filters */}
-      <SectionCard bodyClassName="p-3 sm:p-3">
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {TABS.map((t) => {
-            const active = activeTab === t.value;
-            return (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setActiveTab(t.value)}
-                aria-pressed={active}
-                className={cn(
-                  'min-h-8 cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150',
-                  active
-                    ? 'border-accent/30 bg-accent/12 text-accent'
-                    : 'border-border/70 text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
-                )}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nama, nomor, atau cabang…"
-              className="pl-9"
-              aria-label="Cari penerima"
-            />
-          </div>
-          <Select value={selectedCabang} onValueChange={setSelectedCabang}>
-            <SelectTrigger className="sm:w-64" aria-label="Filter cabang">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Cabang ({total})</SelectItem>
-              {cabangList.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={phoneFilter} onValueChange={(v) => setPhoneFilter(v as 'all' | 'has_phone' | 'no_phone')}>
-            <SelectTrigger className="sm:w-48" aria-label="Filter nomor HP">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Nomor</SelectItem>
-              <SelectItem value="has_phone">Ada Nomor HP</SelectItem>
-              <SelectItem value="no_phone">Belum Ada Nomor</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </SectionCard>
+      {/* Search, filter & sort */}
+      <Toolbar>
+        <TableViewControls
+          view={view}
+          searchPlaceholder="Cari nama, nomor, atau cabang…"
+          resultLabel="penerima"
+        />
+      </Toolbar>
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 ? (
@@ -1033,7 +1033,7 @@ export default function BroadcastPage() {
 
       {/* Recipients table */}
       <SectionCard
-        title={`Daftar Penerima (${filteredData.length})`}
+        title={`Daftar Penerima (${view.total})`}
         description="Kirim pesan per penerima atau gunakan Broadcast Massal di atas"
         className="mt-4"
         bodyClassName="p-0 sm:p-0"
@@ -1044,11 +1044,16 @@ export default function BroadcastPage() {
               <Skeleton key={i} className="h-11 w-full" />
             ))}
           </div>
-        ) : filteredData.length === 0 ? (
+        ) : view.total === 0 ? (
           <EmptyState
             icon={Megaphone}
-            title="Belum ada penerima"
-            description="Tarik dari data pegawai, daftarkan manual, atau import dari file Excel/CSV."
+            title={view.isFiltered ? 'Tidak ditemukan penerima yang cocok' : 'Belum ada penerima'}
+            description={
+              view.isFiltered
+                ? 'Coba ubah kata kunci, filter, atau periode pencarian.'
+                : 'Tarik dari data pegawai, daftarkan manual, atau import dari file Excel/CSV.'
+            }
+            action={view.isFiltered ? { label: 'Reset Filter', onClick: view.reset } : undefined}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -1058,7 +1063,7 @@ export default function BroadcastPage() {
                   <TableHead className="w-10">
                     <input
                       type="checkbox"
-                      checked={selectedIds.size === filteredData.length && filteredData.length > 0}
+                      checked={view.rows.length > 0 && selectedIds.size === view.rows.length}
                       onChange={() => toggleSelectAll()}
                       className="size-4 cursor-pointer accent-[var(--accent)]"
                       aria-label="Pilih semua"
@@ -1073,7 +1078,7 @@ export default function BroadcastPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map((row) => {
+                {view.pageRows.map((row) => {
                   const sending = Boolean(sendingMap[row.id]);
                   return (
                     <TableRow key={row.id}>
@@ -1138,6 +1143,16 @@ export default function BroadcastPage() {
               </TableBody>
             </Table>
           </div>
+        )}
+        {view.total > 0 && (
+          <Pagination
+            currentPage={view.page}
+            totalPages={view.totalPages}
+            totalItems={view.total}
+            pageSize={view.pageSize}
+            onPageChange={view.setPage}
+            onPageSizeChange={view.setPageSize}
+          />
         )}
       </SectionCard>
 
