@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, CheckCircle2, Clock, FileText, Send, type LucideIcon } from 'lucide-react';
-import { Pagination } from '@/components/ui/pagination';
 
 /* ────────────────────────────────────────────────────────────
    Page header

@@ -65,7 +65,6 @@ import {
   MessageSquareText,
   PauseCircle,
   Plus,
-  Search,
   Send,
   ShieldCheck,
   Timer,

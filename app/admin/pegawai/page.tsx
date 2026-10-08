@@ -361,11 +361,6 @@ export default function PegawaiPage() {
     }
   };
 
-  const cabangList = React.useMemo(
-    () => Array.from(new Set(data.map((d) => d.cabang).filter(Boolean))).sort(),
-    [data],
-  );
-
   const isMobileRow = (row: PegawaiRow) =>
     (row.device_type ?? '').toLowerCase().includes('mobile');
 
