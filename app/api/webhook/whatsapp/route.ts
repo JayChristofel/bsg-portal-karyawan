@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
 import { eq, inArray } from 'drizzle-orm';
+import { verifyWebhookSignature } from '@/lib/whatsapp';
+
+// Cap inbound webhook body so a spoofed sender cannot bloat the database.
+const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
+// Cap the number of message ids accepted in a single ack event.
+const MAX_ACK_IDS = 100;
 
 // Health check / verification
 export async function GET() {
@@ -12,6 +18,22 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
+
+    if (rawBody.length > MAX_WEBHOOK_BODY_BYTES) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+    }
+
+    // Authenticate the sender. Without this, anyone who learns the URL can forge
+    // delivery/read receipts and flood the webhook_logs table.
+    const signature =
+      req.headers.get('x-webhook-signature') ||
+      req.headers.get('x-hub-signature-256') ||
+      req.headers.get('x-gowa-signature');
+
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
     let body: any = {};
     try {
       body = JSON.parse(rawBody);
@@ -20,19 +42,21 @@ export async function POST(req: NextRequest) {
     }
 
     const event = body.event || body.type || 'unknown';
-    const deviceId = body.device_id || body.deviceId || 'portal-pegawai';
+    const deviceId = String(body.device_id || body.deviceId || 'portal-pegawai').slice(0, 100);
 
     // Store all events in webhook_logs
     await db.insert(webhookLogs).values({
       deviceId,
-      event,
+      event: String(event).slice(0, 100),
       payload: rawBody,
     });
 
     // ── message.ack → update broadcast status ──────────────────────────
     if (event === 'message.ack' && body.payload) {
       const p = body.payload;
-      const messageIds: string[] = Array.isArray(p.ids) ? p.ids : [];
+      const messageIds: string[] = Array.isArray(p.ids)
+        ? p.ids.slice(0, MAX_ACK_IDS).map((id: unknown) => String(id))
+        : [];
       const receiptType: string = p.receipt_type || '';
 
       // Map GOWA receipt_type to our wa_status
@@ -71,8 +95,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ status: 'OK', message: 'Webhook received' });
   } catch (error: any) {
-    console.error('Error processing WhatsApp webhook:', error);
+    // Do not leak internal error messages to an unauthenticated caller.
+    console.error('Error processing WhatsApp webhook:', error?.message);
     // Still return 200 to prevent GOWA from retrying
-    return NextResponse.json({ status: 'ERROR', error: error?.message }, { status: 200 });
+    return NextResponse.json({ status: 'ERROR' }, { status: 200 });
   }
 }

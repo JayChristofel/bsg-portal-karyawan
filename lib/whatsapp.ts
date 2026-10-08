@@ -1,10 +1,112 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+import crypto from 'node:crypto';
 
 export interface GowaConfig {
   baseUrl: string;
   deviceId: string;
   username?: string;
   password?: string;
+}
+
+/**
+ * Outbound URL guard for the GOWA gateway.
+ *
+ * The gateway URL is admin-configurable and persisted in the settings table,
+ * which makes it an SSRF sink: without this check an attacker (or a hijacked
+ * admin session) could point it at 127.0.0.1, the cloud metadata endpoint, or
+ * any internal service.
+ *
+ * Set GOWA_ALLOWED_HOSTS (comma-separated) to lock this down further.
+ * Loopback/private ranges are only permitted when GOWA_ALLOW_PRIVATE_HOSTS=1,
+ * which is needed when the gateway runs on the same machine during development.
+ */
+function isPrivateHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) {
+    return true;
+  }
+  if (h === '::1' || h === '0:0:0:0:0:0:0:1') return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(h) || /^fe[89ab][0-9a-f]:/i.test(h)) return true; // unique-local
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!v4) return false;
+  const [a, b] = [Number(v4[1]), Number(v4[2])];
+  if (a === 10 || a === 127 || a === 0) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true; // link-local / cloud metadata
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  return false;
+}
+
+export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | { ok: false; error: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { ok: false, error: 'URL gateway tidak valid.' };
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, error: 'URL gateway hanya boleh memakai http atau https.' };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { ok: false, error: 'URL gateway tidak boleh memuat kredensial.' };
+  }
+
+  if (process.env.GOWA_ALLOW_PRIVATE_HOSTS !== '1' && isPrivateHostname(parsed.hostname)) {
+    return {
+      ok: false,
+      error:
+        'Hostname gateway menunjuk ke jaringan internal/loopback dan ditolak. ' +
+        'Set GOWA_ALLOWED_HOSTS bila Anda memang memakai gateway privat.',
+    };
+  }
+
+  const allowlist = (process.env.GOWA_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (allowlist.length > 0 && !allowlist.includes(parsed.hostname.toLowerCase())) {
+    return { ok: false, error: `Hostname gateway tidak diizinkan. Izinkan: ${allowlist.join(', ')}` };
+  }
+
+  if (parsed.protocol === 'http:' && process.env.GOWA_ALLOW_INSECURE_HTTP !== '1') {
+    return {
+      ok: false,
+      error: 'URL gateway wajib HTTPS. Set GOWA_ALLOW_INSECURE_HTTP=1 hanya untuk pengembangan lokal.',
+    };
+  }
+
+  return { ok: true, url: rawUrl.trim().replace(/\/+$/, '') };
+}
+
+/**
+ * Path segment for user-supplied device IDs. Without encoding, a value like
+ * "../../api/x" would traverse the gateway's URL space.
+ */
+function deviceSegment(deviceId: string): string {
+  return encodeURIComponent(deviceId);
+}
+
+/**
+ * HMAC-SHA256 signature verification for inbound GOWA webhooks.
+ * Set WHATSAPP_WEBHOOK_SECRET on both this app and the gateway.
+ */
+export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const secret = process.env.WHATSAPP_WEBHOOK_SECRET;
+  if (!secret) return false; // fail closed
+
+  if (!signatureHeader) return false;
+
+  const provided = signatureHeader.trim().replace(/^sha256=/i, '');
+  const expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+
+  return crypto.timingSafeEqual(a, b);
 }
 
 export const DEFAULT_GOWA_CONFIG: GowaConfig = {
@@ -108,7 +210,7 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
 
 export async function getDeviceStatus(config?: GowaConfig) {
   const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${cfg.deviceId}/status`);
+  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/status`);
 }
 
 export async function listDevices(config?: GowaConfig) {
@@ -118,17 +220,17 @@ export async function listDevices(config?: GowaConfig) {
 
 export async function getQRCode(config?: GowaConfig): Promise<{ code: string; results?: { qr_url?: string; qr_link?: string; code?: string; qr_duration?: number } }> {
   const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${cfg.deviceId}/login`);
+  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/login`);
 }
 
 export async function reconnectDevice(config?: GowaConfig) {
   const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${cfg.deviceId}/reconnect`, { method: 'POST' });
+  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/reconnect`, { method: 'POST' });
 }
 
 export async function logoutDevice(config?: GowaConfig) {
   const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${cfg.deviceId}/logout`, { method: 'POST' });
+  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/logout`, { method: 'POST' });
 }
 
 export interface SendMessagePayload {
@@ -142,6 +244,8 @@ export async function sendMessage(phone: string, message: string, config?: GowaC
   let normalized = phone.replace(/[\s\-\+\(\)]/g, '');
   if (normalized.startsWith('0')) {
     normalized = '62' + normalized.slice(1);
+  } else if (normalized.startsWith('8') && normalized.length >= 9) {
+    normalized = '62' + normalized;
   }
 
   return gowaFetch(cfg, '/send/message', {
@@ -152,12 +256,12 @@ export async function sendMessage(phone: string, message: string, config?: GowaC
 
 export async function getDeviceWebhook(config?: GowaConfig) {
   const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${cfg.deviceId}/webhook`);
+  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/webhook`);
 }
 
 export async function setDeviceWebhook(webhook_url: string, webhook_secret?: string, webhook_events?: string, config?: GowaConfig) {
   const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${cfg.deviceId}/webhook`, {
+  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/webhook`, {
     method: 'PATCH',
     body: JSON.stringify({
       webhook_url,

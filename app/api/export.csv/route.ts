@@ -4,13 +4,28 @@ import { pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+/**
+ * Neutralise spreadsheet formula injection.
+ *
+ * Quoting alone is NOT enough: Excel and LibreOffice still evaluate a leading
+ * '=' / '+' / '-' / '@' inside quoted cells. Prefix with a single quote so the
+ * value is treated as text. Several columns here come from the public
+ * submission form, so the values are attacker-controlled.
+ */
 function escapeCsvCell(cell: string | number | null | undefined): string {
   if (cell == null) return '""';
-  const str = String(cell);
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
+  let str = String(cell);
+
+  // Strip control characters that Excel may use to break out of the cell.
+  str = str.replace(/[\r\n]+/g, ' ');
+
+  if (FORMULA_TRIGGER.test(str)) {
+    str = `'${str}`;
   }
-  return `"${str}"`;
+
+  return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function GET(req: NextRequest) {
@@ -90,6 +105,7 @@ export async function GET(req: NextRequest) {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': 'attachment; filename=rekap_data_pegawai_telemetri.csv',
+        'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch (error: any) {

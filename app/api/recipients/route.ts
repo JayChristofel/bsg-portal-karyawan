@@ -113,8 +113,45 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const created = await db.insert(recipients).values(items).returning();
-      return NextResponse.json({ success: true, count: created.length, recipients: created });
+      const normalizePhone = (p: string | null) => p?.replace(/\D/g, '').replace(/^0/, '62') || null;
+
+      const existingPhones = new Set(
+        (await db.select({ phone: recipients.phone }).from(recipients))
+          .map((r) => normalizePhone(r.phone))
+          .filter(Boolean)
+      );
+
+      const seen = new Set<string>();
+      const unique: typeof items = [];
+      const duplicates: string[] = [];
+
+      for (const item of items) {
+        const key = normalizePhone(item.phone);
+        if (!key) { unique.push(item); continue; }
+        if (seen.has(key) || existingPhones.has(key)) {
+          duplicates.push(item.phone!);
+          continue;
+        }
+        seen.add(key);
+        unique.push(item);
+      }
+
+      if (unique.length === 0) {
+        return NextResponse.json({
+          success: true,
+          count: 0,
+          duplicates,
+          message: 'Semua nomor sudah terdaftar, tidak ada data baru.',
+        });
+      }
+
+      const created = await db.insert(recipients).values(unique).returning();
+      return NextResponse.json({
+        success: true,
+        count: created.length,
+        duplicates,
+        recipients: created,
+      });
     }
 
     // Action 3: Single create + send

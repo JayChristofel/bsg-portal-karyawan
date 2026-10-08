@@ -1,6 +1,7 @@
 import { loadEnvConfig } from '@next/env';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { PassThrough } from 'node:stream';
 
 // Load environment variables from .env.local and .env
 loadEnvConfig(process.cwd());
@@ -11,25 +12,37 @@ import { hashPassword } from '../lib/auth';
 import { eq } from 'drizzle-orm';
 
 async function main() {
+  // SECURITY: never accept the password as a CLI argument — argv is visible to
+  // every local user via `ps` and is persisted in shell history. Username may
+  // still be passed positionally; password is always prompted for.
   const args = process.argv.slice(2);
   let username = args[0];
-  let password = args[1];
+  let password: string | undefined;
 
-  // If arguments not provided via CLI, ask interactively
-  if (!username || !password) {
-    const rl = readline.createInterface({ input, output });
-    try {
-      console.log('\n🔐 Setup Akun Administrator Portal Pegawai');
-      console.log('─────────────────────────────────────────');
-      if (!username) {
-        username = (await rl.question('Masukkan Username Admin: ')).trim();
-      }
-      if (!password) {
-        password = (await rl.question('Masukkan Password: ')).trim();
-      }
-    } finally {
+  if (args.length > 1) {
+    console.error('\n⚠️  Password tidak lagi diterima sebagai argumen CLI (ekspos di process list / shell history).');
+    console.error('    Jalankan `npm run db:seed -- <username>` dan masukkan password saat diminta.\n');
+    process.exit(1);
+  }
+
+  // Hidden prompt: write through a muted stream so the password never echoes.
+  const muted = new PassThrough();
+  muted._write = (chunk, encoding, callback) => callback();
+
+  const rl = readline.createInterface({ input, output: muted, terminal: true });
+  try {
+    console.log('\n🔐 Setup Akun Administrator Portal Pegawai');
+    console.log('─────────────────────────────────────────');
+    if (!username) {
       rl.close();
+      const visible = readline.createInterface({ input, output });
+      username = (await visible.question('Masukkan Username Admin: ')).trim();
+      visible.close();
     }
+    password = (await rl.question('Masukkan Password: ')).trim();
+    console.log('');
+  } finally {
+    rl.close();
   }
 
   if (!username || !password) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { getGowaConfig, saveGowaConfig, listDevices, GOWA_CONFIG_KEYS, DEFAULT_GOWA_CONFIG } from '@/lib/whatsapp';
+import { getGowaConfig, saveGowaConfig, listDevices, validateGatewayUrl, GOWA_CONFIG_KEYS, DEFAULT_GOWA_CONFIG } from '@/lib/whatsapp';
 import { db } from '@/db';
 import { settings } from '@/db/schema';
 import { encrypt, decrypt } from '@/lib/crypto';
@@ -13,12 +13,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const config = await getGowaConfig();
+    // Never return the gateway password in plaintext — only whether one is set.
     return NextResponse.json({
       config: {
         baseUrl: config.baseUrl,
         deviceId: config.deviceId,
         username: config.username || '',
-        password: config.password || '',
+        hasPassword: Boolean(config.password),
+        password: '',
       },
       defaults: {
         baseUrl: DEFAULT_GOWA_CONFIG.baseUrl,
@@ -68,22 +70,29 @@ export async function POST(req: NextRequest) {
     if (!deviceId) {
       return NextResponse.json({ error: 'Device ID wajib diisi.' }, { status: 400 });
     }
-    try {
-      new URL(baseUrl);
-    } catch {
-      return NextResponse.json({ error: 'URL gateway tidak valid.' }, { status: 400 });
+    if (/[\s/\\]/.test(deviceId)) {
+      return NextResponse.json({ error: 'Device ID tidak boleh mengandung spasi, "/" atau "\\".' }, { status: 400 });
     }
 
-    await saveGowaConfig({ baseUrl, deviceId, username });
+    // SSRF guard: the gateway URL is a server-side fetch target.
+    const validated = validateGatewayUrl(baseUrl);
+    if (!validated.ok) {
+      return NextResponse.json({ error: validated.error }, { status: 400 });
+    }
 
-    // Simpan password terenkripsi agar tidak disimpan plaintext
-    await db
-      .insert(settings)
-      .values({ key: GOWA_CONFIG_KEYS.password, value: password ? encrypt(password) : '' })
-      .onConflictDoUpdate({
-        target: settings.key,
-        set: { value: password ? encrypt(password) : '', updatedAt: new Date() },
-      });
+    await saveGowaConfig({ baseUrl: validated.url, deviceId, username });
+
+    // Simpan password terenkripsi agar tidak disimpan plaintext.
+    // Kosongkan field password bila tidak dikirim, agar tidak menimpa nilai lama.
+    if (password) {
+      await db
+        .insert(settings)
+        .values({ key: GOWA_CONFIG_KEYS.password, value: encrypt(password) })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: encrypt(password), updatedAt: new Date() },
+        });
+    }
 
     return NextResponse.json({ version: '2.1', code: 'SUCCESS', message: 'Konfigurasi gateway berhasil disimpan.' });
   } catch (error: any) {

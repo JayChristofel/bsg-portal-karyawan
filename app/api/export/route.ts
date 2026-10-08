@@ -3,7 +3,24 @@ import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { recipients, campaigns } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+/**
+ * Neutralise spreadsheet formula injection (Excel/LibreOffice evaluate a leading
+ * '=' / '+' / '-' / '@' even inside quoted cells). Recipient labels come from
+ * imported spreadsheets, so they are not trusted input.
+ */
+function escapeCsvCell(cell: unknown): string {
+  if (cell == null) return '""';
+  let str = String(cell);
+  str = str.replace(/[\r\n]+/g, ' ');
+  if (FORMULA_TRIGGER.test(str)) {
+    str = `'${str}`;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
 
 export async function GET(req: NextRequest) {
   const username = await getAdminUsername(req);
@@ -28,7 +45,7 @@ export async function GET(req: NextRequest) {
         waMessageId: recipients.waMessageId,
         campaignId: recipients.campaignId,
         campaignName: campaigns.name,
-        isSubmitted: sql<boolean>`EXISTS(SELECT 1 FROM submissions s WHERE s.recipient_id = ${recipients.id})`,
+        isSubmitted: sql<boolean>`EXISTS(SELECT 1 FROM pegawai p WHERE lower(trim(p.name)) = lower(trim(${recipients.label})))`,
         createdAt: recipients.createdAt,
       })
       .from(recipients)
@@ -50,38 +67,60 @@ export async function GET(req: NextRequest) {
         new Date(r.createdAt).toLocaleString('id-ID'),
       ]);
 
-      const csv = [headers, ...csvRows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const csv = [headers, ...csvRows]
+        .map((row) => row.map((cell) => escapeCsvCell(cell)).join(','))
+        .join('\r\n');
 
-      return new NextResponse(csv, {
+      // Prepend UTF-8 BOM so Excel opens it with proper UTF-8 decoding
+      const csvWithBom = '\uFEFF' + csv;
+
+      return new NextResponse(csvWithBom, {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
           'Content-Disposition': `attachment; filename="export-penerima-${Date.now()}.csv"`,
+          'X-Content-Type-Options': 'nosniff',
         },
       });
     }
 
-    const data = rows.map((r) => ({
-      ID: r.id,
-      Nama: r.label,
-      'No. WhatsApp': r.phone || '',
-      Cabang: r.cabang || '',
-      'Status WA': r.waStatus || 'pending',
-      'Waktu Kirim': r.waSentAt ? new Date(r.waSentAt).toLocaleString('id-ID') : '',
-      'ID Pesan': r.waMessageId || '',
-      Kampanye: r.campaignName || '',
-      'Sudah Isi Form': r.isSubmitted ? 'Ya' : 'Tidak',
-      'Tanggal Daftar': new Date(r.createdAt).toLocaleString('id-ID'),
-    }));
+    const headers = ['ID', 'Nama', 'No. WhatsApp', 'Cabang', 'Status WA', 'Waktu Kirim', 'ID Pesan', 'Kampanye', 'Sudah Isi Form', 'Tanggal Daftar'];
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Penerima');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    // exceljs replaces xlsx, which had an unpatched prototype-pollution + ReDoS
+    // advisory with no fixed version available on the npm registry.
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Penerima');
 
-    return new NextResponse(buf, {
+    // Force text cells so Excel never coerces a value into a formula.
+    ws.addRow(headers);
+    ws.getRow(1).font = { bold: true };
+
+    for (const r of rows) {
+      ws.addRow([
+        r.id,
+        String(r.label ?? ''),
+        String(r.phone ?? ''),
+        String(r.cabang ?? ''),
+        String(r.waStatus ?? 'pending'),
+        r.waSentAt ? new Date(r.waSentAt).toLocaleString('id-ID') : '',
+        String(r.waMessageId ?? ''),
+        String(r.campaignName ?? ''),
+        r.isSubmitted ? 'Ya' : 'Tidak',
+        new Date(r.createdAt).toLocaleString('id-ID'),
+      ]);
+    }
+
+    ws.columns.forEach((col) => {
+      col.width = 22;
+    });
+    ws.getColumn(2).width = 30;
+
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+
+    return new NextResponse(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="export-penerima-${Date.now()}.xlsx"`,
+        'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch (error: any) {

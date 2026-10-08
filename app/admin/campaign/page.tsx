@@ -1,7 +1,58 @@
 'use client';
 
 import * as React from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
+/**
+ * Minimal RFC-4180 CSV parser. Hand-rolled so we no longer need the
+ * `xlsx` dependency (which had an unpatched prototype-pollution advisory).
+ */
+function parseCsv(text: string): unknown[][] {
+  const rows: unknown[][] = [];
+  let row: unknown[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
+}
 import {
   AlertTriangle,
   Building2,
@@ -133,6 +184,12 @@ export default function BroadcastPage() {
   const [activeTab, setActiveTab] = React.useState<FilterTab>('all');
   const [selectedCabang, setSelectedCabang] = React.useState('all');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [phoneFilter, setPhoneFilter] = React.useState<'all' | 'has_phone' | 'no_phone'>('all');
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
+  const [showBulkEditCabang, setShowBulkEditCabang] = React.useState(false);
+  const [bulkEditCabangValue, setBulkEditCabangValue] = React.useState('');
+  const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
+  const [isBulkEditing, setIsBulkEditing] = React.useState(false);
 
   const [msgTemplate, setMsgTemplate] = React.useState(DEFAULT_TEMPLATE);
   const [showTemplateModal, setShowTemplateModal] = React.useState(false);
@@ -251,11 +308,32 @@ export default function BroadcastPage() {
     setImportFileName(file.name);
     const reader = new FileReader();
 
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(evt.target?.result, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rawJson: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        // exceljs replaces xlsx, which had an unpatched prototype-pollution
+        // advisory. Parsing is bounded to keep a hostile file from exhausting
+        // the browser (the xlsx path used to be unbounded).
+        const MAX_ROWS = 10_000;
+        let rawJson: unknown[][] = [];
+
+        const isCsv = /\.csv$/i.test(file.name);
+
+        if (isCsv) {
+          const text = String(evt.target?.result ?? '');
+          rawJson = parseCsv(text).slice(0, MAX_ROWS);
+        } else {
+          const buf = evt.target?.result;
+          if (!(buf instanceof ArrayBuffer)) throw new Error('Gagal membaca file.');
+          const wb = new ExcelJS.Workbook();
+          await wb.xlsx.load(buf);
+          const ws = wb.worksheets[0];
+          if (ws) {
+            ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+              if (rowNumber > MAX_ROWS) return;
+              rawJson.push(row.values as unknown[]);
+            });
+          }
+        }
 
         if (rawJson.length < 2) {
           setNotice({ tone: 'err', text: 'File Excel/CSV kosong atau tidak memiliki baris data.' });
@@ -291,7 +369,7 @@ export default function BroadcastPage() {
           if (!row || row.length === 0) continue;
 
           const label = String(row[nameIdx] || '').trim();
-          let phone = String(row[phoneIdx] || '').trim();
+          let phone = String(row[phoneIdx] || '').trim().replace(/^'/, '');
           const cabang = cabangIdx !== -1 ? String(row[cabangIdx] || '').trim() : '';
 
           // Normalize scientific notation from Excel (e.g. 6.2812E+11)
@@ -476,6 +554,157 @@ export default function BroadcastPage() {
     void fetchData();
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Hapus ${selectedIds.size} penerima dari daftar broadcast?`)) return;
+
+    setIsBulkDeleting(true);
+    let deleted = 0;
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch(`/api/recipients/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) deleted++;
+      } catch {
+        // continue
+      }
+    }
+    setIsBulkDeleting(false);
+    setSelectedIds(new Set());
+    setNotice({
+      tone: 'ok',
+      text: `Berhasil menghapus ${deleted} dari ${selectedIds.size} penerima.`,
+    });
+    void fetchData();
+  };
+
+  const handleBulkEditCabang = async () => {
+    if (selectedIds.size === 0 || !bulkEditCabangValue.trim()) return;
+    setIsBulkEditing(true);
+    let updated = 0;
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch(`/api/recipients/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cabang: bulkEditCabangValue.trim() }),
+        });
+        const json = await res.json();
+        if (json.success) updated++;
+      } catch {
+        // continue
+      }
+    }
+    setIsBulkEditing(false);
+    setShowBulkEditCabang(false);
+    setBulkEditCabangValue('');
+    setSelectedIds(new Set());
+    setNotice({
+      tone: 'ok',
+      text: `Berhasil mengubah cabang ${updated} penerima.`,
+    });
+    void fetchData();
+  };
+
+  const handleBulkSendSelected = async () => {
+    const targets = data.filter((r) => selectedIds.has(r.id) && r.phone && (r.waStatus === 'pending' || !r.waSentAt));
+    if (targets.length === 0) {
+      setNotice({ tone: 'err', text: 'Tidak ada penerima terpilih dengan nomor WhatsApp berstatus Pending.' });
+      return;
+    }
+
+    const confirmMsg = `Kirim WhatsApp ke ${targets.length} penerima terpilih?\n\nPengaturan Anti-Banned:\n- Profil Jeda: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'Aktif (istirahat 20s tiap 20 pesan)' : 'Nonaktif'}`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsBulkSending(true);
+    let successCount = 0;
+    const portalLink = `${window.location.origin}/`;
+
+    for (let i = 0; i < targets.length; i++) {
+      const row = targets[i];
+      setBulkProgress(`Mengirim ${i + 1} dari ${targets.length}: ${row.label} (${row.phone})…`);
+
+      try {
+        const message = processSpintax(msgTemplate)
+          .replace(/\{nama\}/gi, row.label)
+          .replace(/\{link\}/gi, portalLink);
+
+        const res = await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipientId: row.id, phone: row.phone, message }),
+        });
+
+        const json = await res.json();
+        if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
+          successCount++;
+        }
+      } catch {
+        // continue
+      }
+
+      if (enableCooldown && (i + 1) % 20 === 0 && i + 1 < targets.length) {
+        for (let cd = 20; cd > 0; cd--) {
+          setCooldownCountdown(cd);
+          setBulkProgress(`Anti-Spam Cooldown: Beristirahat ${cd} detik…`);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        setCooldownCountdown(null);
+      } else {
+        let delayMs = 3000;
+        if (delayProfile === 'safe') delayMs = Math.floor(Math.random() * 4001) + 4000;
+        else if (delayProfile === 'fast') delayMs = Math.floor(Math.random() * 1001) + 2000;
+        else delayMs = Math.floor(Math.random() * 2501) + 2500;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    setIsBulkSending(false);
+    setBulkProgress(null);
+    setSelectedIds(new Set());
+    setNotice({
+      tone: 'ok',
+      text: `Broadcast selesai. Berhasil mengirim ke ${successCount} dari ${targets.length} penerima terpilih.`,
+    });
+    void fetchData();
+  };
+
+  const handleBulkExport = () => {
+    const selected = data.filter((r) => selectedIds.has(r.id));
+    if (selected.length === 0) return;
+
+    const header = 'Nama,No. WhatsApp,Cabang,Status WA\n';
+    const rows = selected
+      .map((r) => `"${r.label}","${r.phone || ''}","${r.cabang || ''}","${r.waStatus}"`)
+      .join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `penerima_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredData.map((r) => r.id)));
+    }
+  };
+
+  const toggleSelectRow = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   /* ── Derived ─────────────────────────────────────────────── */
 
   const total = data.length;
@@ -500,6 +729,8 @@ export default function BroadcastPage() {
         if (activeTab === 'submitted' && !row.isSubmitted) return false;
         if (activeTab === 'not_submitted' && row.isSubmitted) return false;
         if (selectedCabang !== 'all' && row.cabang !== selectedCabang) return false;
+        if (phoneFilter === 'has_phone' && !row.phone) return false;
+        if (phoneFilter === 'no_phone' && row.phone) return false;
 
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
@@ -511,7 +742,7 @@ export default function BroadcastPage() {
         }
         return true;
       }),
-    [data, activeTab, selectedCabang, searchQuery],
+    [data, activeTab, selectedCabang, searchQuery, phoneFilter],
   );
 
   const pendingTargets = React.useMemo(
@@ -755,8 +986,50 @@ export default function BroadcastPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={phoneFilter} onValueChange={(v) => setPhoneFilter(v as 'all' | 'has_phone' | 'no_phone')}>
+            <SelectTrigger className="sm:w-48" aria-label="Filter nomor HP">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Nomor</SelectItem>
+              <SelectItem value="has_phone">Ada Nomor HP</SelectItem>
+              <SelectItem value="no_phone">Belum Ada Nomor</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </SectionCard>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3">
+          <span className="text-sm font-medium text-accent">{selectedIds.size} penerima dipilih</span>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => void handleBulkSendSelected()} disabled={isBulkSending}>
+              <Send className="size-3.5" aria-hidden="true" />
+              Kirim Terpilih
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowBulkEditCabang(true)} disabled={isBulkEditing}>
+              <Building2 className="size-3.5" aria-hidden="true" />
+              Edit Cabang
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => handleBulkExport()}>
+              <FileSpreadsheet className="size-3.5" aria-hidden="true" />
+              Export CSV
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => void handleBulkDelete()} disabled={isBulkDeleting}>
+              {isBulkDeleting ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              )}
+              Hapus
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+              Batal
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Recipients table */}
       <SectionCard
@@ -782,6 +1055,15 @@ export default function BroadcastPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === filteredData.length && filteredData.length > 0}
+                      onChange={() => toggleSelectAll()}
+                      className="size-4 cursor-pointer accent-[var(--accent)]"
+                      aria-label="Pilih semua"
+                    />
+                  </TableHead>
                   <TableHead>Nama</TableHead>
                   <TableHead>No. WhatsApp</TableHead>
                   <TableHead>Cabang</TableHead>
@@ -795,6 +1077,15 @@ export default function BroadcastPage() {
                   const sending = Boolean(sendingMap[row.id]);
                   return (
                     <TableRow key={row.id}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(row.id)}
+                          onChange={() => toggleSelectRow(row.id)}
+                          className="size-4 cursor-pointer accent-[var(--accent)]"
+                          aria-label={`Pilih ${row.label}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium text-foreground">{row.label}</TableCell>
                       <TableCell className="tabular text-chart-2">
                         {row.phone || <span className="text-muted-foreground">— belum ada</span>}
@@ -1024,6 +1315,39 @@ export default function BroadcastPage() {
                 <FileSpreadsheet aria-hidden="true" />
               )}
               {isImporting ? 'Mengimpor…' : `Impor ${importPreview.length} Pegawai`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk edit cabang modal ─────────────────────────────── */}
+      <Dialog open={showBulkEditCabang} onOpenChange={setShowBulkEditCabang}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Cabang Massal</DialogTitle>
+            <DialogDescription>
+              Ubah cabang untuk {selectedIds.size} penerima yang dipilih.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={bulkEditCabangValue}
+              onChange={(e) => setBulkEditCabangValue(e.target.value)}
+              placeholder="Nama cabang baru (contoh: KCP Manado)"
+              aria-label="Cabang baru"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkEditCabang(false)}>
+              Batal
+            </Button>
+            <Button onClick={() => void handleBulkEditCabang()} disabled={isBulkEditing || !bulkEditCabangValue.trim()}>
+              {isBulkEditing ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Building2 aria-hidden="true" />
+              )}
+              Simpan
             </Button>
           </DialogFooter>
         </DialogContent>

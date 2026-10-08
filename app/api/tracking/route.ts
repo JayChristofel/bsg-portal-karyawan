@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         waMessageId: recipients.waMessageId,
         campaignId: recipients.campaignId,
         campaignName: campaigns.name,
-        isSubmitted: sql<boolean>`EXISTS(SELECT 1 FROM submissions s WHERE s.recipient_id = ${recipients.id})`,
+        isSubmitted: sql<boolean>`EXISTS(SELECT 1 FROM pegawai p WHERE lower(trim(p.name)) = lower(trim(${recipients.label})))`,
         createdAt: recipients.createdAt,
       })
       .from(recipients)

@@ -56,6 +56,19 @@ export async function POST(req: NextRequest) {
     const webhookSecret = (body.webhook_secret || '').trim();
     const webhookEvents = (body.webhook_events || '').trim();
 
+    // The gateway will POST inbound events here; keep it a well-formed
+    // absolute http(s) URL so it cannot be pointed at a third party host.
+    if (webhookUrl) {
+      try {
+        const parsed = new URL(webhookUrl);
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+          return NextResponse.json({ error: 'Webhook URL harus memakai http atau https.' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Webhook URL tidak valid.' }, { status: 400 });
+      }
+    }
+
     const result = await setDeviceWebhook(webhookUrl, webhookSecret, webhookEvents);
     return NextResponse.json(result);
   } catch (error: any) {

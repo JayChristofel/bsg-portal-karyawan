@@ -2,17 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { admins } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { verifyPassword, createSessionToken, COOKIE_NAME, SESSION_TTL_SECONDS } from '@/lib/auth';
-import { getClientIp, checkRateLimit } from '@/lib/proxy';
+import { verifyPassword, equalizeVerifyTiming, createSessionToken, COOKIE_NAME, SESSION_TTL_SECONDS } from '@/lib/auth';
+import { getClientIp, checkRateLimit, resetRateLimit, recordAuthFailure } from '@/lib/proxy';
 import { logAudit } from '@/lib/audit';
+
+const LOGIN_WINDOW_SECONDS = 300;
+const LOGIN_MAX_ATTEMPTS = 5;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: NextRequest) {
   const clientIp = getClientIp(req);
-  const rateLimitKey = `auth_fail_${clientIp}`;
 
-  // Rate limit: max 5 failed attempts per 5 minutes (300s)
-  const limitCheck = checkRateLimit(rateLimitKey, 300, 5);
-  if (limitCheck.limited) {
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Body harus berupa JSON yang valid.' },
+      { status: 400 }
+    );
+  }
+
+  const username = (body.username || '').trim();
+  const password = body.password || '';
+
+  const ipKey = `auth_fail_ip_${clientIp}`;
+  const accountKey = `auth_fail_user_${username.toLowerCase()}`;
+
+  // Hard rate limit per source IP.
+  if (checkRateLimit(ipKey, LOGIN_WINDOW_SECONDS, LOGIN_MAX_ATTEMPTS).limited) {
     return NextResponse.json(
       { success: false, error: 'Terlalu banyak percobaan login gagal. Coba lagi nanti.' },
       { status: 429 }
@@ -20,10 +39,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const username = (body.username || '').trim();
-    const password = body.password || '';
-
     if (!username || !password) {
       return NextResponse.json(
         { success: false, error: 'Username dan password wajib diisi.' },
@@ -37,14 +52,32 @@ export async function POST(req: NextRequest) {
       .where(eq(admins.username, username))
       .limit(1);
 
-    if (!admin || !verifyPassword(password, admin.passwordHash)) {
-      // Record failed hit for rate limiting
-      checkRateLimit(rateLimitKey, 300, 5);
+    if (!admin) {
+      // Spend equivalent CPU so timing does not disclose valid usernames.
+      equalizeVerifyTiming();
+
+      const delay = recordAuthFailure(accountKey);
+      if (delay > 0) await sleep(delay);
+
       return NextResponse.json(
         { success: false, error: 'Username atau password salah.' },
         { status: 401 }
       );
     }
+
+    if (!verifyPassword(password, admin.passwordHash)) {
+      const delay = recordAuthFailure(accountKey);
+      if (delay > 0) await sleep(delay);
+
+      return NextResponse.json(
+        { success: false, error: 'Username atau password salah.' },
+        { status: 401 }
+      );
+    }
+
+    // Successful login: clear the failure budget for this IP and account.
+    resetRateLimit(ipKey);
+    resetRateLimit(accountKey);
 
     const token = await createSessionToken(admin.username);
     await logAudit(admin.username, 'login', 'Login berhasil', clientIp);
