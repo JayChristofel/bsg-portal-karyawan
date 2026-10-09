@@ -62,10 +62,10 @@ export async function POST(req: NextRequest) {
       try {
         const parsed = new URL(webhookUrl);
         if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-          return NextResponse.json({ error: 'Webhook URL harus memakai http atau https.' }, { status: 400 });
+          return NextResponse.json({ error: 'Webhook URL must use http or https.' }, { status: 400 });
         }
       } catch {
-        return NextResponse.json({ error: 'Webhook URL tidak valid.' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid webhook URL.' }, { status: 400 });
       }
     }
 

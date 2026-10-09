@@ -165,7 +165,7 @@ const STATUS_META: Record<
     className: 'border-accent/30 bg-accent/10 text-accent',
   },
   active: {
-    label: 'Aktif',
+    label: 'Active',
     icon: CheckCircle2,
     className: 'border-accent/30 bg-accent/10 text-accent',
   },

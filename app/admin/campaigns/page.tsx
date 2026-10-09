@@ -103,7 +103,7 @@ export default function CampaignsPage() {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      setNotice({ tone: 'err', text: 'Nama kampanye wajib diisi.' });
+      setNotice({ tone: 'err', text: 'Campaign name is required.' });
       return;
     }
     setIsSaving(true);
@@ -119,7 +119,7 @@ export default function CampaignsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Kampanye "${name}" berhasil dibuat.` });
+        setNotice({ tone: 'ok', text: `Campaign "${name}" was created.` });
         setOpen(false);
         setName('');
         setTemplateId('none');
@@ -162,13 +162,13 @@ export default function CampaignsPage() {
     try {
       const res = await fetch(`/api/campaigns?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Kampanye "${campaignName}" berhasil dihapus.` });
+        setNotice({ tone: 'ok', text: `Campaign "${campaignName}" was deleted.` });
         void fetchCampaigns();
       } else {
         setNotice({ tone: 'err', text: 'Could not delete the campaign.' });
       }
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
+      setNotice({ tone: 'err', text: 'An error occurred while deleting.' });
     }
   };
 
@@ -176,7 +176,7 @@ export default function CampaignsPage() {
     <div className="mx-auto max-w-[1200px]">
       <PageHeader
         title="Campaign Management"
-        description="Buat kampanye broadcast, pilih template, jadwalkan kirim, dan pantau status pengiriman."
+        description="Create a broadcast campaign, pick a template, schedule the send, and track delivery status."
         actions={
           <Button onClick={() => setOpen(true)}>
             <Plus aria-hidden="true" />
@@ -217,7 +217,7 @@ export default function CampaignsPage() {
           <EmptyState
             icon={ClipboardList}
             title="No campaigns yet"
-            description="Buat kampanye pertama untuk mulai melakukan broadcast ke pegawai."
+            description="Create your first campaign to start broadcasting to employees."
             action={{ label: 'New Campaign', onClick: () => setOpen(true) }}
           />
         </div>
@@ -242,7 +242,7 @@ export default function CampaignsPage() {
                         {c.templateName ? (
                           <span className="text-foreground">{c.templateName}</span>
                         ) : (
-                          <span className="text-muted-foreground/70">tanpa template</span>
+                          <span className="text-muted-foreground/70">without a template</span>
                         )}
                       </span>
                       {c.scheduledAt ? (
@@ -348,7 +348,7 @@ export default function CampaignsPage() {
           <DialogHeader>
             <DialogTitle className="text-base">New Campaign</DialogTitle>
             <DialogDescription>
-              Pilih template pesan dan jadwalkan waktu kirim bila diperlukan.
+              Pick a message template and set a send schedule if needed.
             </DialogDescription>
           </DialogHeader>
 
@@ -359,7 +359,7 @@ export default function CampaignsPage() {
                 id="campaign-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Contoh: Pemutakhiran Data Q4 2026"
+                placeholder="e.g. Q4 2026 Data Update"
               />
             </div>
 
@@ -370,7 +370,7 @@ export default function CampaignsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Tanpa template —</SelectItem>
+                  <SelectItem value="none">— No template —</SelectItem>
                   {templates.map((t) => (
                     <SelectItem key={t.id} value={String(t.id)}>
                       {t.name}
@@ -389,7 +389,7 @@ export default function CampaignsPage() {
                 onChange={(e) => setScheduledAt(e.target.value)}
               />
               <p className="text-[11px] text-muted-foreground">
-                Kosongkan untuk menyimpan sebagai draft.
+                Leave empty to save as a draft.
               </p>
             </div>
           </div>

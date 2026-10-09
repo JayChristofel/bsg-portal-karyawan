@@ -23,7 +23,7 @@ const ROWS: Row[] = [
 const FILTER_FIELDS: FilterField<Row>[] = [
   {
     key: 'cabang',
-    label: 'Cabang',
+    label: 'Branch',
     kind: 'select',
     options: [
       { value: 'Manado', label: 'Manado' },
@@ -43,7 +43,7 @@ const FILTER_FIELDS: FilterField<Row>[] = [
   },
   {
     key: 'sent',
-    label: 'Periode kirim',
+    label: 'Send period',
     kind: 'date-range',
     dateOf: (row) => row.sentAt,
   },
@@ -71,7 +71,7 @@ function Harness() {
   const view = useHarness();
   return (
     <div>
-      <TableViewControls view={view} resultLabel="penerima" />
+      <TableViewControls view={view} resultLabel="recipients" />
       <ul data-testid="rows">
         {view.pageRows.map((r) => (
           <li key={r.id}>{r.name}</li>
@@ -102,7 +102,7 @@ async function pickOption(
 }
 
 async function openPanel(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: /filter & urutkan/i }));
+  await user.click(screen.getByRole('button', { name: /filter & sort/i }));
 }
 
 /** The popover is non-modal: Escape returns focus to the trigger. */
@@ -121,7 +121,7 @@ const visibleNames = () =>
 
 const chipText = () =>
   screen
-    .queryAllByRole('button', { name: /hapus filter ini/i })
+    .queryAllByRole('button', { name: /remove this filter/i })
     .map((el) => el.textContent ?? '');
 
 describe('TableViewControls — single consolidated entry point', () => {
@@ -129,25 +129,25 @@ describe('TableViewControls — single consolidated entry point', () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    expect(screen.getAllByRole('button', { name: /filter & urutkan/i })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /filter & sort/i })).toHaveLength(1);
     await openPanel(user);
 
-    expect(screen.getByLabelText(/pencarian/i)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /^urutkan$/i })).toBeInTheDocument();
-    expect(screen.getByLabelText('Cabang')).toBeInTheDocument();
+    expect(screen.getByLabelText(/search/i)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /^sort by$/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Branch')).toBeInTheDocument();
     expect(screen.getByLabelText('Tinggi')).toBeInTheDocument();
-    expect(screen.getByLabelText(/periode kirim dari/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/periode kirim sampai/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/send period from/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/send period to/i)).toBeInTheDocument();
   });
 
   it('reports no active filters before the admin changes anything', async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    expect(screen.getByRole('button', { name: /belum ada filter aktif/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /no active filters/i })).toBeInTheDocument();
 
     await openPanel(user);
-    expect(screen.getByRole('status')).toHaveTextContent('3 penerima');
+    expect(screen.getByRole('status')).toHaveTextContent('3 recipients');
   });
 });
 
@@ -157,11 +157,11 @@ describe('TableViewControls — searching', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await user.type(screen.getByLabelText(/pencarian/i), 'gorontalo');
+    await user.type(screen.getByLabelText(/search/i), 'gorontalo');
     await closePanel(user);
 
     expect(visibleNames()).toEqual(['Citra']);
-    expect(chipText().some((t) => t.startsWith('Cari:'))).toBe(true);
+    expect(chipText().some((t) => t.startsWith('Search:'))).toBe(true);
   });
 });
 
@@ -174,11 +174,11 @@ describe('TableViewControls — select filter', () => {
     expect(screen.getByTestId('page')).toHaveTextContent('2');
 
     await openPanel(user);
-    await pickOption(user, /^cabang$/i, 'Manado');
+    await pickOption(user, /^branch$/i, 'Manado');
     await closePanel(user);
 
     expect(screen.getByTestId('page')).toHaveTextContent('1');
-    expect(chipText().some((t) => t.startsWith('Cabang:'))).toBe(true);
+    expect(chipText().some((t) => t.startsWith('Branch:'))).toBe(true);
     expect(visibleNames()).toEqual(['Andi', 'Budi']);
   });
 });
@@ -219,8 +219,8 @@ describe('TableViewControls — date range filter', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await user.type(screen.getByLabelText(/periode kirim dari/i), '2026-01-01');
-    await user.type(screen.getByLabelText(/periode kirim sampai/i), '2026-03-31');
+    await user.type(screen.getByLabelText(/send period from/i), '2026-01-01');
+    await user.type(screen.getByLabelText(/send period to/i), '2026-03-31');
     await closePanel(user);
 
     expect(visibleNames()).toEqual(['Andi', 'Citra']);
@@ -236,14 +236,14 @@ describe('TableViewControls — sorting', () => {
     expect(visibleNames()).toEqual(['Andi', 'Budi']);
 
     await openPanel(user);
-    await user.click(screen.getByRole('button', { name: /urutkan menurun/i }));
+    await user.click(screen.getByRole('button', { name: /sort descending/i }));
     await closePanel(user);
     // Descending by name: Citra, Budi | Andi
     expect(visibleNames()).toEqual(['Citra', 'Budi']);
 
     await openPanel(user);
-    await pickOption(user, /^urutkan$/i, 'Jumlah');
-    await user.click(screen.getByRole('button', { name: /urutkan menaik/i }));
+    await pickOption(user, /^sort by$/i, 'Jumlah');
+    await user.click(screen.getByRole('button', { name: /sort ascending/i }));
     await closePanel(user);
     // Ascending by total: Andi (10), Citra (20) | Budi (30)
     expect(visibleNames()).toEqual(['Andi', 'Citra']);
@@ -254,14 +254,14 @@ describe('TableViewControls — sorting', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await pickOption(user, /^urutkan$/i, 'Terkirim');
-    await user.click(screen.getByRole('button', { name: /urutkan menaik/i }));
+    await pickOption(user, /^sort by$/i, 'Terkirim');
+    await user.click(screen.getByRole('button', { name: /sort ascending/i }));
     await closePanel(user);
     // Budi has no sentAt so it sorts last in both directions: Citra, Andi | Budi
     expect(visibleNames()).toEqual(['Citra', 'Andi']);
 
     await openPanel(user);
-    await user.click(screen.getByRole('button', { name: /urutkan menurun/i }));
+    await user.click(screen.getByRole('button', { name: /sort descending/i }));
     await closePanel(user);
     expect(visibleNames()).toEqual(['Andi', 'Citra']);
   });
@@ -271,11 +271,11 @@ describe('TableViewControls — sorting', () => {
     render(<Harness />);
 
     await openPanel(user);
-    expect(screen.getByRole('button', { name: /urutkan menaik/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /sort ascending/i })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(screen.getByRole('button', { name: /urutkan menurun/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /sort descending/i })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
@@ -304,7 +304,7 @@ describe('TableViewControls — pagination', () => {
     expect(screen.getByTestId('page')).toHaveTextContent('2');
 
     await openPanel(user);
-    await pickOption(user, /^cabang$/i, 'Gorontalo');
+    await pickOption(user, /^branch$/i, 'Gorontalo');
     await closePanel(user);
 
     expect(screen.getByTestId('page')).toHaveTextContent('1');
@@ -328,9 +328,9 @@ describe('TableViewControls — resetting', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await user.type(screen.getByLabelText(/pencarian/i), 'manado');
+    await user.type(screen.getByLabelText(/search/i), 'manado');
     await closePanel(user);
-    expect(chipText().some((t) => t.startsWith('Cari:'))).toBe(true);
+    expect(chipText().some((t) => t.startsWith('Search:'))).toBe(true);
 
     await openPanel(user);
     await user.click(screen.getByRole('button', { name: /^reset$/i }));
@@ -349,7 +349,7 @@ describe('TableViewControls — resetting', () => {
     await closePanel(user);
 
     await openPanel(user);
-    await pickOption(user, /^cabang$/i, 'Manado');
+    await pickOption(user, /^branch$/i, 'Manado');
     await closePanel(user);
 
     await openPanel(user);
@@ -361,10 +361,10 @@ describe('TableViewControls — resetting', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await user.type(screen.getByLabelText(/pencarian/i), 'manado');
+    await user.type(screen.getByLabelText(/search/i), 'manado');
     await closePanel(user);
 
-    await user.click(screen.getByRole('button', { name: /hapus filter ini/i }));
+    await user.click(screen.getByRole('button', { name: /remove this filter/i }));
 
     expect(screen.getByTestId('total')).toHaveTextContent('3');
   });
@@ -376,11 +376,11 @@ describe('TableViewControls — chip layout and a11y', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await user.type(screen.getByLabelText(/pencarian/i), 'manado');
-    await pickOption(user, /^cabang$/i, 'Gorontalo');
+    await user.type(screen.getByLabelText(/search/i), 'manado');
+    await pickOption(user, /^branch$/i, 'Gorontalo');
     await closePanel(user);
 
-    const chip = screen.getAllByRole('button', { name: /hapus filter ini/i })[0];
+    const chip = screen.getAllByRole('button', { name: /remove this filter/i })[0];
     const chipList = chip.closest('ul');
     expect(chipList).toHaveClass('flex-wrap');
     expect(chipText().length).toBeGreaterThan(1);
@@ -393,14 +393,14 @@ describe('TableViewControls — chip layout and a11y', () => {
 
     const status = screen.getByRole('status');
     expect(status).toHaveAttribute('aria-live', 'polite');
-    expect(status).toHaveTextContent('3 penerima');
+    expect(status).toHaveTextContent('3 recipients');
   });
 
   it('marks the trigger as a popover opener', async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    const trigger = screen.getByRole('button', { name: /filter & urutkan/i });
+    const trigger = screen.getByRole('button', { name: /filter & sort/i });
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
@@ -425,9 +425,9 @@ describe('TableViewControls — combined filters', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await pickOption(user, /^cabang$/i, 'Manado');
+    await pickOption(user, /^branch$/i, 'Manado');
     await user.click(screen.getByLabelText('Rendah'));
-    await user.type(screen.getByLabelText(/pencarian/i), 'andi');
+    await user.type(screen.getByLabelText(/search/i), 'andi');
     await closePanel(user);
 
     expect(visibleNames()).toEqual(['Andi']);
@@ -439,7 +439,7 @@ describe('TableViewControls — combined filters', () => {
     render(<Harness />);
 
     await openPanel(user);
-    await user.type(screen.getByLabelText(/pencarian/i), 'tidak-ada');
+    await user.type(screen.getByLabelText(/search/i), 'tidak-ada');
     await closePanel(user);
 
     expect(visibleNames()).toEqual([]);

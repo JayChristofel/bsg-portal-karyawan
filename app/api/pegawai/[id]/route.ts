@@ -22,7 +22,7 @@ export async function PUT(
   const { id } = await params;
   const recordId = parseInt(id, 10);
   if (isNaN(recordId)) {
-    return NextResponse.json({ success: false, error: 'ID tidak valid.' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Invalid ID.' }, { status: 400 });
   }
 
   try {
@@ -35,7 +35,7 @@ export async function PUT(
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
-        { success: false, error: 'Semua kolom wajib diisi.' },
+        { success: false, error: 'All fields are required.' },
         { status: 400 }
       );
     }
@@ -77,7 +77,7 @@ export async function DELETE(
   const { id } = await params;
   const recordId = parseInt(id, 10);
   if (isNaN(recordId)) {
-    return NextResponse.json({ success: false, error: 'ID tidak valid.' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Invalid ID.' }, { status: 400 });
   }
 
   try {

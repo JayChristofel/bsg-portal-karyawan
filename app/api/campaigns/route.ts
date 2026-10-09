@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
 
     if (!name) {
-      return NextResponse.json({ error: 'Nama kampanye wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Campaign name is required.' }, { status: 400 });
     }
 
     const status = scheduledAt ? 'scheduled' : 'draft';
@@ -88,7 +88,7 @@ export async function PUT(req: NextRequest) {
     const status = body.status !== undefined ? body.status : undefined;
 
     if (!id) {
-      return NextResponse.json({ error: 'ID kampanye wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Campaign ID is required.' }, { status: 400 });
     }
 
     const [campaign] = await db
@@ -104,7 +104,7 @@ export async function PUT(req: NextRequest) {
       .returning();
 
     if (!campaign) {
-      return NextResponse.json({ error: 'Kampanye tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
     }
 
     const username = await getAdminUsername(req);
@@ -126,7 +126,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const id = Number(req.nextUrl.searchParams.get('id'));
     if (!id) {
-      return NextResponse.json({ error: 'ID kampanye wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Campaign ID is required.' }, { status: 400 });
     }
 
     const [deleted] = await db
@@ -135,7 +135,7 @@ export async function DELETE(req: NextRequest) {
       .returning();
 
     if (!deleted) {
-      return NextResponse.json({ error: 'Kampanye tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
     }
 
     const username = await getAdminUsername(req);

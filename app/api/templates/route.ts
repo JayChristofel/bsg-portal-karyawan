@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const body_ = (body.body || '').trim();
 
     if (!name || !body_) {
-      return NextResponse.json({ error: 'Nama dan isi template wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Template name and body are required.' }, { status: 400 });
     }
 
     const [template] = await db
@@ -69,7 +69,7 @@ export async function PUT(req: NextRequest) {
     const body_ = (body.body || '').trim();
 
     if (!id || !name || !body_) {
-      return NextResponse.json({ error: 'ID, nama, dan isi template wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'ID, name, and template body are required.' }, { status: 400 });
     }
 
     const [template] = await db
@@ -79,7 +79,7 @@ export async function PUT(req: NextRequest) {
       .returning();
 
     if (!template) {
-      return NextResponse.json({ error: 'Template tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Template not found.' }, { status: 404 });
     }
 
     const username = await getAdminUsername(req);
@@ -101,7 +101,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const id = Number(req.nextUrl.searchParams.get('id'));
     if (!id) {
-      return NextResponse.json({ error: 'ID template wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Template ID is required.' }, { status: 400 });
     }
 
     const [deleted] = await db
@@ -110,7 +110,7 @@ export async function DELETE(req: NextRequest) {
       .returning();
 
     if (!deleted) {
-      return NextResponse.json({ error: 'Template tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Template not found.' }, { status: 404 });
     }
 
     const username = await getAdminUsername(req);

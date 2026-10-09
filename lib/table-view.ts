@@ -270,7 +270,7 @@ export function useTableView<T>(config: TableViewConfig<T>): TableView<T> {
       const text = query.trim();
       result.push({
         key: '__query',
-        group: 'Cari',
+        group: 'Search',
         text,
         onClear: () => setQueryState(''),
       });

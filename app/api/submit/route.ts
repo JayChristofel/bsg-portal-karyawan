@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const rateLimit = checkRateLimit(`submit_${clientIp}`, 60, 5);
   if (rateLimit.limited) {
     return NextResponse.json(
-      { success: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
+      { success: false, error: 'Too many attempts. Please try again later.' },
       { status: 429 }
     );
   }

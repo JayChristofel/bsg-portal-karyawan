@@ -53,14 +53,14 @@ function DirectionToggle({
   onChange: (dir: "asc" | "desc") => void
 }) {
   return (
-    <div className="flex gap-1.5" role="group" aria-label="Arah pengurutan">
+    <div className="flex gap-1.5" role="group" aria-label="Sort direction">
       <Button
         variant={dir === "asc" ? "secondary" : "outline"}
         size="icon"
         className="flex-1"
         onClick={() => onChange("asc")}
         aria-pressed={dir === "asc"}
-        aria-label="Urutkan menaik"
+        aria-label="Sort ascending"
         title="Menaik (A–Z)"
       >
         <ArrowUpAZ aria-hidden="true" />
@@ -71,7 +71,7 @@ function DirectionToggle({
         className="flex-1"
         onClick={() => onChange("desc")}
         aria-pressed={dir === "desc"}
-        aria-label="Urutkan menurun"
+        aria-label="Sort descending"
         title="Menurun (Z–A)"
       >
         <ArrowDownAZ aria-hidden="true" />
@@ -82,7 +82,7 @@ function DirectionToggle({
 
 export function TableViewControls<T>({
   view,
-  searchPlaceholder = "Cari data…",
+  searchPlaceholder = "Search data…",
   resultLabel = "data",
   className,
 }: Props<T>) {
@@ -119,7 +119,7 @@ export function TableViewControls<T>({
         <PopoverTrigger asChild>
           <Button variant={isFiltered ? "secondary" : "outline"} size="sm">
             <SlidersHorizontal aria-hidden="true" />
-            Filter &amp; Urutkan
+            Filter &amp; Sort
             {activeCount > 0 ? (
               <span
                 className="tabular bg-accent text-accent-foreground ml-0.5 rounded-full px-1.5 text-[11px] font-semibold"
@@ -129,7 +129,7 @@ export function TableViewControls<T>({
               </span>
             ) : null}
             <span className="sr-only">
-              {isFiltered ? `${activeCount} filter aktif` : "Belum ada filter aktif"}
+              {isFiltered ? `${activeCount} active filters` : "No active filters"}
             </span>
           </Button>
         </PopoverTrigger>
@@ -140,7 +140,7 @@ export function TableViewControls<T>({
         >
           <div className="max-h-[min(32rem,calc(100vh-8rem))] overflow-y-auto">
             <div className="space-y-4 p-4">
-              <PanelSection label="Pencarian">
+              <PanelSection label="Search">
                 <div className="relative">
                   <Search
                     className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
@@ -150,7 +150,7 @@ export function TableViewControls<T>({
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={searchPlaceholder}
-                    aria-label="Pencarian"
+                    aria-label="Search"
                     className="h-9 pl-8"
                   />
                 </div>
@@ -162,7 +162,7 @@ export function TableViewControls<T>({
                     htmlFor="tv-sort"
                     className="text-xs text-muted-foreground"
                   >
-                    Urutkan
+                    Sort by
                   </Label>
                   <div className="flex gap-1.5">
                     <Select
@@ -170,7 +170,7 @@ export function TableViewControls<T>({
                       onValueChange={(v) => setSort(v)}
                     >
                       <SelectTrigger id="tv-sort" className="h-9 flex-1">
-                        <SelectValue placeholder="Pilih kolom" />
+                        <SelectValue placeholder="Select a column" />
                       </SelectTrigger>
                       <SelectContent>
                         {sortFields.map((s) => (
@@ -274,7 +274,7 @@ export function TableViewControls<T>({
                           <div className="flex gap-1.5">
                             <Input
                               type="date"
-                              aria-label={`${field.label} dari`}
+                              aria-label={`${field.label} from`}
                               value={rangeOf(field.key).from}
                               onChange={(e) =>
                                 setFilter(field.key, {
@@ -286,7 +286,7 @@ export function TableViewControls<T>({
                             />
                             <Input
                               type="date"
-                              aria-label={`${field.label} sampai`}
+                              aria-label={`${field.label} to`}
                               value={rangeOf(field.key).to}
                               onChange={(e) =>
                                 setFilter(field.key, {
@@ -337,7 +337,7 @@ export function TableViewControls<T>({
                 <span className="font-medium">{chip.group}:</span>
                 <span className="truncate">{chip.text}</span>
                 <X className="size-3 shrink-0" aria-hidden="true" />
-                <span className="sr-only">Hapus filter ini</span>
+                <span className="sr-only">Remove this filter</span>
               </button>
             </li>
           ))}

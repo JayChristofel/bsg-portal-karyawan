@@ -75,7 +75,7 @@ export default function TemplatesPage() {
 
   const handleSave = async () => {
     if (!name.trim() || !body.trim()) {
-      setNotice({ tone: 'err', text: 'Nama dan isi template wajib diisi.' });
+      setNotice({ tone: 'err', text: 'Template name and body are required.' });
       return;
     }
     setIsSaving(true);
@@ -87,7 +87,7 @@ export default function TemplatesPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Template "${name}" berhasil disimpan.` });
+        setNotice({ tone: 'ok', text: `Template "${name}" was saved.` });
         setOpen(false);
         void fetchTemplates();
       } else {
@@ -105,13 +105,13 @@ export default function TemplatesPage() {
     try {
       const res = await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Template "${templateName}" berhasil dihapus.` });
+        setNotice({ tone: 'ok', text: `Template "${templateName}" was deleted.` });
         void fetchTemplates();
       } else {
         setNotice({ tone: 'err', text: 'Could not delete the template.' });
       }
     } catch {
-      setNotice({ tone: 'err', text: 'Terjadi kesalahan saat menghapus.' });
+      setNotice({ tone: 'err', text: 'An error occurred while deleting.' });
     }
   };
 
@@ -119,7 +119,7 @@ export default function TemplatesPage() {
     <div className="mx-auto max-w-[1200px]">
       <PageHeader
         title="WhatsApp Message Templates"
-        description="Kelola pustaka template pesan yang dapat dipakai ulang untuk broadcast dan kampanye."
+        description="Manage a library of reusable message templates for broadcasts and campaigns."
         actions={
           <Button onClick={openNew}>
             <Plus aria-hidden="true" />
@@ -160,7 +160,7 @@ export default function TemplatesPage() {
           <EmptyState
             icon={FileText}
             title="No templates yet"
-            description="Buat template pesan pertama agar dapat dipakai ulang di seluruh kampanye."
+            description="Create your first message template so it can be reused across campaigns."
             action={{ label: 'New Template', onClick: openNew }}
           />
         </div>
@@ -228,7 +228,7 @@ export default function TemplatesPage() {
                 id="tpl-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Contoh: Pemutakhiran Data Q4 2026"
+                placeholder="e.g. Q4 2026 Data Update"
               />
             </div>
 
@@ -238,7 +238,7 @@ export default function TemplatesPage() {
                 id="tpl-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="Contoh: pemutakhiran, umum, pelatihan"
+                placeholder="e.g. update, general, training"
               />
             </div>
 

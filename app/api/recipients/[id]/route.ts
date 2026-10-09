@@ -23,7 +23,7 @@ export async function PATCH(
     const { id } = await params;
     const recipientId = parseInt(id, 10);
     if (isNaN(recipientId)) {
-      return NextResponse.json({ success: false, error: 'ID tidak valid' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
     }
 
     const body = await req.json();
@@ -46,7 +46,7 @@ export async function PATCH(
       .returning();
 
     if (!updated) {
-      return NextResponse.json({ success: false, error: 'Target tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Target not found.' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, recipient: updated });
@@ -71,7 +71,7 @@ export async function DELETE(
     const { id } = await params;
     const recipientId = parseInt(id, 10);
     if (isNaN(recipientId)) {
-      return NextResponse.json({ success: false, error: 'ID tidak valid' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
     }
 
     const [deleted] = await db
@@ -80,7 +80,7 @@ export async function DELETE(
       .returning();
 
     if (!deleted) {
-      return NextResponse.json({ success: false, error: 'Target tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Target not found.' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });

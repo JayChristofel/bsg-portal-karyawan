@@ -331,7 +331,7 @@ export default function BroadcastPage() {
         }
 
         if (rawJson.length < 2) {
-          setNotice({ tone: 'err', text: 'File Excel/CSV kosong atau tidak memiliki baris data.' });
+          setNotice({ tone: 'err', text: 'The Excel/CSV file is empty or has no data rows.' });
           return;
         }
 
@@ -885,12 +885,12 @@ export default function BroadcastPage() {
       {/* Anti-ban engine */}
       <SectionCard
         title="Anti-Banned & Sending Engine"
-        description="Jeda acak antar pesan dan batch cooldown untuk mencegah pemblokiran akun oleh Meta."
+        description="Random delay between messages plus a batch cooldown to prevent Meta from blocking the account."
         className="mb-4"
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="delay-profile">Profil Jeda Pengiriman</Label>
+            <Label htmlFor="delay-profile">Send Delay Profile</Label>
             <Select
               value={delayProfile}
               onValueChange={(v) => setDelayProfile(v as DelayProfile)}
@@ -943,7 +943,7 @@ export default function BroadcastPage() {
 
         <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground">
           <ShieldCheck className="mt-px size-3 shrink-0 text-accent" aria-hidden="true" />
-          Saat aktif, proses berhenti otomatis setiap 20 pesan selama 20 detik. Jangan tutup tab selama
+          When enabled, the process pauses automatically for 20 seconds every 20 messages. Do not close the tab while
           broadcast berjalan.
         </p>
       </SectionCard>
@@ -1159,7 +1159,7 @@ export default function BroadcastPage() {
       <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
         <DialogContent className="glass-strong max-h-[92vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Template Pesan &amp; Pratinjau</DialogTitle>
+            <DialogTitle className="text-base">Message Template &amp; Preview</DialogTitle>
             <DialogDescription>
               Tag: <code className="tabular">{'{nama}'}</code>,{' '}
               <code className="tabular">{'{link}'}</code>, spintax{' '}
@@ -1169,7 +1169,7 @@ export default function BroadcastPage() {
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="tpl-broadcast">Isi Pesan</Label>
+              <Label htmlFor="tpl-broadcast">Message Body</Label>
               <textarea
                 id="tpl-broadcast"
                 rows={14}
@@ -1255,7 +1255,7 @@ export default function BroadcastPage() {
               </div>
 
               <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>Contoh Nama Target:</span>
+                <span>Sample Target Name:</span>
                 <Input
                   value={mockupSampleName}
                   onChange={(e) => setMockupSampleName(e.target.value)}

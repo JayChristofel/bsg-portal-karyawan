@@ -43,13 +43,13 @@ export async function GET(req: NextRequest) {
         event: r.event || 'submit',
         time_on_page: r.timeOnPage ?? 0,
         page_path: r.pagePath || '/',
-        asn_isp: r.asnIsp || 'Jaringan Seluler / ISP Lokal',
+        asn_isp: r.asnIsp || 'Mobile Network / Local ISP',
         approx_location: r.approxLocation || 'Sulawesi Utara, ID',
         connection_type: r.connectionType || 'Wi-Fi / Mobile',
       }))
     );
   } catch (error: any) {
-    console.error('Fetch data pegawai error:', error);
+    console.error('Fetch employee records error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not read data from the database.' },
       { status: 500 }
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
-        { success: false, error: 'Semua kolom wajib diisi.' },
+        { success: false, error: 'All fields are required.' },
         { status: 400 }
       );
     }

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   // Hard rate limit per source IP.
   if (checkRateLimit(ipKey, LOGIN_WINDOW_SECONDS, LOGIN_MAX_ATTEMPTS).limited) {
     return NextResponse.json(
-      { success: false, error: 'Terlalu banyak percobaan login gagal. Coba lagi nanti.' },
+      { success: false, error: 'Too many failed login attempts. Please try again later.' },
       { status: 429 }
     );
   }
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   try {
     if (!username || !password) {
       return NextResponse.json(
-        { success: false, error: 'Username dan password wajib diisi.' },
+        { success: false, error: 'Username and password are required.' },
         { status: 400 }
       );
     }
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan pada server saat memproses login.' },
+      { success: false, error: 'A server error occurred while processing the login.' },
       { status: 500 }
     );
   }

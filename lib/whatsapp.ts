@@ -58,8 +58,8 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
     return {
       ok: false,
       error:
-        'Hostname gateway menunjuk ke jaringan internal/loopback dan ditolak. ' +
-        'Set GOWA_ALLOWED_HOSTS bila Anda memang memakai gateway privat.',
+        'Gateway hostname points to an internal/loopback network and was rejected. ' +
+        'Set GOWA_ALLOWED_HOSTS if you intentionally use a private gateway.',
     };
   }
 
@@ -69,13 +69,13 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
     .filter(Boolean);
 
   if (allowlist.length > 0 && !allowlist.includes(parsed.hostname.toLowerCase())) {
-    return { ok: false, error: `Hostname gateway tidak diizinkan. Izinkan: ${allowlist.join(', ')}` };
+    return { ok: false, error: `Gateway hostname is not allowed. Allow: ${allowlist.join(', ')}` };
   }
 
   if (parsed.protocol === 'http:' && process.env.GOWA_ALLOW_INSECURE_HTTP !== '1') {
     return {
       ok: false,
-      error: 'URL gateway wajib HTTPS. Set GOWA_ALLOW_INSECURE_HTTP=1 hanya untuk pengembangan lokal.',
+      error: 'Gateway URL must use HTTPS. Set GOWA_ALLOW_INSECURE_HTTP=1 for local development only.',
     };
   }
 

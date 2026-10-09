@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: true,
           count: 0,
-          message: 'Semua data pegawai sudah terdaftar di daftar broadcast.',
+          message: 'All employee records are already in the broadcast list.',
         });
       }
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
       if (items.length === 0 || items.length > 2000) {
         return NextResponse.json(
-          { success: false, error: 'Jumlah data tidak valid (1 - 2000 baris).' },
+          { success: false, error: 'Invalid record count (1 - 2000 rows).' },
           { status: 400 }
         );
       }
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
           success: true,
           count: 0,
           duplicates,
-          message: 'Semua nomor sudah terdaftar, tidak ada data baru.',
+          message: 'All numbers are already registered; no new records.',
         });
       }
 
@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
 
     if (!label || !phone || !message) {
       return NextResponse.json(
-        { success: false, error: 'label, phone, dan message wajib diisi.' },
+        { success: false, error: 'label, phone, and message are required.' },
         { status: 400 }
       );
     }

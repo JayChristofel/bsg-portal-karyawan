@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const recipientId = body.recipientId || body.id;
 
     if (!phone || !message) {
-      return NextResponse.json({ success: false, error: 'phone dan message wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'phone and message are required.' }, { status: 400 });
     }
 
     const result = await sendMessage(phone, message);

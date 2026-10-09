@@ -490,7 +490,7 @@ export default function PegawaiPage() {
       {/* Metrics */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MetricCard label="Total Records" value={data.length} icon={Users} loading={isLoading} hint="All submissions" />
-        <MetricCard label="Branches Recorded" value={cabangCount} icon={MapPin} loading={isLoading} hint="Kantor cabang" />
+        <MetricCard label="Branches Recorded" value={cabangCount} icon={MapPin} loading={isLoading} hint="Branch offices" />
         <MetricCard label="Mobile Access" value={mobileCount} icon={Smartphone} loading={isLoading} hint="From mobile devices" />
         <MetricCard
           label="Filtered"
@@ -797,16 +797,16 @@ export default function PegawaiPage() {
                 id="add-jabatan-sekarang"
                 value={addForm.jabatan_sekarang}
                 onChange={(e) => setAddForm({ ...addForm, jabatan_sekarang: e.target.value })}
-                placeholder="Jabatan saat ini"
+                placeholder="Current position"
               />
             </Field>
-            <Field label="Kantor Cabang" className="sm:col-span-2">
+            <Field label="Branch Office" className="sm:col-span-2">
               <Select
                 value={addForm.cabang}
                 onValueChange={(v) => setAddForm({ ...addForm, cabang: v })}
               >
                 <SelectTrigger aria-label="Select branch office">
-                  <SelectValue placeholder="-- Pilih Kantor Cabang --" />
+                  <SelectValue placeholder="-- Select Branch Office --" />
                 </SelectTrigger>
                 <SelectContent>
                   {CABANG_OPTIONS.map(([grp, items]) => (

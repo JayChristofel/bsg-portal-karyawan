@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   return NextResponse.json(
-    { error: 'Method not allowed. Gunakan POST untuk logout.' },
+    { error: 'Method not allowed. Use POST for logout.' },
     { status: 405, headers: { Allow: 'POST' } }
   );
 }

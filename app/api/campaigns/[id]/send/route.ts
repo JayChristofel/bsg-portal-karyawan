@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId));
     if (!campaign) {
-      return NextResponse.json({ error: 'Kampanye tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
     }
 
     const [template] = campaign.templateId

@@ -264,7 +264,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         </div>
 
         <div className={cn('min-w-0 flex-1', collapsed && 'lg:hidden')}>
-          <p className="truncate text-[13px] font-semibold text-foreground">Portal Pegawai</p>
+          <p className="truncate text-[13px] font-semibold text-foreground">Employee Portal</p>
           <p className="truncate text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
             Admin Console
           </p>
@@ -275,7 +275,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           size="icon-sm"
           className="shrink-0 text-muted-foreground hover:text-foreground lg:hidden"
           onClick={() => setMobileOpen(false)}
-          aria-label="Tutup menu navigasi"
+          aria-label="Close navigation menu"
         >
           <X className="size-4" aria-hidden="true" />
         </Button>
@@ -470,8 +470,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           variant="ghost"
           size="icon-sm"
           onClick={handleLogout}
-          title="Keluar"
-          aria-label="Keluar dari sesi admin"
+          title="Sign Out"
+          aria-label="Sign out of the admin session"
           className={cn(
             'shrink-0 text-muted-foreground transition-colors hover:text-destructive',
             collapsed && 'lg:hidden',
@@ -556,7 +556,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             size="icon-sm"
             className="shrink-0 text-muted-foreground hover:text-foreground lg:hidden"
             onClick={() => setMobileOpen(true)}
-            aria-label="Buka menu navigasi"
+            aria-label="Open navigation menu"
           >
             <Menu className="size-5" aria-hidden="true" />
           </Button>
@@ -615,7 +615,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             variant="ghost"
             size="icon-sm"
             onClick={handleLogout}
-            aria-label="Keluar dari sesi admin"
+            aria-label="Sign out of the admin session"
             className="shrink-0 text-muted-foreground hover:text-destructive sm:hidden"
           >
             <LogOut className="size-4" aria-hidden="true" />

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     if (recipientId) {
       const [recipient] = await db.select().from(recipients).where(eq(recipients.id, Number(recipientId)));
       if (!recipient) {
-        return NextResponse.json({ error: 'Penerima tidak ditemukan.' }, { status: 404 });
+        return NextResponse.json({ error: 'Recipient not found.' }, { status: 404 });
       }
 
       const history = await db

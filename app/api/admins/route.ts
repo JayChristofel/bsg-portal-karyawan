@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const password = body.password || '';
 
     if (!newUsername || !password) {
-      return NextResponse.json({ error: 'Username dan password wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Username and password are required.' }, { status: 400 });
     }
 
     if (password.length < 8) {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     const [existing] = await db.select().from(admins).where(eq(admins.username, newUsername));
     if (existing) {
-      return NextResponse.json({ error: 'Username sudah digunakan.' }, { status: 409 });
+      return NextResponse.json({ error: 'Username is already taken.' }, { status: 409 });
     }
 
     const passwordHash = hashPassword(password);
@@ -69,7 +69,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const id = Number(req.nextUrl.searchParams.get('id'));
     if (!id) {
-      return NextResponse.json({ error: 'ID admin wajib diisi.' }, { status: 400 });
+      return NextResponse.json({ error: 'Admin ID is required.' }, { status: 400 });
     }
 
     const [admin] = await db.select().from(admins).where(eq(admins.id, id));

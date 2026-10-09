@@ -235,7 +235,7 @@ export default function DashboardPage() {
                     <div
                       className="h-5 w-full overflow-hidden rounded bg-background/60"
                       role="img"
-                      aria-label={`${c.name}: ${c.totalRecipients} penerima`}
+                      aria-label={`${c.name}: ${c.totalRecipients} recipients`}
                     >
                       <div
                         className="flex h-full min-w-fit items-center rounded bg-linear-to-r from-primary to-chart-2 px-2 text-[11px] font-semibold text-white"

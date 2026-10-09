@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
       return new NextResponse(csvWithBom, {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="export-penerima-${Date.now()}.csv"`,
+          'Content-Disposition': `attachment; filename="export-recipients-${Date.now()}.csv"`,
           'X-Content-Type-Options': 'nosniff',
         },
       });
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="export-penerima-${Date.now()}.xlsx"`,
+        'Content-Disposition': `attachment; filename="export-recipients-${Date.now()}.xlsx"`,
         'X-Content-Type-Options': 'nosniff',
       },
     });
