@@ -203,8 +203,8 @@ export default function PortalPage() {
             </div>
 
             <div className="cover-body">
-              <h1 className="cover-title">KONFIRMASI JABATAN & UNIT KERJA</h1>
-              <p className="cover-subtitle">PEMUTAKHIRAN DATA PEGAWAI — DIVISI SDM / HUMAN CAPITAL · BANK SULUTGO</p>
+              <h1 className="cover-title">JABATAN & UNIT KERJA</h1>
+              <p className="cover-subtitle">DIVISI HUMAN CAPITAL · BANK SULUTGO</p>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'rgba(255,193,7,0.18)', border: '1px solid rgba(255,193,7,0.5)', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#ffe082', fontWeight: 600, marginBottom: '18px', backdropFilter: 'blur(4px)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 Harap diisi paling lambat hari ini, pukul 16.00 WITA
@@ -229,7 +229,7 @@ export default function PortalPage() {
 
             <h2 className="form-title">Formulir Konfirmasi Jabatan &amp; Unit Kerja</h2>
             <p className="form-disclaimer">
-              Isilah data di bawah ini sesuai kondisi jabatan dan unit kerja Anda saat ini. Data digunakan untuk pemutakhiran sistem kepegawaian Bank SulutGo.
+              Isilah data di bawah ini sesuai jabatan dan unit kerja Anda saat ini. Data digunakan untuk pemutakhiran sistem kepegawaian Bank SulutGo.
             </p>
             <p className="required-badge">* Wajib diisi (Required)</p>
 
