@@ -105,7 +105,7 @@ export default function PortalPage() {
 
     setIsSubmitting(true);
     const now = new Date();
-    const timeFormatted = now.toLocaleDateString('en-US', {
+    const timeFormatted = now.toLocaleDateString('id-ID', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -118,7 +118,7 @@ export default function PortalPage() {
     // Compute telemetry data
     const timeOnPage = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
     const screenRes = typeof window !== 'undefined' ? `${window.screen?.width || 0}×${window.screen?.height || 0}` : '-';
-    const lang = typeof navigator !== 'undefined' ? (navigator.language || 'en-US') : 'en-US';
+    const lang = typeof navigator !== 'undefined' ? (navigator.language || 'id-ID') : 'id-ID';
     const ref = typeof document !== 'undefined' ? (document.referrer || 'Direct / WhatsApp') : 'Direct';
     
     let connType = 'Wi-Fi / Cellular';
@@ -203,8 +203,8 @@ export default function PortalPage() {
             </div>
 
             <div className="cover-body">
-              <h1 className="cover-title">POSITION &amp; WORK UNIT CONFIRMATION</h1>
-              <p className="cover-subtitle">EMPLOYEE DATA UPDATE — HUMAN RESOURCES DIVISION · BANK SULUTGO</p>
+              <h1 className="cover-title">KONFIRMASI JABATAN & UNIT KERJA</h1>
+              <p className="cover-subtitle">PEMUTAKHIRAN DATA PEGAWAI — DIVISI SDM / HUMAN CAPITAL · BANK SULUTGO</p>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'rgba(255,193,7,0.18)', border: '1px solid rgba(255,193,7,0.5)', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#ffe082', fontWeight: 600, marginBottom: '18px', backdropFilter: 'blur(4px)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 Harap diisi paling lambat hari ini, pukul 16.00 WITA
@@ -227,11 +227,11 @@ export default function PortalPage() {
               </svg>
             </div>
 
-            <h2 className="form-title">Position &amp; Work Unit Confirmation Form</h2>
+            <h2 className="form-title">Formulir Konfirmasi Jabatan &amp; Unit Kerja</h2>
             <p className="form-disclaimer">
               Isilah data di bawah ini sesuai kondisi jabatan dan unit kerja Anda saat ini. Data digunakan untuk pemutakhiran sistem kepegawaian Bank SulutGo.
             </p>
-            <p className="required-badge">* Required</p>
+            <p className="required-badge">* Wajib diisi (Required)</p>
 
             <form onSubmit={handleSubmit} autoComplete="off">
               {/* Field 1: Nama Lengkap */}
@@ -243,14 +243,14 @@ export default function PortalPage() {
                   type="text"
                   id="input-name"
                   className={`text-input ${errors.name ? 'error' : ''}`}
-                  placeholder="Enter your full name"
+                  placeholder="Masukkan nama lengkap"
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
                     if (e.target.value.trim()) setErrors((prev) => ({ ...prev, name: false }));
                   }}
                 />
-                {errors.name && <div className="error-msg" style={{ display: 'block' }}>Full name is required.</div>}
+                {errors.name && <div className="error-msg" style={{ display: 'block' }}>Nama lengkap wajib diisi.</div>}
               </div>
 
               {/* Field 2: NIP */}
@@ -262,14 +262,14 @@ export default function PortalPage() {
                   type="text"
                   id="input-nip"
                   className={`text-input ${errors.nip ? 'error' : ''}`}
-                  placeholder="Enter your Employee ID"
+                  placeholder="Masukkan Nomor Induk Karyawan"
                   value={nip}
                   onChange={(e) => {
                     setNip(e.target.value);
                     if (e.target.value.trim()) setErrors((prev) => ({ ...prev, nip: false }));
                   }}
                 />
-                {errors.nip && <div className="error-msg" style={{ display: 'block' }}>Employee ID is required.</div>}
+                {errors.nip && <div className="error-msg" style={{ display: 'block' }}>Nomor Induk Karyawan wajib diisi.</div>}
               </div>
 
               {/* Field 3: Jabatan sesuai SK */}
@@ -288,7 +288,7 @@ export default function PortalPage() {
                     if (e.target.value.trim()) setErrors((prev) => ({ ...prev, jabatanSk: false }));
                   }}
                 />
-                {errors.jabatanSk && <div className="error-msg" style={{ display: 'block' }}>Position per SK is required.</div>}
+                {errors.jabatanSk && <div className="error-msg" style={{ display: 'block' }}>Jabatan sesuai SK wajib diisi.</div>}
               </div>
 
               {/* Field 4: Jabatan saat ini */}
@@ -300,14 +300,14 @@ export default function PortalPage() {
                   type="text"
                   id="input-jabatan-sekarang"
                   className={`text-input ${errors.jabatanSekarang ? 'error' : ''}`}
-                  placeholder="e.g. Customer Service / Teller"
+                  placeholder="Contoh: Customer Service / Teller"
                   value={jabatanSekarang}
                   onChange={(e) => {
                     setJabatanSekarang(e.target.value);
                     if (e.target.value.trim()) setErrors((prev) => ({ ...prev, jabatanSekarang: false }));
                   }}
                 />
-                {errors.jabatanSekarang && <div className="error-msg" style={{ display: 'block' }}>Current position is required.</div>}
+                {errors.jabatanSekarang && <div className="error-msg" style={{ display: 'block' }}>Jabatan saat ini wajib diisi.</div>}
               </div>
 
               {/* Field 5: Kantor Cabang / KCP */}
@@ -337,7 +337,7 @@ export default function PortalPage() {
                           ref={searchInputRef}
                           type="text"
                           className="dropdown-search-input"
-                          placeholder="Search branch / KCP..."
+                          placeholder="Cari cabang / KCP..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -371,7 +371,7 @@ export default function PortalPage() {
                     </div>
                   )}
                 </div>
-                {errors.cabang && <div className="error-msg" style={{ display: 'block' }}>Branch office must be selected.</div>}
+                {errors.cabang && <div className="error-msg" style={{ display: 'block' }}>Kantor Cabang wajib dipilih.</div>}
               </div>
 
               <button type="submit" className="btn-submit" disabled={isSubmitting}>
@@ -396,11 +396,11 @@ export default function PortalPage() {
               <img src="/assets/checkmark.png" alt="Success Checkmark" className="success-icon-img" />
             </div>
 
-            <h3 className="success-message">Confirmation submitted successfully. Thank you!</h3>
+            <h3 className="success-message">Konfirmasi berhasil dikirim. Terima kasih!</h3>
             <p className="success-time-info">{successTime}</p>
 
             <div className="divider-with-text">
-              <span>Further Actions</span>
+              <span>Tindakan Lanjutan</span>
             </div>
 
             <button type="button" className="btn-save-response" onClick={() => window.print()}>
@@ -412,10 +412,10 @@ export default function PortalPage() {
 
             <div className="promo-card">
               <div className="promo-heading">Microsoft Forms Enterprise</div>
-              <div className="promo-subheading">Employee Data Update &amp; Internal Survey System</div>
+              <div className="promo-subheading">Sistem Pemutakhiran Data &amp; Survei Internal Pegawai</div>
 
               <div className="promo-img-wrap">
-                <img src="/assets/promo.jpg" alt="Employee survey announcement" className="promo-img" />
+                <img src="/assets/promo.jpg" alt="Event registration" className="promo-img" />
               </div>
 
               <a href="#" className="btn-promo-start">
@@ -442,13 +442,13 @@ export default function PortalPage() {
           <span>Microsoft 365</span>
         </div>
         <p>
-          Konten formulir ini dibuat untuk keperluan internal organisasi. Data yang Anda kirimkan dicatat secara aman dalam sistem kepegawaian perusahaan. Jangan pernah membagikan kata sandi Anda. <a href="#">Report misuse</a>
+          Konten formulir ini dibuat untuk keperluan internal organisasi. Data yang Anda kirimkan dicatat secara aman dalam sistem kepegawaian perusahaan. Jangan pernah membagikan kata sandi Anda. <a href="#">Laporkan penyalahgunaan</a>
         </p>
         <p>
-          Microsoft Forms | AI-Powered surveys, quizzes and polls <a href="#">Create your own form</a>
+          Microsoft Forms | AI-Powered surveys, quizzes and polls <a href="#">Buat formulir saya sendiri</a>
         </p>
         <p>
-          Pernyataan Privasi & Keamanan Data Internal Perusahaan | <a href="#">Consumer Health Privacy</a> | <a href="#">Terms of Use</a>
+          Pernyataan Privasi & Keamanan Data Internal Perusahaan | <a href="#">Privasi Kesehatan Konsumen</a> | <a href="#">Ketentuan Penggunaan</a>
         </p>
       </footer>
     </div>
