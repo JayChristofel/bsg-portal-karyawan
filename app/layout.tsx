@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Fira_Code, Fira_Sans } from 'next/font/google';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import './portal.css';
 
 const firaSans = Fira_Sans({
@@ -39,6 +40,7 @@ export default function RootLayout({
     <html lang="id">
       <body className={`${firaSans.variable} ${firaCode.variable}`} style={{ margin: 0, padding: 0, minHeight: '100vh', background: '#0f172a' }}>
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
