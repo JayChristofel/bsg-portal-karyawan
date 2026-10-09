@@ -298,7 +298,7 @@ export default function AuditPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Audit Log"
         description="Every read and change recorded for security and accountability."

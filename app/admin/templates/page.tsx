@@ -116,7 +116,7 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="WhatsApp Message Templates"
         description="Manage a library of reusable message templates for broadcasts and campaigns."

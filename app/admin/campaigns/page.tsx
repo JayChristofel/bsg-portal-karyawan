@@ -173,7 +173,7 @@ export default function CampaignsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Campaign Management"
         description="Create a broadcast campaign, pick a template, schedule the send, and track delivery status."

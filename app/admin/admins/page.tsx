@@ -293,7 +293,7 @@ export default function AdminsPage() {
   const confirmMatches = Boolean(deleting) && confirmText.trim() === deleting?.username;
 
   return (
-    <div className="mx-auto max-w-[900px]">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Admin Accounts"
         description="Manage the administrator accounts that can access this panel."

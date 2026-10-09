@@ -411,7 +411,7 @@ export default function WhatsAppGatewayPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="WhatsApp Gateway Management"
         description="Automatic message delivery and WhatsApp webhook event reception for multi-device GOWA."
