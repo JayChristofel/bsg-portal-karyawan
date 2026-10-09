@@ -1,35 +1,34 @@
 /* ========================================================= */
-/* 1. RESET & THEME VARIABLES (MOBILE FIRST)                 */
+/* Public portal styles — Tailwind CSS v4                    */
 /* ========================================================= */
-:root {
-  --primary-btn: #0078d4;
-  --primary-btn-hover: #106ebe;
-  --primary-dark: #004578;
-  --text-main: #242424;
-  --text-sub: #616161;
-  --text-disclaimer: #424242;
-  --border-input: #8a8886;
-  --border-focus: #0078d4;
-  --error-color: #a80000;
-  --bg-error: #fff8f8;
-  --card-bg: #ffffff;
-  --promo-bg: #f0f6ff;
-  --font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
 /*
- * Reset ini HARUS berada di dalam cascade layer.
+ * The public portal runs on Tailwind utilities. Design tokens live in
+ * `@theme` below so they surface as `text-portal-*`, `bg-portal-*` and
+ * `font-portal` utilities instead of a separate custom-property namespace.
  *
- * Tanpa layer, aturan `*` ini bersifat "unlayered" dan selalu menang atas
- * utility Tailwind (yang berada di @layer utilities), meskipun specificity
- * utility lebih tinggi. Akibatnya setiap `p-*`, `m-*`, `px-*` di admin ikut
- * ditimpa `padding: 0; margin: 0`, sehingga seluruh layout admin kehilangan
- * padding dan tampak bertumpuk.
+ * Only three things remain in CSS because CSS still does them better than
+ * utilities: `@keyframes`, the fixed overlay pseudo-element on the page
+ * wrapper, and the gradient hairline inside `.divider-with-text`.
  *
- * Dengan dibungkus `@layer portal-reset`, layer ini dibuat lebih dulu
- * (portal.css dimuat sebelum admin.css) sehingga utility Tailwind di layer
- * berikutnya tetap menang, sementara halaman publik tetap mendapat reset.
+ * Preflight is deliberately NOT imported.
+ *
+ * Tailwind's preflight sets `line-height: 1.5` on `html`, whereas this design
+ * was built on the browser default `normal`. That single difference changes
+ * every line box on the page — measured 6px taller buttons and shifted footer
+ * wrapping — so enabling it is a design change, not a refactor.
+ *
+ * Only the theme and utilities are imported, and the original handcrafted
+ * reset is kept verbatim so computed styles stay identical.
  */
+
+/* Cascade order must be declared before any layer is used. Without this the
+   `*` reset below would land after `utilities` and override every padding
+   utility on the page. */
+@layer portal-reset, theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 @layer portal-reset {
   *,
   *::before,
@@ -41,21 +40,60 @@
   }
 }
 
-.portal-page-wrapper {
-  font-family: var(--font-family);
-  background-color: #1e293b;
-  background-image: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 12px 10px 36px;
-  color: var(--text-main);
-  position: relative;
-  overflow-x: hidden;
+@theme {
+  /* Brand */
+  --color-portal-primary: #0078d4;
+  --color-portal-primary-hover: #106ebe;
+  --color-portal-dark: #004578;
+
+  /* Text */
+  --color-portal-text: #242424;
+  --color-portal-text-sub: #616161;
+  --color-portal-text-disclaimer: #424242;
+
+  /* Form */
+  --color-portal-border-input: #8a8886;
+  --color-portal-border-focus: #0078d4;
+  --color-portal-error: #a80000;
+  --color-portal-bg-error: #fff8f8;
+
+  /* Surfaces */
+  --color-portal-card: #ffffff;
+  --color-portal-promo: #f0f6ff;
+
+  /* Type */
+  --font-portal:
+    "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+
+  /* Motion */
+  --animate-fade-in: fade-in 0.35s ease-out;
+  --animate-fade-in-menu: fade-in-menu 0.18s ease-out;
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-menu {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dim + blur veil behind the form card. Needs a pseudo-element, so it stays. */
 .portal-page-wrapper::before {
   content: "";
   position: fixed;
@@ -67,734 +105,9 @@
   pointer-events: none;
 }
 
-.main-wrapper {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: 0 auto;
-  transition: max-width 0.3s ease;
-}
-
-.form-card {
-  background: var(--card-bg);
-  width: 100%;
-  border-radius: 12px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
-  overflow: visible;
-  margin-bottom: 24px;
-  animation: fadeIn 0.35s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ========================================================= */
-/* 2. COVER VIEW (MOBILE FIRST)                              */
-/* ========================================================= */
-.cover-banner-container {
-  position: relative;
-  width: 100%;
-  height: 200px;
-  background: linear-gradient(135deg, #004e8c 0%, #0078d4 50%, #50e6ff 100%);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px 12px 0 0;
-}
-
-.cover-banner-bg {
-  position: absolute;
-  inset: 0;
-  background: url('/assets/BSGO.jpg') center/cover no-repeat;
-  filter: brightness(0.65) saturate(1.2);
-}
-
-.cover-banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, rgba(0, 78, 140, 0.4) 0%, rgba(15, 23, 42, 0.75) 100%);
-}
-
-.cover-badge {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #ffffff;
-  text-align: center;
-  padding: 0 20px;
-}
-
-.cover-badge-icon {
-  width: 52px;
-  height: 52px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(8px);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-.cover-badge-tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  background: rgba(0, 120, 212, 0.85);
-  padding: 4px 12px;
-  border-radius: 20px;
-}
-
-.card-top-action {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #ffffff;
-  z-index: 3;
-  transition: background 0.2s;
-}
-
-.cover-body {
-  padding: 28px 20px 32px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.cover-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-main);
-  line-height: 1.3;
-  letter-spacing: -0.2px;
-  margin-bottom: 12px;
-}
-
-.cover-subtitle {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-sub);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-bottom: 18px;
-}
-
-.btn-start-now {
-  background: var(--primary-btn);
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 600;
-  border: none;
-  border-radius: 6px;
-  padding: 12px 48px;
-  cursor: pointer;
-  box-shadow: 0 3px 10px rgba(0, 120, 212, 0.35);
-  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-}
-
-.btn-start-now:hover {
-  background: var(--primary-btn-hover);
-  box-shadow: 0 4px 14px rgba(0, 120, 212, 0.45);
-}
-
-.btn-start-now:active {
-  transform: scale(0.98);
-}
-
-/* ========================================================= */
-/* 3. FORM VIEW (MOBILE FIRST)                               */
-/* ========================================================= */
-.form-header-action {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-sub);
-}
-
-.form-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-main);
-  margin-bottom: 12px;
-  padding-right: 36px;
-  line-height: 1.3;
-}
-
-.form-disclaimer {
-  font-size: 13px;
-  color: var(--text-disclaimer);
-  line-height: 1.45;
-  margin-bottom: 14px;
-}
-
-.required-badge {
-  font-size: 13px;
-  color: var(--error-color);
-  margin-bottom: 22px;
-  font-weight: 500;
-}
-
-.question-block {
-  margin-bottom: 24px;
-}
-
-.question-label {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-main);
-  margin-bottom: 10px;
-  display: block;
-  line-height: 1.35;
-}
-
-.question-label .star {
-  color: var(--error-color);
-  margin-left: 2px;
-}
-
-.text-input {
-  width: 100%;
-  height: 44px;
-  border: 1px solid var(--border-input);
-  border-radius: 4px;
-  padding: 0 12px;
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--text-main);
-  background: #ffffff;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.text-input::placeholder {
-  color: #707070;
-  font-size: 14px;
-}
-
-.text-input:focus {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 1px var(--border-focus);
-}
-
-.text-input.error {
-  border-color: var(--error-color);
-  background-color: var(--bg-error);
-}
-
-/* Custom Dropdown Styling */
-.dropdown-container {
-  position: relative;
-  width: 100%;
-}
-
-.dropdown-trigger {
-  width: 100%;
-  height: 44px;
-  border: 1px solid var(--border-input);
-  border-radius: 4px;
-  padding: 0 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  background: #ffffff;
-  user-select: none;
-  font-size: 14px;
-  color: var(--text-main);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.dropdown-trigger.placeholder {
-  color: #707070;
-}
-
-.dropdown-trigger:focus,
-.dropdown-trigger.active {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 1px var(--border-focus);
-}
-
-.dropdown-trigger.error {
-  border-color: var(--error-color);
-  background-color: var(--bg-error);
-}
-
-.dropdown-arrow {
-  width: 16px;
-  height: 16px;
-  color: var(--text-sub);
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-
-.dropdown-trigger.active .dropdown-arrow {
-  transform: rotate(180deg);
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  background: #ffffff;
-  border: 1px solid #d1d1d1;
-  border-radius: 6px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
-  max-height: 290px;
-  overflow-y: auto;
-  z-index: 200;
-  list-style: none;
-  padding: 6px 0;
-  animation: fadeInMenu 0.18s ease-out;
-}
-
-@keyframes fadeInMenu {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.dropdown-search-wrap {
-  padding: 4px 10px 8px;
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  border-bottom: 1px solid #edebe9;
-  z-index: 2;
-}
-
-.dropdown-search-input {
-  width: 100%;
-  height: 34px;
-  border: 1px solid #c8c6c4;
-  border-radius: 4px;
-  padding: 0 10px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-
-.dropdown-search-input:focus {
-  border-color: var(--border-focus);
-}
-
-.dropdown-option {
-  padding: 10px 14px;
-  font-size: 14px;
-  color: var(--text-main);
-  cursor: pointer;
-  transition: background 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.dropdown-option:hover {
-  background: #f3f2f1;
-}
-
-.dropdown-option.selected {
-  background: #edebe9;
-  font-weight: 600;
-}
-
-.dropdown-group-header {
-  padding: 6px 14px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: #64748b;
-  background: #f8fafc;
-  letter-spacing: 0.5px;
-  pointer-events: none;
-  user-select: none;
-}
-
-.btn-submit {
-  width: 100%;
-  background: var(--primary-btn);
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 600;
-  border: none;
-  border-radius: 6px;
-  padding: 13px;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 120, 212, 0.3);
-  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
-}
-
-.btn-submit:hover {
-  background: var(--primary-btn-hover);
-  box-shadow: 0 4px 12px rgba(0, 120, 212, 0.4);
-}
-
-.btn-submit:active {
-  transform: scale(0.99);
-}
-
-.btn-submit:disabled {
-  background: #c8c6c4;
-  cursor: not-allowed;
-}
-
-.error-msg {
-  color: var(--error-color);
-  font-size: 12px;
-  margin-top: 6px;
-}
-
-/* ========================================================= */
-/* 4. SUCCESS VIEW (MOBILE FIRST)                            */
-/* ========================================================= */
-.success-top-action {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-sub);
-  cursor: pointer;
-}
-
-.success-icon-wrap {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
-  margin-bottom: 16px;
-}
-
-.success-icon-img {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-}
-
-.success-message {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-main);
-  text-align: center;
-  line-height: 1.4;
-  margin-bottom: 8px;
-}
-
-.success-time-info {
-  font-size: 13px;
-  color: var(--text-sub);
-  text-align: center;
-  margin-bottom: 22px;
-}
-
-.divider-with-text {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  color: var(--text-sub);
-  font-size: 12px;
-  margin: 18px 0 16px;
-}
-
-.divider-with-text::before,
-.divider-with-text::after {
-  content: '';
+/* Hairline that fills the gap either side of a divider label. */
+.divider-with-text::before {
+  content: "";
   flex: 1;
   border-bottom: 1px solid #edebe9;
-}
-
-.divider-with-text span {
-  padding: 0 10px;
-}
-
-.btn-save-response {
-  width: 100%;
-  background: #ffffff;
-  border: 1px solid #616161;
-  border-radius: 6px;
-  color: var(--text-main);
-  font-size: 14px;
-  font-weight: 600;
-  padding: 10px;
-  cursor: pointer;
-  margin-bottom: 16px;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.btn-save-response:hover {
-  background: #f3f2f1;
-  border-color: #323130;
-}
-
-.link-submit-another {
-  display: block;
-  text-align: center;
-  color: var(--primary-btn);
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: underline;
-  cursor: pointer;
-  margin-bottom: 26px;
-}
-
-.link-submit-another:hover {
-  color: var(--primary-dark);
-}
-
-/* Promo Card */
-.promo-card {
-  background: var(--promo-bg);
-  border-radius: 12px;
-  padding: 20px 14px 18px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.promo-heading {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-main);
-  margin-bottom: 4px;
-}
-
-.promo-subheading {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-main);
-  margin-bottom: 16px;
-}
-
-.promo-img-wrap {
-  width: 175px;
-  margin-bottom: 18px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.promo-img {
-  width: 100%;
-  display: block;
-}
-
-.btn-promo-start {
-  background: #ffffff;
-  border: 1px solid #ffffff;
-  border-radius: 20px;
-  color: #005a9e;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 9px 26px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  text-decoration: none;
-  transition: background 0.15s;
-}
-
-.btn-promo-start:hover {
-  background: #f3f2f1;
-}
-
-/* ========================================================= */
-/* 5. FOOTER (MOBILE FIRST)                                  */
-/* ========================================================= */
-.ms-footer {
-  width: 100%;
-  color: #ffffff;
-  font-size: 12px;
-  line-height: 1.45;
-  padding: 0 8px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-  text-align: left;
-}
-
-.ms-branding {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 12px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-}
-
-.ms-logo-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 8px);
-  gap: 2px;
-}
-
-.ms-logo-square {
-  width: 8px;
-  height: 8px;
-}
-
-.ms-footer p {
-  margin-bottom: 10px;
-}
-
-.ms-footer a {
-  color: #8be4ff;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.ms-footer a:hover {
-  color: #ffffff;
-}
-
-/* ========================================================= */
-/* 6. RESPONSIVE BREAKPOINTS (TABLET & DESKTOP)              */
-/* ========================================================= */
-@media (min-width: 640px) {
-  .portal-page-wrapper {
-    padding: 24px 16px 40px;
-  }
-
-  .main-wrapper {
-    max-width: 560px;
-  }
-
-  .form-card {
-    border-radius: 14px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-  }
-
-  .cover-banner-container {
-    height: 240px;
-  }
-
-  .cover-body {
-    padding: 36px 32px 40px;
-  }
-
-  .cover-title {
-    font-size: 26px;
-  }
-
-  .form-view-container {
-    padding: 30px 28px 34px !important;
-  }
-
-  .form-title {
-    font-size: 22px;
-  }
-
-  .success-view-container {
-    padding: 34px 28px 30px !important;
-  }
-
-  .success-message {
-    font-size: 18px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .portal-page-wrapper {
-    padding: 40px 20px 60px;
-  }
-
-  .main-wrapper {
-    max-width: 640px;
-  }
-
-  .form-card {
-    border-radius: 16px;
-    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.45);
-  }
-
-  .cover-banner-container {
-    height: 280px;
-  }
-
-  .cover-body {
-    padding: 42px 44px 48px;
-  }
-
-  .cover-title {
-    font-size: 28px;
-    margin-bottom: 14px;
-  }
-
-  .cover-subtitle {
-    font-size: 14px;
-    margin-bottom: 22px;
-  }
-
-  .btn-start-now {
-    font-size: 16px;
-    padding: 13px 56px;
-  }
-
-  .form-view-container {
-    padding: 36px 38px 40px !important;
-  }
-
-  .form-title {
-    font-size: 24px;
-  }
-
-  .question-label {
-    font-size: 16px;
-  }
-
-  .text-input,
-  .dropdown-trigger {
-    height: 46px;
-    font-size: 15px;
-  }
-
-  .btn-submit {
-    padding: 14px;
-    font-size: 16px;
-  }
-
-  .success-view-container {
-    padding: 40px 36px 36px !important;
-  }
-
-  .success-message {
-    font-size: 20px;
-  }
-
-  .promo-card {
-    padding: 24px 20px 22px;
-  }
 }
