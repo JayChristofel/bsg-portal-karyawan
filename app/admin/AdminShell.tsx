@@ -139,17 +139,17 @@ const GATEWAY_META: Record<GatewayState, { label: string; dot: string; badge: st
   connected: {
     label: 'Online',
     dot: 'bg-emerald-400',
-    badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+    badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-300',
   },
   checking: {
     label: 'Checking',
     dot: 'bg-amber-400 animate-pulse',
-    badge: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
+    badge: 'border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-300',
   },
   disconnected: {
     label: 'Offline',
     dot: 'bg-red-400',
-    badge: 'border-red-400/30 bg-red-400/10 text-red-300',
+    badge: 'border-red-400/30 bg-red-400/10 text-red-700 dark:text-red-300',
   },
 };
 
@@ -165,25 +165,40 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
 
+  /**
+   * The theme class is applied to <html>, not to the shell: Radix portals
+   * (dialog, popover, select, tooltip) mount under <body>, so a class scoped
+   * to the shell left those overlays on the light palette.
+   */
+  const applyTheme = React.useCallback((next: 'dark' | 'light') => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', next === 'dark');
+    root.style.colorScheme = next;
+  }, []);
+
   /* Restore sidebar collapse and theme preferences */
   React.useEffect(() => {
     const stored = window.localStorage.getItem('admin:sidebar-collapsed');
     if (stored === '1') setCollapsed(true);
     else if (!stored && window.innerWidth < 1280) setCollapsed(true);
 
-    const storedTheme = window.localStorage.getItem('admin:theme') as 'dark' | 'light' | null;
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      setTheme(storedTheme);
-    }
-  }, []);
+    // Always re-apply, even without a stored preference: the pre-paint script in
+    // the layout only exists in server-rendered HTML, so a client-side
+    // navigation (e.g. /login → /admin) would otherwise never run it.
+    const storedTheme = window.localStorage.getItem('admin:theme');
+    const next: 'dark' | 'light' = storedTheme === 'light' ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+  }, [applyTheme]);
 
   const toggleTheme = React.useCallback(() => {
     setTheme((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
       window.localStorage.setItem('admin:theme', next);
+      applyTheme(next);
       return next;
     });
-  }, []);
+  }, [applyTheme]);
 
   const toggleCollapsed = React.useCallback(() => {
     setCollapsed((prev) => {
@@ -485,7 +500,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   /* ── Render ── */
   return (
-    <div className={cn('admin-root min-h-screen', theme)}>
+    <div className="admin-root min-h-screen">
       {/* Desktop sidebar */}
       <aside className={cn('admin-sidebar relative', collapsed && 'is-collapsed')}>
         {sidebarBody}

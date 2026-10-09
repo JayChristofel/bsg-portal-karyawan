@@ -78,6 +78,8 @@
    ────────────────────────────────────────────────────────────── */
 :root,
 .admin-root {
+  color-scheme: light;
+
   --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -90,16 +92,19 @@
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
 
-  --accent: #16a34a;
+  /* Text-weight steps of the brand hues: the bright variants fail WCAG AA on
+     white, so the light palette uses the darker step. Dark mode keeps the
+     bright ones, which clear AA on the dark surfaces. */
+  --accent: #15803d;
   --accent-foreground: #ffffff;
-  --destructive: #ef4444;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #16a34a;
+  --ring: #15803d;
 
   --chart-1: #16a34a;
   --chart-2: #2563eb;
@@ -111,11 +116,46 @@
   --sidebar-border: #e2e8f0;
   --header-bg: rgba(255, 255, 255, 0.88);
   --header-border: #e2e8f0;
+
+  /*
+   * Tailwind aliases. These must be redeclared inside the palette blocks below,
+   * not only in @theme: an alias like `--color-background: var(--background)`
+   * is substituted on the element where it is DECLARED. @theme declares it on
+   * :root, so the light value computed there and simply inherited down — the
+   * dark override on .admin-root.dark never reached it. Declaring the alias
+   * next to its source keeps both on the same element.
+   */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 }
 
 .dark,
 .admin-root.dark,
 :is(.dark .admin-root) {
+  color-scheme: dark;
+
   --background: #0b1120;
   --foreground: #f1f5f9;
   --card: #131c2e;
@@ -149,6 +189,39 @@
   --sidebar-border: rgba(255, 255, 255, 0.07);
   --header-bg: rgba(11, 17, 32, 0.90);
   --header-border: rgba(255, 255, 255, 0.07);
+
+  /*
+   * Tailwind aliases. These must be redeclared inside the palette blocks below,
+   * not only in @theme: an alias like `--color-background: var(--background)`
+   * is substituted on the element where it is DECLARED. @theme declares it on
+   * :root, so the light value computed there and simply inherited down — the
+   * dark override on .admin-root.dark never reached it. Declaring the alias
+   * next to its source keeps both on the same element.
+   */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 }
 
 /* ──────────────────────────────────────────────────────────────

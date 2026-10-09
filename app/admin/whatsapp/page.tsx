@@ -510,7 +510,7 @@ export default function WhatsAppGatewayPage() {
               className={cn(
                 'gap-1.5 border px-2 py-0 text-[10px] font-semibold',
                 isLoadingStatus
-                  ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                  ? 'border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-300'
                   : isConnected
                     ? 'border-accent/30 bg-accent/10 text-accent'
                     : 'border-destructive/30 bg-destructive/10 text-destructive',

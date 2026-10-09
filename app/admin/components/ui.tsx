@@ -125,7 +125,7 @@ const STATUS_META: Record<
   sent: {
     label: 'Sent',
     icon: Send,
-    className: 'border-blue-400/30 bg-blue-400/10 text-blue-300',
+    className: 'border-blue-400/30 bg-blue-400/10 text-blue-700 dark:text-blue-300',
   },
   delivered: {
     label: 'Delivered',
@@ -152,12 +152,12 @@ const STATUS_META: Record<
   scheduled: {
     label: 'Scheduled',
     icon: Clock,
-    className: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
+    className: 'border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-300',
   },
   sending: {
     label: 'Sending',
     icon: Send,
-    className: 'border-blue-400/30 bg-blue-400/10 text-blue-300',
+    className: 'border-blue-400/30 bg-blue-400/10 text-blue-700 dark:text-blue-300',
   },
   completed: {
     label: 'Completed',
