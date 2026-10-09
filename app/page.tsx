@@ -178,7 +178,7 @@ export default function PortalPage() {
         {currentView === 'cover' && (
           <div id="view-cover">
             <div className="relative flex h-[200px] w-full items-center justify-center overflow-hidden rounded-t-[12px] bg-[linear-gradient(135deg,#004e8c_0%,#0078d4_50%,#50e6ff_100%)] sm:h-[240px] lg:h-[280px]">
-              <div className="absolute inset-0 bg-[url('/assets/background.jpg')] bg-cover bg-center brightness-[0.65] saturate-[1.2]" />
+              <div className="absolute inset-0 bg-[url('/assets/BSGO.jpg')] bg-cover bg-center brightness-[0.65] saturate-[1.2]" />
               <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,78,140,0.4)_0%,rgba(15,23,42,0.75)_100%)]" />
               <div className="absolute top-3 right-3 z-3 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-[4px] transition-colors duration-200" title="More options">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
