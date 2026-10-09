@@ -59,6 +59,13 @@ export async function POST(req: NextRequest) {
       const delay = recordAuthFailure(accountKey);
       if (delay > 0) await sleep(delay);
 
+      void logAudit(
+        username,
+        'login_failed',
+        'Percobaan login gagal: username tidak ditemukan',
+        clientIp,
+      );
+
       return NextResponse.json(
         { success: false, error: 'Username atau password salah.' },
         { status: 401 }
@@ -68,6 +75,13 @@ export async function POST(req: NextRequest) {
     if (!verifyPassword(password, admin.passwordHash)) {
       const delay = recordAuthFailure(accountKey);
       if (delay > 0) await sleep(delay);
+
+      void logAudit(
+        admin.username,
+        'login_failed',
+        'Percobaan login gagal: password salah',
+        clientIp,
+      );
 
       return NextResponse.json(
         { success: false, error: 'Username atau password salah.' },

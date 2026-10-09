@@ -3,7 +3,7 @@ import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { recipients, campaigns } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { logAudit } from '@/lib/audit';
+import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -37,7 +37,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'assign_recipients', `Kampanye #${campaignId}: ${recipientIds.length} penerima ditambahkan`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'assign_recipients',
+      `Kampanye #${campaignId}: ${recipientIds.length} penerima ditambahkan`,
+    );
 
     return NextResponse.json({ success: true, count: recipientIds.length });
   } catch (error: any) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 import { db } from '@/db';
 import { recipients, recipientStatusHistory, campaigns } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
@@ -26,6 +27,15 @@ export async function GET(req: NextRequest) {
         .where(eq(recipientStatusHistory.recipientId, Number(recipientId)))
         .orderBy(desc(recipientStatusHistory.createdAt));
 
+      if (username) {
+        void logAuditForRequest(
+          req,
+          username,
+          'view_delivery_history',
+          `Timeline penerima "${recipient.label}" (ID: ${recipientId})`,
+        );
+      }
+
       return NextResponse.json({ recipient, history });
     }
 
@@ -49,6 +59,15 @@ export async function GET(req: NextRequest) {
       .leftJoin(campaigns, eq(recipients.campaignId, campaigns.id))
       .where(campaignFilter)
       .orderBy(desc(recipients.createdAt));
+
+    if (username) {
+      void logAuditForRequest(
+        req,
+        username,
+        'view_tracking',
+        `Daftar status pengiriman (${rows.length} baris)`,
+      );
+    }
 
     return NextResponse.json({ recipients: rows });
   } catch (error: any) {

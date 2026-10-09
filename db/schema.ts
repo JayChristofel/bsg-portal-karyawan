@@ -1,4 +1,4 @@
-import { customType, integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { customType, index, integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 import { encrypt, decrypt } from '@/lib/crypto';
 
 // Custom encrypted type: Automatically encrypts on INSERT/UPDATE, decrypts on SELECT
@@ -102,14 +102,24 @@ export const campaigns = pgTable('campaigns', {
 });
 
 // Audit log — tracks admin actions for security and accountability
-export const auditLog = pgTable('audit_log', {
-  id: serial('id').primaryKey(),
-  adminUsername: text('admin_username').notNull(),
-  action: text('action').notNull(), // 'login' | 'send_message' | 'save_template' | 'create_campaign' | etc.
-  detail: text('detail'),
-  ipAddress: text('ip_address'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: serial('id').primaryKey(),
+    adminUsername: text('admin_username').notNull(),
+    action: text('action').notNull(), // 'login' | 'send_message' | 'save_template' | 'create_campaign' | etc.
+    detail: text('detail'),
+    ipAddress: text('ip_address'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    // The audit page sorts newest-first and filters by admin. With read
+    // polling logged every 8s this table grows by thousands of rows a day, so
+    // both queries need index support or the page degrades over time.
+    index('audit_log_created_at_idx').on(t.createdAt),
+    index('audit_log_admin_username_idx').on(t.adminUsername),
+  ],
+);
 
 // Recipient status history — timeline of status transitions for real-time tracking
 export const recipientStatusHistory = pgTable('recipient_status_history', {

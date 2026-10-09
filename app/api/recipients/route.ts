@@ -4,6 +4,8 @@ import { recipients, pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { sendMessage } from '@/lib/whatsapp';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 
 async function checkAuth(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -43,6 +45,16 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    const listActor = await getAdminUsername(req);
+    if (listActor) {
+      void logAuditForRequest(
+        req,
+        listActor,
+        'view_recipients',
+        `Melihat daftar penerima (${recList.length} baris)`,
+      );
+    };
+
     return NextResponse.json(rowsWithSubmission);
   } catch (error: any) {
     console.error('Fetch recipients error:', error);
@@ -79,6 +91,7 @@ export async function POST(req: NextRequest) {
           waStatus: 'pending',
         }));
 
+      const actor = await getAdminUsername(req);
       if (toInsert.length === 0) {
         return NextResponse.json({
           success: true,
@@ -88,6 +101,16 @@ export async function POST(req: NextRequest) {
       }
 
       const created = await db.insert(recipients).values(toInsert).returning();
+
+      if (actor) {
+        void logAuditForRequest(
+          req,
+          actor,
+          'import_recipients',
+          `Tarik dari data pegawai: ${created.length} penerima ditambahkan ke daftar broadcast`,
+        );
+      }
+
       return NextResponse.json({
         success: true,
         count: created.length,
@@ -146,6 +169,20 @@ export async function POST(req: NextRequest) {
       }
 
       const created = await db.insert(recipients).values(unique).returning();
+
+      const actor = await getAdminUsername(req);
+      if (actor) {
+        const dupNote = duplicates.length
+          ? `, ${duplicates.length} nomor duplikat dilewati`
+          : '';
+        void logAuditForRequest(
+          req,
+          actor,
+          'import_recipients',
+          `Import batch: ${created.length} penerima ditambahkan${dupNote}`,
+        );
+      }
+
       return NextResponse.json({
         success: true,
         count: created.length,

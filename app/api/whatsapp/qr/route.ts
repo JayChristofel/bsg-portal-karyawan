@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { requestQr } from '@/lib/whatsapp';
 import { gatewayTlsMode } from '@/lib/gowa-tls';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -11,6 +13,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await requestQr();
+
+    const actor = await getAdminUsername(req);
+    if (actor) {
+      void logAuditForRequest(req, actor, 'request_qr', 'Meminta kode QR pairing baru');
+    }
 
     if (result.ok) {
       return NextResponse.json({

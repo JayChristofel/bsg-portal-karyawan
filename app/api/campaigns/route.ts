@@ -3,7 +3,7 @@ import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { campaigns, recipients, messageTemplates } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
-import { logAudit } from '@/lib/audit';
+import { logAudit, logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
 
 export async function GET(req: NextRequest) {
@@ -32,6 +32,16 @@ export async function GET(req: NextRequest) {
       .from(campaigns)
       .leftJoin(messageTemplates, eq(campaigns.templateId, messageTemplates.id))
       .orderBy(desc(campaigns.createdAt));
+
+    const listActor = await getAdminUsername(req);
+    if (listActor) {
+      void logAuditForRequest(
+        req,
+        listActor,
+        'view_campaigns',
+        `Melihat daftar kampanye (${rows.length} baris)`,
+      );
+    }
 
     return NextResponse.json({ campaigns: rows });
   } catch (error: any) {
@@ -64,7 +74,12 @@ export async function POST(req: NextRequest) {
       .returning();
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'create_campaign', `Kampanye "${name}" (ID: ${campaign.id}, status: ${status})`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'create_campaign',
+      `Kampanye "${name}" (ID: ${campaign.id}, status: ${status})`,
+    );
 
     return NextResponse.json({ campaign });
   } catch (error: any) {
@@ -108,7 +123,12 @@ export async function PUT(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'update_campaign', `Kampanye "${campaign.name}" (ID: ${id})`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'update_campaign',
+      `Kampanye "${campaign.name}" (ID: ${id})`,
+    );
 
     return NextResponse.json({ campaign });
   } catch (error: any) {
@@ -139,7 +159,12 @@ export async function DELETE(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'delete_campaign', `Kampanye "${deleted.name}" (ID: ${id})`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'delete_campaign',
+      `Kampanye "${deleted.name}" (ID: ${id})`,
+    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

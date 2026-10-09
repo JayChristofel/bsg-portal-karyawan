@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
+import { logAudit, PUBLIC_ACTOR } from '@/lib/audit';
 import {
   getClientIp,
   getUserAgent,
@@ -78,7 +79,18 @@ export async function POST(req: NextRequest) {
       asnIsp,
       approxLocation,
       connectionType,
-    });
+    })
+    .returning({ id: pegawai.id });
+
+    // The public form has no admin session, so the actor is the literal
+    // 'public'. The NIP is enough to correlate this entry with the employee
+    // record it produced.
+    void logAudit(
+      PUBLIC_ACTOR,
+      'public_submit',
+      `Form jabatan diisi — NIP: ${nip}, cabang: ${cabang}, event: ${event}`,
+      getClientIp(req),
+    );
 
     return NextResponse.json({ success: true, message: 'Data recorded' });
   } catch (error: any) {

@@ -4,7 +4,7 @@ import { sendMessage, reconnectDevice, logoutDevice } from '@/lib/whatsapp';
 import { db } from '@/db';
 import { recipients } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { logAudit } from '@/lib/audit';
+import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
 
 export async function POST(req: NextRequest) {
@@ -64,7 +64,12 @@ export async function POST(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'send_message', `Kirim WA ke ${phone}${recipientId ? ` (recipient #${recipientId})` : ''}`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'send_message',
+      `Kirim WA ke ${phone}${recipientId ? ` (recipient #${recipientId})` : ''}`,
+    );
 
     return NextResponse.json({
       ...result,

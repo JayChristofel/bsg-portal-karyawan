@@ -5,6 +5,8 @@ import { db } from '@/db';
 import { settings } from '@/db/schema';
 import { encrypt } from '@/lib/crypto';
 import { gatewayTlsMode } from '@/lib/gowa-tls';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -14,6 +16,17 @@ export async function GET(req: NextRequest) {
 
   try {
     const config = await getGowaConfig();
+
+    const readActor = await getAdminUsername(req);
+    if (readActor) {
+      void logAuditForRequest(
+        req,
+        readActor,
+        'view_gateway_config',
+        `Membaca konfigurasi gateway (${config.baseUrl}, device: ${config.deviceId})`,
+      );
+    }
+
     // Never return the gateway password in plaintext — only whether one is set.
     return NextResponse.json({
       config: {
@@ -106,6 +119,17 @@ export async function POST(req: NextRequest) {
           target: settings.key,
           set: { value: encrypt(password), updatedAt: new Date() },
         });
+    }
+
+    const writeActor = await getAdminUsername(req);
+    if (writeActor) {
+      void logAuditForRequest(
+        req,
+        writeActor,
+        'update_gateway_config',
+        `Konfigurasi gateway diubah — url: ${validated.url}, device: ${deviceId}, ` +
+          `auth: ${username ? 'diperbarui' : 'tidak berubah'}`,
+      );
     }
 
     return NextResponse.json({ version: '2.1', code: 'SUCCESS', message: 'Gateway configuration saved.' });

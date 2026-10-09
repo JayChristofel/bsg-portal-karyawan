@@ -3,6 +3,8 @@ import { db } from '@/db';
 import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { verifyWebhookSignature } from '@/lib/whatsapp';
+import { logAudit } from '@/lib/audit';
+import { getClientIp } from '@/lib/proxy';
 
 // Cap inbound webhook body so a spoofed sender cannot bloat the database.
 const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
@@ -31,6 +33,15 @@ export async function POST(req: NextRequest) {
       req.headers.get('x-gowa-signature');
 
     if (!verifyWebhookSignature(rawBody, signature)) {
+      // A forged signature is a security event. The audit write is fire-and-
+      // forget and never blocks the 401, but a sender could still flood the
+      // table — the rate limiting that guards this endpoint covers it.
+      void logAudit(
+        'webhook',
+        'webhook_invalid_signature',
+        `Signature tidak valid (body ${rawBody.length} byte)`,
+        getClientIp(req),
+      );
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+import { logAuditForRequest, describeChanges } from '@/lib/audit';
 
 async function checkAuth(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -19,6 +21,7 @@ export async function PUT(
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
+  const actor = await getAdminUsername(req);
   const { id } = await params;
   const recordId = parseInt(id, 10);
   if (isNaN(recordId)) {
@@ -40,6 +43,13 @@ export async function PUT(
       );
     }
 
+    // Snapshot the current values before the write so the audit entry can show
+    // a real before/after diff rather than just "record updated".
+    const [before] = await db.select().from(pegawai).where(eq(pegawai.id, recordId));
+    if (!before) {
+      return NextResponse.json({ success: false, error: 'Record not found.' }, { status: 404 });
+    }
+
     const [updated] = await db
       .update(pegawai)
       .set({
@@ -54,6 +64,21 @@ export async function PUT(
 
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Record not found.' }, { status: 404 });
+    }
+
+    const changes = describeChanges(
+      before as unknown as Record<string, unknown>,
+      { name, nip, jabatanSk, jabatanSekarang, cabang },
+      ['name', 'nip', 'jabatanSk', 'jabatanSekarang', 'cabang'],
+    );
+
+    if (actor) {
+      void logAuditForRequest(
+        req,
+        actor,
+        'update_employee',
+        `Data pegawai "${before.name}" (ID: ${recordId}) diperbarui — ${changes}`,
+      );
     }
 
     return NextResponse.json({ success: true });
@@ -74,6 +99,7 @@ export async function DELETE(
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
+  const actor = await getAdminUsername(req);
   const { id } = await params;
   const recordId = parseInt(id, 10);
   if (isNaN(recordId)) {
@@ -88,6 +114,15 @@ export async function DELETE(
 
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Record not found.' }, { status: 404 });
+    }
+
+    if (actor) {
+      void logAuditForRequest(
+        req,
+        actor,
+        'delete_employee',
+        `Data pegawai "${deleted.name}" (ID: ${recordId}, NIP: ${deleted.nip}) dihapus`,
+      );
     }
 
     return NextResponse.json({ success: true });

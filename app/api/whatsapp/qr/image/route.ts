@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { getGowaConfig, validateGatewayUrl } from '@/lib/whatsapp';
 import { gatewayFetch } from '@/lib/gowa-tls';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 
 /**
  * Streams the pairing QR image through the app.
@@ -40,6 +42,8 @@ export async function GET(req: NextRequest) {
   }
 
   let target: URL;
+  const actor = (await getAdminUsername(req)) || 'unknown';
+
   try {
     target = new URL(src);
   } catch {
@@ -86,6 +90,8 @@ export async function GET(req: NextRequest) {
         { status: 502 },
       );
     }
+
+    void logAuditForRequest(req, actor, 'view_qr_image', 'Mengambil gambar QR pairing dari gateway');
 
     return new NextResponse(upstream.body as unknown as ReadableStream, {
       status: 200,

@@ -61,6 +61,16 @@
   --color-portal-card: #ffffff;
   --color-portal-promo: #f0f6ff;
 
+  /*
+   * Deadline notice. Sits on the white card, so the pairing is dark text on a
+   * light tint. An earlier version used #ffe082 on a translucent amber which
+   * composited to ~1.18:1 — effectively unreadable, failing even the 3:1
+   * large-text minimum. These three clear 8.15:1 (text) and 3.19:1 (border).
+   */
+  --color-portal-warning: #fef3c7;
+  --color-portal-warning-border: #d97706;
+  --color-portal-warning-text: #78350f;
+
   /* Type */
   --font-portal:
     "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue",

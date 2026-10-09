@@ -4,6 +4,8 @@ import { getDeviceWebhook, setDeviceWebhook } from '@/lib/whatsapp';
 import { db } from '@/db';
 import { webhookLogs } from '@/db/schema';
 import { desc } from 'drizzle-orm';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -21,6 +23,16 @@ export async function GET(req: NextRequest) {
         .limit(20)
         .catch(() => []),
     ]);
+
+    const readActor = await getAdminUsername(req);
+    if (readActor) {
+      void logAuditForRequest(
+        req,
+        readActor,
+        'view_webhook_config',
+        `Membaca konfigurasi webhook perangkat dan ${recentLogs.length} log terakhir`,
+      );
+    }
 
     return NextResponse.json({
       config: webhookConfig?.results || null,
@@ -70,6 +82,18 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await setDeviceWebhook(webhookUrl, webhookSecret, webhookEvents);
+
+    const writeActor = await getAdminUsername(req);
+    if (writeActor) {
+      void logAuditForRequest(
+        req,
+        writeActor,
+        'update_webhook_config',
+        `Konfigurasi webhook diperbarui — url: ${webhookUrl || '(kosong)'}, ` +
+          `events: ${webhookEvents || 'default'}, secret: ${webhookSecret ? 'diperbarui' : 'tidak berubah'}`,
+      );
+    }
+
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Update webhook error:', error);

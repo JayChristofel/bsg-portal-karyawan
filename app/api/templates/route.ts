@@ -4,7 +4,7 @@ import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { messageTemplates } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { logAudit } from '@/lib/audit';
+import { logAudit, logAuditForRequest } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -17,6 +17,17 @@ export async function GET(req: NextRequest) {
       .select()
       .from(messageTemplates)
       .orderBy(desc(messageTemplates.updatedAt));
+
+    const listActor = await getAdminUsername(req);
+    if (listActor) {
+      void logAuditForRequest(
+        req,
+        listActor,
+        'view_templates',
+        `Melihat daftar template (${templates.length} baris)`,
+      );
+    }
+
     return NextResponse.json({ templates });
   } catch (error: any) {
     console.error('Templates GET error:', error);
@@ -46,7 +57,12 @@ export async function POST(req: NextRequest) {
       .returning();
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'save_template', `Template "${name}" (ID: ${template.id})`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'save_template',
+      `Template "${name}" (ID: ${template.id})`,
+    );
 
     return NextResponse.json({ template });
   } catch (error: any) {
@@ -83,7 +99,12 @@ export async function PUT(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'update_template', `Template "${name}" (ID: ${id})`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'update_template',
+      `Template "${name}" (ID: ${id})`,
+    );
 
     return NextResponse.json({ template });
   } catch (error: any) {
@@ -114,7 +135,12 @@ export async function DELETE(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'delete_template', `Template "${deleted.name}" (ID: ${id})`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'delete_template',
+      `Template "${deleted.name}" (ID: ${id})`,
+    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

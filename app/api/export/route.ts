@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 import { db } from '@/db';
 import { recipients, campaigns } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
@@ -74,6 +75,13 @@ export async function GET(req: NextRequest) {
       // Prepend UTF-8 BOM so Excel opens it with proper UTF-8 decoding
       const csvWithBom = '\uFEFF' + csv;
 
+      void logAuditForRequest(
+        req,
+        username,
+        'export_recipients',
+        `Ekspor daftar penerima (${rows.length} baris) format CSV`,
+      );
+
       return new NextResponse(csvWithBom, {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
@@ -115,6 +123,13 @@ export async function GET(req: NextRequest) {
     ws.getColumn(2).width = 30;
 
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
+
+    void logAuditForRequest(
+      req,
+      username,
+      'export_recipients',
+      `Ekspor daftar penerima (${rows.length} baris) format XLSX`,
+    );
 
     return new NextResponse(new Uint8Array(buf), {
       headers: {

@@ -3,7 +3,7 @@ import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { campaigns, recipients, messageTemplates } from '@/db/schema';
 import { eq, and, ne, sql } from 'drizzle-orm';
-import { logAudit } from '@/lib/audit';
+import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { getGowaConfig, sendMessage } from '@/lib/whatsapp';
 
@@ -82,7 +82,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }).where(eq(campaigns.id, campaignId));
 
     const username = await getAdminUsername(req);
-    await logAudit(username || 'unknown', 'send_campaign', `Kampanye #${campaignId} "${campaign.name}": ${successCount} berhasil, ${failCount} gagal`);
+    await logAuditForRequest(
+      req,
+      username ?? 'unknown',
+      'send_campaign',
+      `Kampanye #${campaignId} "${campaign.name}": ${successCount} berhasil, ${failCount} gagal`,
+    );
 
     return NextResponse.json({
       success: true,

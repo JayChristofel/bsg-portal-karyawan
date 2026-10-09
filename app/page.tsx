@@ -192,7 +192,7 @@ export default function PortalPage() {
             <div className="flex flex-col items-center px-5 pt-7 pb-8 text-center sm:px-8 sm:pt-9 sm:pb-10 lg:px-11 lg:pt-[42px] lg:pb-12">
               <h1 className="mb-3 text-[22px] leading-[1.3] font-bold tracking-[-0.2px] text-portal-text sm:text-[26px] lg:mb-3.5 lg:text-[28px]">JABATAN & UNIT KERJA</h1>
               <p className="mb-[18px] text-[13px] font-semibold tracking-[0.8px] text-portal-text-sub uppercase lg:mb-[22px] lg:text-[14px]">DIVISI HUMAN CAPITAL · BANK SULUTGO</p>
-              <div className="mb-[18px] inline-flex items-center gap-[7px] rounded-[6px] border border-[rgba(255,193,7,0.5)] bg-[rgba(255,193,7,0.18)] px-3.5 py-1.5 text-[12px] font-semibold text-[#ffe082] backdrop-blur-[4px]">
+              <div className="mb-[18px] inline-flex items-center gap-[7px] rounded-[6px] border border-portal-warning-border bg-portal-warning px-3.5 py-1.5 text-[12px] font-semibold text-portal-warning-text">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 Harap diisi paling lambat hari ini, pukul 16.00 WITA
               </div>

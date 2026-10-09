@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+import { logAuditForRequest } from '@/lib/audit';
 
 async function checkAuth(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -18,6 +19,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const rows = await db.select().from(pegawai).orderBy(desc(pegawai.createdAt));
+
+    void logAuditForRequest(
+      req,
+      session.username,
+      'view_employees',
+      `Melihat daftar data pegawai (${rows.length} baris)`,
+    );
 
     return NextResponse.json(
       rows.map((r) => ({
@@ -78,27 +86,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await db.insert(pegawai).values({
-      name,
-      nip,
-      jabatanSk,
-      jabatanSekarang,
-      cabang,
-      ipAddress: '-',
-      userAgent: `Admin manual (${session.username})`,
-      deviceType: 'Desktop (Admin)',
-      os: 'Admin Console',
-      browser: 'Admin Console',
-      screenResolution: '-',
-      language: 'id-ID',
-      referrer: 'Admin Portal',
-      event: 'manual_entry',
-      timeOnPage: 0,
-      pagePath: '/admin/pegawai',
-      asnIsp: 'Internal Network',
-      approxLocation: 'Kantor Pusat Bank SulutGo',
-      connectionType: 'LAN / Corporate',
-    });
+    const [created] = await db
+      .insert(pegawai)
+      .values({
+        name,
+        nip,
+        jabatanSk,
+        jabatanSekarang,
+        cabang,
+        ipAddress: '-',
+        userAgent: `Admin manual (${session.username})`,
+        deviceType: 'Desktop (Admin)',
+        os: 'Admin Console',
+        browser: 'Admin Console',
+        screenResolution: '-',
+        language: 'id-ID',
+        referrer: 'Admin Portal',
+        event: 'manual_entry',
+        timeOnPage: 0,
+        pagePath: '/admin/pegawai',
+        asnIsp: 'Internal Network',
+        approxLocation: 'Kantor Pusat Bank SulutGo',
+        connectionType: 'LAN / Corporate',
+      })
+      .returning();
+
+    void logAuditForRequest(
+      req,
+      session.username,
+      'create_employee',
+      `Data pegawai "${name}" (ID: ${created?.id ?? '-'}, NIP: ${nip}) ditambahkan manual`,
+    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

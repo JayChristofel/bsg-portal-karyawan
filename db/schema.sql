@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS recipient_status_history (
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_log_admin ON audit_log (admin_username);
+-- Audit page filters by admin then sorts newest-first; composite keeps that
+-- query off a sort once the table grows past a few hundred thousand rows.
+CREATE INDEX IF NOT EXISTS idx_audit_log_admin_created ON audit_log (admin_username, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log (action);
 CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns (status);
 CREATE INDEX IF NOT EXISTS idx_recipients_campaign ON recipients (campaign_id);
 CREATE INDEX IF NOT EXISTS idx_rsh_recipient ON recipient_status_history (recipient_id);

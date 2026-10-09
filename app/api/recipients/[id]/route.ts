@@ -3,6 +3,8 @@ import { db } from '@/db';
 import { recipients } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest, describeChanges } from '@/lib/audit';
 
 async function checkAuth(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -39,6 +41,14 @@ export async function PATCH(
       updateData.waStatus = 'sent';
     }
 
+    const [before] = await db
+      .select()
+      .from(recipients)
+      .where(eq(recipients.id, recipientId));
+    if (!before) {
+      return NextResponse.json({ success: false, error: 'Target not found.' }, { status: 404 });
+    }
+
     const [updated] = await db
       .update(recipients)
       .set(updateData)
@@ -47,6 +57,22 @@ export async function PATCH(
 
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Target not found.' }, { status: 404 });
+    }
+
+    const actor = await getAdminUsername(req);
+    if (actor) {
+      const fields = ['phone', 'cabang', 'message', 'waStatus', 'waMessageId'];
+      const changes = describeChanges(
+        before as unknown as Record<string, unknown>,
+        updated as unknown as Record<string, unknown>,
+        fields,
+      );
+      void logAuditForRequest(
+        req,
+        actor,
+        'update_recipient',
+        `Penerima "${before.label}" (ID: ${recipientId}) diperbarui — ${changes}`,
+      );
     }
 
     return NextResponse.json({ success: true, recipient: updated });
@@ -81,6 +107,16 @@ export async function DELETE(
 
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Target not found.' }, { status: 404 });
+    }
+
+    const actor = await getAdminUsername(req);
+    if (actor) {
+      void logAuditForRequest(
+        req,
+        actor,
+        'delete_recipient',
+        `Penerima "${deleted.label}" (ID: ${recipientId}, ${deleted.phone ?? 'tanpa nomor'}) dihapus`,
+      );
     }
 
     return NextResponse.json({ success: true });

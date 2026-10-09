@@ -3,6 +3,8 @@ import { db } from '@/db';
 import { pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest } from '@/lib/audit';
 
 const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
 
@@ -99,6 +101,16 @@ export async function GET(req: NextRequest) {
 
     // Prepend UTF-8 BOM so Excel opens it with proper UTF-8 decoding
     const csvContent = '\uFEFF' + lines.join('\r\n');
+
+    const actor = await getAdminUsername(req);
+    if (actor) {
+      void logAuditForRequest(
+        req,
+        actor,
+        'export_employee_records',
+        `Ekspor rekap data pegawai + telemetri (${rows.length} baris)`,
+      );
+    }
 
     return new NextResponse(csvContent, {
       status: 200,
