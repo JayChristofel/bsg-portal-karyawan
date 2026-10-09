@@ -210,7 +210,7 @@ export default function PortalPage() {
                 Harap diisi paling lambat hari ini, pukul 16.00 WITA
               </div>
               <button type="button" className="btn-start-now" onClick={handleStart}>
-                Mulai Konfirmasi Sekarang
+                Mulai
               </button>
             </div>
           </div>
@@ -227,7 +227,7 @@ export default function PortalPage() {
               </svg>
             </div>
 
-            <h2 className="form-title">Formulir Konfirmasi Jabatan &amp; Unit Kerja</h2>
+            <h2 className="form-title">Formulir Jabatan &amp; Unit Kerja</h2>
             <p className="form-disclaimer">
               Isilah data di bawah ini sesuai jabatan dan unit kerja Anda saat ini. Data digunakan untuk pemutakhiran sistem kepegawaian Bank SulutGo.
             </p>
@@ -375,7 +375,7 @@ export default function PortalPage() {
               </div>
 
               <button type="submit" className="btn-submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Menyimpan Data...' : 'Kirim Konfirmasi'}
+                {isSubmitting ? 'Menyimpan Data...' : 'Kirim'}
               </button>
             </form>
           </div>
@@ -396,7 +396,7 @@ export default function PortalPage() {
               <img src="/assets/checkmark.png" alt="Success Checkmark" className="success-icon-img" />
             </div>
 
-            <h3 className="success-message">Konfirmasi berhasil dikirim. Terima kasih!</h3>
+            <h3 className="success-message">Data berhasil dikirim. Terima kasih!</h3>
             <p className="success-time-info">{successTime}</p>
 
             <div className="divider-with-text">
@@ -404,7 +404,7 @@ export default function PortalPage() {
             </div>
 
             <button type="button" className="btn-save-response" onClick={() => window.print()}>
-              Simpan / Cetak Bukti Konfirmasi Jabatan
+              Simpan / Cetak Bukti Data Jabatan
             </button>
             <a className="link-submit-another" onClick={handleResetForm}>
               Kirim respons data lainnya

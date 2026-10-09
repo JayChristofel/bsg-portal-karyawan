@@ -112,7 +112,7 @@
 .cover-banner-bg {
   position: absolute;
   inset: 0;
-  background: url('/assets/background.jpg') center/cover no-repeat;
+  background: url('/assets/BSGO.jpg') center/cover no-repeat;
   filter: brightness(0.65) saturate(1.2);
 }
 
