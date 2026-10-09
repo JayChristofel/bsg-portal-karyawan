@@ -67,13 +67,12 @@ import {
   Plus,
   Send,
   ShieldCheck,
-  Timer,
   Trash2,
   Upload,
   UserCheck,
   UserPlus,
   Users,
-  type LucideIcon,
+  X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -104,7 +103,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, MetricCard, PageHeader, SectionCard, StatusBadge, Toolbar } from '../components/ui';
+import { EmptyState, PageHeader, SectionCard, StatStrip, StatusBadge } from '../components/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
@@ -825,10 +824,6 @@ export default function BroadcastPage() {
               <MessageSquareText aria-hidden="true" />
               Template Pesan
             </Button>
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-              <Upload aria-hidden="true" />
-              Import File
-            </Button>
             <Button onClick={() => void handleBulkSendWA()} disabled={isBulkSending || pendingTargets === 0}>
               {isBulkSending ? (
                 <Loader2 className="animate-spin" aria-hidden="true" />
@@ -873,44 +868,53 @@ export default function BroadcastPage() {
       ) : null}
 
       {/* Metrics */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="Total Recipients" value={total} icon={Users} loading={isLoading} />
-        <MetricCard label="Pending" value={pendingCount} icon={Clock} loading={isLoading} />
-        <MetricCard label="Sent" value={sentCount} icon={Send} loading={isLoading} />
-        <MetricCard label="Read" value={readCount} icon={Eye} loading={isLoading} />
-        <MetricCard label="Read Rate" value={`${readRate}%`} icon={Gauge} loading={isLoading} />
-        <MetricCard label="Submitted Form" value={submittedCount} icon={UserCheck} hint={`${submitRate}%`} loading={isLoading} />
-      </div>
-
-      {/* Anti-ban engine */}
-      <SectionCard
-        title="Anti-Banned & Sending Engine"
-        description="Random delay between messages plus a batch cooldown to prevent Meta from blocking the account."
+      <StatStrip
         className="mb-4"
-      >
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="delay-profile">Send Delay Profile</Label>
-            <Select
-              value={delayProfile}
-              onValueChange={(v) => setDelayProfile(v as DelayProfile)}
-              disabled={isBulkSending}
-            >
-              <SelectTrigger id="delay-profile">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(DELAY_META) as DelayProfile[]).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {DELAY_META[k].label} — {DELAY_META[k].range}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        loading={isLoading}
+        items={[
+          { label: 'Recipients', value: total, icon: Users },
+          { label: 'Pending', value: pendingCount, icon: Clock },
+          { label: 'Sent', value: sentCount, icon: Send },
+          { label: 'Read', value: readCount, icon: Eye },
+          { label: 'Read rate', value: `${readRate}%`, icon: Gauge },
+          { label: 'Forms', value: submittedCount, icon: UserCheck, hint: `${submitRate}%` },
+        ]}
+      />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cooldown-toggle">Batch Cooldown</Label>
+      {/* Recipients & sending — one card, three groups */}
+      <SectionCard
+        title="Recipients & Sending"
+        description="Add who to message, then tune the pacing that keeps the account from being blocked."
+        className="mb-4"
+        bodyClassName="p-0 sm:p-0"
+      >
+        <div className="grid gap-x-6 gap-y-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)]">
+          {/* Sending */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Sending
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="delay-profile">Delay profile</Label>
+              <Select
+                value={delayProfile}
+                onValueChange={(v) => setDelayProfile(v as DelayProfile)}
+                disabled={isBulkSending}
+              >
+                <SelectTrigger id="delay-profile">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(DELAY_META) as DelayProfile[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {DELAY_META[k].label} — {DELAY_META[k].range}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <button
               id="cooldown-toggle"
               type="button"
@@ -920,8 +924,8 @@ export default function BroadcastPage() {
               onClick={() => setEnableCooldown((v) => !v)}
               className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-transparent px-3 py-2 text-left transition-colors hover:bg-secondary/40 disabled:opacity-50"
             >
-              <span className="text-sm text-foreground">
-                Istirahat 20 detik setiap 20 pesan
+              <span className="min-w-0 text-sm whitespace-nowrap text-foreground">
+                Batch cooldown
               </span>
               <span
                 className={cn(
@@ -938,105 +942,159 @@ export default function BroadcastPage() {
                 />
               </span>
             </button>
+
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="mt-0.5 size-3 shrink-0 text-accent" aria-hidden="true" />
+              <span>
+                Pauses for 20 seconds after every 20 messages. Do not close this tab while a
+                broadcast is running.
+              </span>
+            </p>
           </div>
-        </div>
 
-        <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground">
-          <ShieldCheck className="mt-px size-3 shrink-0 text-accent" aria-hidden="true" />
-          When enabled, the process pauses automatically for 20 seconds every 20 messages. Do not close the tab while
-          broadcast berjalan.
-        </p>
-      </SectionCard>
-
-      {/* Registration */}
-      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <SectionCard
-          title="Pull from Employee Records"
-          description="Copy every employee who submitted the form into this broadcast list."
-        >
-          <Button onClick={() => void handlePullFromPegawai()} disabled={isGenerating}>
-            {isGenerating ? (
-              <Loader2 className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Building2 aria-hidden="true" />
-            )}
-            Pull All Employees
-          </Button>
-        </SectionCard>
-
-        <SectionCard
-          title="Manual Registration"
-          description="One employee per line: Name, WhatsApp Number, Branch"
-        >
+          {/* Add recipients */}
           <div className="space-y-3">
-            <textarea
-              rows={3}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={'Andi Pratama, 08123456789, Kantor Pusat\nBudi Santoso, 08129876543, KCP Manado'}
-              aria-label="Manual recipient data"
-              className="tabular w-full resize-vertical rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            />
-            <Button onClick={() => void handleRegisterManual()} disabled={isGenerating || !inputText.trim()}>
-              {isGenerating ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <UserPlus aria-hidden="true" />
-              )}
-              Register Manually
-            </Button>
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Add recipients
+            </p>
+
+            <div className="grid gap-2">
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => void handlePullFromPegawai()}
+                disabled={isGenerating || isBulkSending}
+              >
+                {isGenerating ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Building2 aria-hidden="true" />
+                )}
+                Pull all employees
+              </Button>
+
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isBulkSending}
+              >
+                <Upload aria-hidden="true" />
+                Import Excel or CSV
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Pull copies everyone who submitted the public form. Import reads a file you choose.
+            </p>
           </div>
-        </SectionCard>
-      </div>
 
-      {/* Search, filter & sort */}
-      <Toolbar>
-        <TableViewControls
-          view={view}
-          searchPlaceholder="Search name, number, or branch…"
-          resultLabel="recipients"
-        />
-      </Toolbar>
+          {/* Manual entry */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Manual entry
+            </p>
 
-      {/* Bulk action bar */}
-      {selectedIds.size > 0 ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3">
-          <span className="text-sm font-medium text-accent">{selectedIds.size} recipients selected</span>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => void handleBulkSendSelected()} disabled={isBulkSending}>
-              <Send className="size-3.5" aria-hidden="true" />
-              Send Selected
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowBulkEditCabang(true)} disabled={isBulkEditing}>
-              <Building2 className="size-3.5" aria-hidden="true" />
-              Edit Branch
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => handleBulkExport()}>
-              <FileSpreadsheet className="size-3.5" aria-hidden="true" />
-              Export CSV
-            </Button>
-            <Button size="sm" variant="destructive" onClick={() => void handleBulkDelete()} disabled={isBulkDeleting}>
-              {isBulkDeleting ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <Trash2 className="size-3.5" aria-hidden="true" />
-              )}
-              Delete
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-              Cancel
-            </Button>
+            <div className="space-y-2">
+              <textarea
+                rows={3}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={'Andi Pratama, 08123456789, Kantor Pusat\nBudi Santoso, 08129876543, KCP Manado'}
+                aria-label="Manual recipient data, one employee per line"
+                className="tabular w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+              <Button
+                className="w-full"
+                onClick={() => void handleRegisterManual()}
+                disabled={isGenerating || !inputText.trim()}
+              >
+                {isGenerating ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <UserPlus aria-hidden="true" />
+                )}
+                Register manually
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              One employee per line: Name, WhatsApp Number, Branch.
+            </p>
           </div>
         </div>
-      ) : null}
+      </SectionCard>
 
       {/* Recipients table */}
       <SectionCard
         title={`Daftar Penerima (${view.total})`}
         description="Send per recipient, or use Mass Broadcast above"
-        className="mt-4"
         bodyClassName="p-0 sm:p-0"
       >
+        {/*
+          Filter controls and the bulk action bar share one always-present row.
+          Previously the bar was a separate band above the card, so selecting a
+          row pushed the table down the page.
+        */}
+        <div className="flex flex-col gap-3 border-b border-border/60 p-3 sm:flex-row sm:items-start sm:justify-between">
+          <TableViewControls
+            view={view}
+            searchPlaceholder="Search name, number, or branch…"
+            resultLabel="recipients"
+          />
+
+          {selectedIds.size > 0 ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <span className="text-xs font-medium whitespace-nowrap text-accent">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleBulkSendSelected()}
+                disabled={isBulkSending}
+              >
+                <Send className="size-3.5" aria-hidden="true" />
+                Send
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowBulkEditCabang(true)}
+                disabled={isBulkEditing}
+              >
+                <Building2 className="size-3.5" aria-hidden="true" />
+                Branch
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => handleBulkExport()}>
+                <FileSpreadsheet className="size-3.5" aria-hidden="true" />
+                Export
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => void handleBulkDelete()}
+                disabled={isBulkDeleting}
+              >
+                {isBulkDeleting ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                )}
+                Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedIds(new Set())}
+                aria-label="Clear selection"
+              >
+                <X aria-hidden="true" />
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
         {isLoading ? (
           <div className="space-y-2 p-5" aria-busy="true">
             {[0, 1, 2, 3, 4].map((i) => (

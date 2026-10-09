@@ -107,8 +107,72 @@ export function MetricCard({
 }
 
 /* ────────────────────────────────────────────────────────────
-   Status badge
+   Stat strip
    ──────────────────────────────────────────────────────────── */
+
+/**
+ * A row of metrics that reads as one band instead of a wall of cards.
+ *
+ * Six MetricCards stacked two or three per row cost roughly 200px of vertical
+ * space and forced labels like "TOTAL RECIPIENTS" to wrap onto two lines. Here
+ * the items are a wrapping flex collection with `whitespace-nowrap` labels, so
+ * the row stays a single line on desktop and folds to two on small screens
+ * without any label breaking mid-word.
+ *
+ * Labels must be short. The strip does not truncate them by design — a
+ * half-cut metric name is worse than a shorter one.
+ */
+export function StatStrip({
+  items,
+  loading,
+  className,
+}: {
+  items: {
+    label: string;
+    value: React.ReactNode;
+    icon?: LucideIcon;
+    hint?: string;
+  }[];
+  loading?: boolean;
+  className?: string;
+}) {
+  return (
+    <Card className={cn('glass overflow-hidden', className)}>
+      <CardContent className="flex flex-wrap items-center gap-y-3 p-0 sm:divide-x sm:divide-border/60">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.label}
+              className="flex min-w-0 flex-1 basis-[calc(50%-1rem)] items-center gap-2.5 px-3 py-3 sm:basis-0 sm:px-4"
+            >
+              {Icon ? (
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary/60 ring-1 ring-white/5">
+                  <Icon className="size-4 text-accent" aria-hidden="true" />
+                </span>
+              ) : null}
+              <div className="min-w-0">
+                <p className="text-xs font-medium tracking-wide whitespace-nowrap text-muted-foreground uppercase">
+                  {item.label}
+                </p>
+                {loading ? (
+                  <Skeleton className="mt-1 h-6 w-12" />
+                ) : (
+                  <p className="tabular mt-0.5 text-xl leading-tight font-semibold text-foreground">
+                    {item.value}
+                  </p>
+                )}
+                {item.hint && !loading ? (
+                  <p className="text-xs whitespace-nowrap text-muted-foreground">{item.hint}</p>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
 
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
