@@ -268,7 +268,7 @@ export default function PortalPage() {
                   type="text"
                   id="input-jabatan-sk"
                   className={`h-11 w-full rounded-[4px] border border-portal-border-input bg-white px-3 text-[14px] font-inherit text-portal-text outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[14px] placeholder:text-[#707070] focus:border-portal-border-focus focus:shadow-[0_0_0_1px_var(--color-portal-border-focus)] sm:h-[46px] sm:text-[15px] ${errors.jabatanSk ? 'border-portal-error bg-portal-bg-error' : ''}`}
-                  placeholder="Contoh: Mgr / Realtion Officer"
+                  placeholder="Contoh: Manager / Relation Officer"
                   value={jabatanSk}
                   onChange={(e) => {
                     setJabatanSk(e.target.value);
