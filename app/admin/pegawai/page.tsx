@@ -47,7 +47,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
+import { EmptyState, PageHeader, SectionCard, StatStrip } from '../components/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
@@ -475,7 +475,7 @@ export default function PegawaiPage() {
           <>
             <Button onClick={() => setAddOpen(true)}>
               <Plus aria-hidden="true" />
-              Tambah Data
+              Add Data
             </Button>
             <Button asChild variant="outline">
               <a href="/api/export.csv" download>
@@ -488,18 +488,21 @@ export default function PegawaiPage() {
       />
 
       {/* Metrics */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <MetricCard label="Total Records" value={data.length} icon={Users} loading={isLoading} hint="All submissions" />
-        <MetricCard label="Branches Recorded" value={cabangCount} icon={MapPin} loading={isLoading} hint="Branch offices" />
-        <MetricCard label="Mobile Access" value={mobileCount} icon={Smartphone} loading={isLoading} hint="From mobile devices" />
-        <MetricCard
-          label="Filtered"
-          value={view.total}
-          icon={Search}
-          loading={isLoading}
-          hint={view.isFiltered ? 'From active filters' : 'All records'}
-        />
-      </div>
+      <StatStrip
+        className="mb-4"
+        loading={isLoading}
+        items={[
+          { label: 'Records', value: data.length, icon: Users, hint: 'All submissions' },
+          { label: 'Branches', value: cabangCount, icon: MapPin, hint: 'Branch offices' },
+          { label: 'Mobile', value: mobileCount, icon: Smartphone, hint: 'From mobile' },
+          {
+            label: 'Filtered',
+            value: view.total,
+            icon: Search,
+            hint: view.isFiltered ? 'Active filters' : 'All records',
+          },
+        ]}
+      />
 
       {error ? (
         <div
@@ -518,17 +521,20 @@ export default function PegawaiPage() {
         </div>
       ) : null}
 
-      {/* Filters */}
-      <Toolbar>
-        <TableViewControls
-          view={view}
-          searchPlaceholder="Search name, NIP, position, IP, device…"
-          resultLabel="employee records"
-        />
-      </Toolbar>
-
       {/* Table */}
       <SectionCard bodyClassName="p-0 sm:p-0">
+        {/* Controls live inside the card, and stay hidden until there is
+            something to filter. */}
+        {data.length === 0 ? null : (
+          <div className="border-b border-border/60 p-3">
+            <TableViewControls
+              view={view}
+              searchPlaceholder="Search name, NIP, position, IP, device…"
+              resultLabel="employee records"
+            />
+          </div>
+        )}
+
         {isLoading ? (
           <div className="space-y-2 p-5" aria-busy="true">
             {[0, 1, 2, 3, 4].map((i) => (

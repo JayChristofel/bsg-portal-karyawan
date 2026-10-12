@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { FileText, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { FileText, Layers, Pencil, Plus, Ruler, Trash2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, PageHeader } from '../components/ui';
+import { EmptyState, PageHeader, StatStrip } from '../components/ui';
 
 interface Template {
   id: number;
@@ -101,7 +101,7 @@ export default function TemplatesPage() {
   };
 
   const handleDelete = async (id: number, templateName: string) => {
-    if (!window.confirm(`Hapus template "${templateName}"?`)) return;
+    if (!window.confirm(`Delete template "${templateName}"?`)) return;
     try {
       const res = await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -115,6 +115,11 @@ export default function TemplatesPage() {
     }
   };
 
+  const categoryCount = new Set(templates.map((t) => t.category)).size;
+  const avgLength = templates.length
+    ? Math.round(templates.reduce((sum, t) => sum + t.body.length, 0) / templates.length)
+    : 0;
+
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
@@ -123,7 +128,7 @@ export default function TemplatesPage() {
         actions={
           <Button onClick={openNew}>
             <Plus aria-hidden="true" />
-            Template Baru
+            New Template
           </Button>
         }
       />
@@ -148,6 +153,16 @@ export default function TemplatesPage() {
           </button>
         </div>
       ) : null}
+
+      <StatStrip
+        className="mb-4"
+        loading={isLoading}
+        items={[
+          { label: 'Templates', value: templates.length, icon: FileText },
+          { label: 'Categories', value: categoryCount, icon: Layers },
+          { label: 'Avg length', value: avgLength, icon: Ruler, hint: 'Characters' },
+        ]}
+      />
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
@@ -188,7 +203,7 @@ export default function TemplatesPage() {
                     size="icon-sm"
                     variant="ghost"
                     onClick={() => void handleDelete(t.id, t.name)}
-                    aria-label={`Hapus template ${t.name}`}
+                    aria-label={`Delete template ${t.name}`}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 aria-hidden="true" />

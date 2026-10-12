@@ -39,7 +39,8 @@ async function main() {
       username = (await visible.question('Masukkan Username Admin: ')).trim();
       visible.close();
     }
-    password = (await rl.question('Masukkan Password: ')).trim();
+    process.stdout.write('Masukkan Password: ');
+    password = (await rl.question('')).trim();
     console.log('');
   } finally {
     rl.close();

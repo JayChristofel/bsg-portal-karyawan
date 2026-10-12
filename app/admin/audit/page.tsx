@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
+import { EmptyState, PageHeader, SectionCard, StatStrip } from '../components/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import type { ActiveChip, DateRange, SortDir, TableView } from '@/lib/table-view';
@@ -310,27 +310,25 @@ export default function AuditPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-        <MetricCard label="Total Entries" value={total} icon={ScrollText} loading={isLoading} />
-        <MetricCard label="Actors Involved" value={facets.admins.length} icon={ShieldCheck} loading={isLoading} />
-        <MetricCard
-          label="Destructive Actions"
-          value={destructive}
-          icon={ShieldAlert}
-          loading={isLoading}
-          hint="Matching the current filter"
-        />
-      </div>
-
-      <Toolbar>
-        <TableViewControls
-          view={view}
-          searchPlaceholder="Search admin, detail, action, or IP…"
-          resultLabel="log entries"
-        />
-      </Toolbar>
+      <StatStrip
+        className="mb-4"
+        loading={isLoading}
+        items={[
+          { label: 'Entries', value: total, icon: ScrollText },
+          { label: 'Actors', value: facets.admins.length, icon: ShieldCheck },
+          { label: 'Destructive', value: destructive, icon: ShieldAlert, hint: 'Matching filter' },
+        ]}
+      />
 
       <SectionCard bodyClassName="p-0 sm:p-0">
+        <div className="border-b border-border/60 p-3">
+          <TableViewControls
+            view={view}
+            searchPlaceholder="Search admin, detail, action, or IP…"
+            resultLabel="log entries"
+          />
+        </div>
+
         {isLoading ? (
           <div className="space-y-2 p-5" aria-busy="true">
             {[0, 1, 2, 3, 4].map((i) => (

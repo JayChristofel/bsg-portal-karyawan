@@ -33,7 +33,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, MetricCard, PageHeader, SectionCard, Toolbar } from '../components/ui';
+import { EmptyState, PageHeader, SectionCard, StatStrip } from '../components/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
@@ -305,16 +305,14 @@ export default function AdminsPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4">
-        <MetricCard label="Total Admins" value={admins.length} icon={UserCog} loading={isLoading} />
-        <MetricCard
-          label="Status"
-          value="Active"
-          icon={ShieldCheck}
-          loading={isLoading}
-          hint="All accounts can sign in"
-        />
-      </div>
+      <StatStrip
+        className="mb-4"
+        loading={isLoading}
+        items={[
+          { label: 'Admins', value: admins.length, icon: UserCog },
+          { label: 'Status', value: 'Active', icon: ShieldCheck, hint: 'All accounts can sign in' },
+        ]}
+      />
 
       {notice ? (
         <div
@@ -337,15 +335,15 @@ export default function AdminsPage() {
         </div>
       ) : null}
 
-      <Toolbar>
-        <TableViewControls
-          view={view}
-          searchPlaceholder="Search username…"
-          resultLabel="admin accounts"
-        />
-      </Toolbar>
-
       <SectionCard bodyClassName="p-0 sm:p-0">
+        <div className="border-b border-border/60 p-3">
+          <TableViewControls
+            view={view}
+            searchPlaceholder="Search username…"
+            resultLabel="admin accounts"
+          />
+        </div>
+
         {isLoading ? (
           <div className="space-y-2 p-5" aria-busy="true">
             {[0, 1, 2].map((i) => (

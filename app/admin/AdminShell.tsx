@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
+  BarChart3,
   Building2,
   ChevronRight,
   ClipboardList,
@@ -99,6 +100,13 @@ const NAV_SECTIONS: NavSection[] = [
         href: '/admin/tracking',
         icon: Activity,
         description: 'Monitor real-time delivery status',
+      },
+      {
+        label: 'Broadcast Report',
+        short: 'Report',
+        href: '/admin/report',
+        icon: BarChart3,
+        description: 'Delivery performance report across campaigns',
       },
     ],
   },

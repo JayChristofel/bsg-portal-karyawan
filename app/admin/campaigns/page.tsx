@@ -9,6 +9,7 @@ import {
   Plus,
   Rocket,
   Send,
+  Timer,
   Trash2,
   Users,
   X,
@@ -33,7 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, PageHeader, StatusBadge } from '../components/ui';
+import { EmptyState, PageHeader, StatStrip, StatusBadge } from '../components/ui';
 
 interface Campaign {
   id: number;
@@ -136,7 +137,7 @@ export default function CampaignsPage() {
   };
 
   const handleSend = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Kirim kampanye "${campaignName}" sekarang?`)) return;
+    if (!window.confirm(`Send campaign "${campaignName}" now?`)) return;
     setSendingId(id);
     try {
       const res = await fetch(`/api/campaigns/${id}/send`, { method: 'POST' });
@@ -158,7 +159,7 @@ export default function CampaignsPage() {
   };
 
   const handleDelete = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Hapus kampanye "${campaignName}"?`)) return;
+    if (!window.confirm(`Delete campaign "${campaignName}"?`)) return;
     try {
       const res = await fetch(`/api/campaigns?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -172,6 +173,14 @@ export default function CampaignsPage() {
     }
   };
 
+  const scheduledCount = campaigns.filter(
+    (c) => c.status === 'scheduled' || c.status === 'draft',
+  ).length;
+  const recipientTotal = campaigns.reduce((sum, c) => sum + c.totalRecipients, 0);
+  const sentTotal = campaigns.reduce((sum, c) => sum + c.sentCount, 0);
+  const readTotal = campaigns.reduce((sum, c) => sum + c.readCount, 0);
+  const readRateHint = sentTotal > 0 ? `${Math.round((readTotal / sentTotal) * 100)}% of sent` : undefined;
+
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
@@ -180,7 +189,7 @@ export default function CampaignsPage() {
         actions={
           <Button onClick={() => setOpen(true)}>
             <Plus aria-hidden="true" />
-            Kampanye Baru
+            New Campaign
           </Button>
         }
       />
@@ -205,6 +214,18 @@ export default function CampaignsPage() {
           </button>
         </div>
       ) : null}
+
+      <StatStrip
+        className="mb-4"
+        loading={isLoading}
+        items={[
+          { label: 'Campaigns', value: campaigns.length, icon: ClipboardList },
+          { label: 'Scheduled', value: scheduledCount, icon: Timer },
+          { label: 'Recipients', value: recipientTotal, icon: Users },
+          { label: 'Sent', value: sentTotal, icon: Send },
+          { label: 'Read', value: readTotal, icon: Eye, hint: readRateHint },
+        ]}
+      />
 
       {isLoading ? (
         <div className="space-y-3" aria-busy="true">
@@ -283,7 +304,7 @@ export default function CampaignsPage() {
                       size="icon-sm"
                       variant="ghost"
                       onClick={() => void handleDelete(c.id, c.name)}
-                      aria-label={`Hapus kampanye ${c.name}`}
+                      aria-label={`Delete campaign ${c.name}`}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 aria-hidden="true" />
@@ -296,7 +317,7 @@ export default function CampaignsPage() {
                   <div className="min-w-0">
                     <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
                       <Users className="size-3" aria-hidden="true" />
-                      Penerima
+                      Recipients
                     </dt>
                     <dd className="tabular mt-0.5 text-lg font-semibold text-foreground">
                       {c.totalRecipients}
@@ -305,7 +326,7 @@ export default function CampaignsPage() {
                   <div className="min-w-0">
                     <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
                       <Send className="size-3" aria-hidden="true" />
-                      Terkirim
+                      Sent
                     </dt>
                     <dd className="tabular mt-0.5 text-lg font-semibold text-chart-2">
                       {c.sentCount}
@@ -314,7 +335,7 @@ export default function CampaignsPage() {
                   <div className="min-w-0">
                     <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
                       <Eye className="size-3" aria-hidden="true" />
-                      Dibaca
+                      Read
                     </dt>
                     <dd className="tabular mt-0.5 text-lg font-semibold text-accent">
                       {c.readCount}

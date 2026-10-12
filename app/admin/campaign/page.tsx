@@ -1027,7 +1027,7 @@ export default function BroadcastPage() {
 
       {/* Recipients table */}
       <SectionCard
-        title={`Daftar Penerima (${view.total})`}
+        title={`Recipients (${view.total})`}
         description="Send per recipient, or use Mass Broadcast above"
         bodyClassName="p-0 sm:p-0"
       >
@@ -1145,7 +1145,7 @@ export default function BroadcastPage() {
                           checked={selectedIds.has(row.id)}
                           onChange={() => toggleSelectRow(row.id)}
                           className="size-4 cursor-pointer accent-[var(--accent)]"
-                          aria-label={`Pilih ${row.label}`}
+                          aria-label={`Select ${row.label}`}
                         />
                       </TableCell>
                       <TableCell className="font-medium text-foreground">{row.label}</TableCell>
@@ -1162,7 +1162,7 @@ export default function BroadcastPage() {
                             variant="outline"
                             className="border-accent/30 bg-accent/10 text-[10px] text-accent"
                           >
-                            Sudah
+                            Yes
                           </Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">No</span>
@@ -1181,7 +1181,7 @@ export default function BroadcastPage() {
                             ) : (
                               <Send aria-hidden="true" />
                             )}
-                            Kirim
+                            Send
                           </Button>
                           <Button
                             size="icon-sm"

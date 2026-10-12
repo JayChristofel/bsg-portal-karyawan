@@ -28,11 +28,10 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   EmptyState,
-  MetricCard,
   PageHeader,
   SectionCard,
+  StatStrip,
   StatusBadge,
-  Toolbar,
 } from '../components/ui';
 
 interface Recipient {
@@ -250,16 +249,20 @@ export default function TrackingPage() {
       />
 
       {/* Metrics */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-        <MetricCard label="Total Recipients" value={stats.total} icon={Users} loading={isLoading} />
-        <MetricCard label="Pending" value={stats.pending} icon={Clock} loading={isLoading} />
-        <MetricCard label="Sent" value={stats.sent} icon={Send} loading={isLoading} />
-        <MetricCard label="Read" value={stats.read} icon={Eye} loading={isLoading} />
-        <MetricCard label="Submitted Form" value={stats.submitted} icon={UserCheck} loading={isLoading} />
-      </div>
+      <StatStrip
+        className="mb-4"
+        loading={isLoading}
+        items={[
+          { label: 'Recipients', value: stats.total, icon: Users },
+          { label: 'Pending', value: stats.pending, icon: Clock },
+          { label: 'Sent', value: stats.sent, icon: Send },
+          { label: 'Read', value: stats.read, icon: Eye },
+          { label: 'Forms', value: stats.submitted, icon: UserCheck },
+        ]}
+      />
 
-      {/* Filters + live controls */}
-      <Toolbar>
+      {/* Filters + live controls — one row, directly above the list it drives */}
+      <div className="glass mb-4 flex flex-col gap-3 rounded-lg p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-1 flex-col gap-3 sm:flex-row">
           <div className="relative flex-1 sm:max-w-sm">
             <Search
@@ -299,7 +302,7 @@ export default function TrackingPage() {
             {isLive ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
             {isLive ? 'Pause' : 'Resume'}
           </Button>
-          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
             <span
               className={
                 isLive ? 'size-1.5 rounded-full bg-accent animate-pulse' : 'size-1.5 rounded-full bg-muted-foreground'
@@ -310,12 +313,12 @@ export default function TrackingPage() {
             {lastUpdated ? ` · ${lastUpdated.toLocaleTimeString('id-ID')}` : ''}
           </p>
         </div>
-      </Toolbar>
+      </div>
 
       {/* List + timeline */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <SectionCard
-          title={`Daftar Penerima (${filteredRecipients.length})`}
+          title={`Recipients (${filteredRecipients.length})`}
           description="Click a recipient to see their status timeline"
           bodyClassName="p-0 sm:p-0"
         >

@@ -5,9 +5,9 @@ import {
   CheckCircle2,
   Copy,
   Info,
-  Link2,
   LogOut,
   Plug,
+  ShieldCheck,
   PlugZap,
   QrCode,
   Radio,
@@ -15,7 +15,6 @@ import {
   Save,
   Send,
   Smartphone,
-  Terminal,
   Webhook,
 } from 'lucide-react';
 
@@ -23,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { SectionCard, PageHeader } from '../components/ui';
+import { PageHeader, SectionCard, StatStrip } from '../components/ui';
 import { cn } from '@/lib/utils';
 
 interface DeviceStatusResult {
@@ -410,6 +409,10 @@ export default function WhatsAppGatewayPage() {
     setNotice({ tone: 'info', text: 'Gateway data refreshed.' });
   };
 
+  const webhookEventCount = webhookEvents
+    ? webhookEvents.split(',').filter((e) => e.trim()).length
+    : 0;
+
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
@@ -422,7 +425,7 @@ export default function WhatsAppGatewayPage() {
             ) : (
               <Plug aria-hidden="true" />
             )}
-            Refresh Semua
+            Refresh All
           </Button>
         }
       />
@@ -441,6 +444,36 @@ export default function WhatsAppGatewayPage() {
           <span className="flex-1">{notice.text}</span>
         </div>
       ) : null}
+
+      <StatStrip
+        className="mb-4"
+        loading={isLoadingStatus}
+        items={[
+          {
+            label: 'Connection',
+            value: status ? (isConnected ? 'Online' : 'Offline') : isLoadingStatus ? 'Checking…' : 'Unknown',
+            icon: Plug,
+          },
+          {
+            label: 'Session',
+            value: status
+              ? status.is_logged_in
+                ? 'Signed in'
+                : 'Not signed in'
+              : isLoadingStatus
+                ? 'Checking…'
+                : 'Unknown',
+            icon: ShieldCheck,
+          },
+          { label: 'Device', value: gatewayDeviceId || 'Not set', icon: Smartphone },
+          {
+            label: 'Webhook events',
+            value: webhookEventCount,
+            icon: Webhook,
+            hint: webhookEventCount === 0 ? 'All events' : 'Selected',
+          },
+        ]}
+      />
 
       {/* ── Gateway configuration ─────────────────────────────── */}
       <SectionCard
@@ -664,7 +697,7 @@ export default function WhatsAppGatewayPage() {
           <Field
             label="Webhook Target URL"
             htmlFor="wh-url"
-            placeholder="https://domain-anda/api/webhook/whatsapp"
+            placeholder="https://your-domain.com/api/webhook/whatsapp"
             value={webhookUrl}
             onChange={setWebhookUrl}
           />
