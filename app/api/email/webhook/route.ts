@@ -4,6 +4,8 @@ import { db } from '@/db';
 import { emailLogs, emailRecipients, emailCampaigns } from '@/db/schema';
 import { eq, sql, desc } from 'drizzle-orm';
 import { verifyWebhookSignature } from '@/lib/email';
+import { logAuditForRequest } from '@/lib/audit';
+import { getAdminUsername } from '@/lib/auth-helper';
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -19,29 +21,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'event and recipientId are required.' }, { status: 400 });
     }
 
-    // Verify webhook signature
     const signature = req.headers.get('x-signature') || '';
-    const isValid = verifyWebhookSignature(JSON.stringify(body), signature);
+    verifyWebhookSignature(JSON.stringify(body), signature);
 
-    // Update recipient status
+    const newStatus = event === 'bounced' || event === 'complained' ? 'failed'
+      : event === 'sent' ? 'sent'
+      : 'delivered';
+
     await db.update(emailRecipients).set({
-      status: event === 'delivered' ? 'delivered' : event === 'opened' ? 'delivered' : event === 'clicked' ? 'delivered' : event === 'bounced' ? 'failed' : event === 'complained' ? 'failed' : 'delivered',
-      messageId,
+      status: newStatus,
+      messageId: messageId ?? undefined,
       sentAt: event === 'sent' ? new Date() : undefined,
     }).where(eq(emailRecipients.id, recipientId));
 
-    // Log the event
-    const [log] = await db
-      .insert(emailLogs)
-      .values({ campaignId, recipientId, event, detail })
-      .returning();
-
-    // Update campaign sent count
     if (event === 'sent') {
-      await db.update(emailCampaigns).set({ sentCount: sql`${emailCampaigns.sentCount} + 1` }).where(eq(emailCampaigns.id, campaignId));
+      await db.update(emailCampaigns)
+        .set({ sentCount: sql`${emailCampaigns.sentCount} + 1` })
+        .where(eq(emailCampaigns.id, campaignId));
     }
 
-    return NextResponse.json({ success: true, logged: log ? true : false });
+    await db.insert(emailLogs).values({
+      campaignId: campaignId ?? undefined,
+      recipientId,
+      event,
+      detail: detail ?? undefined,
+    });
+
+    const actor = await getAdminUsername(req);
+    await logAuditForRequest(
+      req,
+      actor ?? 'unknown',
+      'email_webhook',
+      `Event "${event}" untuk recipient #${recipientId}`,
+    );
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Email webhook error:', error);
     return NextResponse.json({ error: 'Could not process webhook' }, { status: 500 });
@@ -55,16 +69,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(req.url);
-    const campaignId = searchParams.get('campaignId') ? Number(searchParams.get('campaignId')) : undefined;
+    const campaignId = req.nextUrl.searchParams.get('campaignId');
+    const logs = await db.select().from(emailLogs)
+      .where(campaignId ? eq(emailLogs.campaignId, Number(campaignId)) : undefined)
+      .orderBy(desc(emailLogs.createdAt))
+      .limit(50);
 
-    let query = db.select().from(emailLogs);
-
-    if (campaignId !== undefined) {
-      query = query.where(eq(emailLogs.campaignId, campaignId));
-    }
-
-    const logs = await query.orderBy(desc(emailLogs.createdAt)).limit(50);
     return NextResponse.json({ logs });
   } catch (error: any) {
     console.error('Email logs GET error:', error);

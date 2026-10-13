@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
-import { emailCampaigns, emailTemplates, emailRecipients } from '@/db/schema';
-import { eq, desc, ne, sql } from 'drizzle-orm';
+import { emailCampaigns, emailRecipients } from '@/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
 
@@ -13,39 +13,31 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get('status');
+    const status = req.nextUrl.searchParams.get('status');
 
-    let query = db.select({
-      id: emailCampaigns.id,
-      name: emailCampaigns.name,
-      subject: emailCampaigns.subject,
-      status: emailCampaigns.status,
-      templateId: emailCampaigns.templateId,
-      scheduledAt: emailCampaigns.scheduledAt,
-      sentAt: emailCampaigns.sentAt,
-      totalRecipients: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id})`,
-      sentCount: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} != 'pending')`,
-      failCount: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} = 'failed')`,
-    })
-      .from(emailCampaigns);
+    const rows = await db
+      .select({
+        id: emailCampaigns.id,
+        name: emailCampaigns.name,
+        subject: emailCampaigns.subject,
+        status: emailCampaigns.status,
+        templateId: emailCampaigns.templateId,
+        scheduledAt: emailCampaigns.scheduledAt,
+        sentAt: emailCampaigns.sentAt,
+        totalRecipients: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id})`,
+        sentCount: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} != 'pending')`,
+        failCount: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} = 'failed')`,
+      })
+      .from(emailCampaigns)
+      .where(status ? eq(emailCampaigns.status, status) : undefined)
+      .orderBy(desc(emailCampaigns.createdAt));
 
-    if (status) {
-      query = query.where(eq(emailCampaigns.status, status));
+    const actor = await getAdminUsername(req);
+    if (actor) {
+      void logAuditForRequest(req, actor, 'view_email_campaigns', `Melihat ${rows.length} kampanye email`);
     }
 
-    const list = await query.orderBy(desc(emailCampaigns.createdAt));
-    const listActor = await getAdminUsername(req);
-    if (listActor) {
-      void logAuditForRequest(
-        req,
-        listActor,
-        'view_campaigns',
-        `Melihat daftar kampanye email (${list.length} baris)`,
-      );
-    }
-
-    return NextResponse.json({ campaigns: list });
+    return NextResponse.json({ campaigns: rows });
   } catch (error: any) {
     console.error('Email campaigns GET error:', error);
     return NextResponse.json({ error: 'Could not load campaigns' }, { status: 500 });
@@ -77,12 +69,7 @@ export async function POST(req: NextRequest) {
       .returning();
 
     const username = await getAdminUsername(req);
-    await logAuditForRequest(
-      req,
-      username ?? 'unknown',
-      'create_campaign',
-      `Kampanye "${name}" (ID: ${campaign.id}, status: ${status})`,
-    );
+    await logAuditForRequest(req, username ?? 'unknown', 'create_email_campaign', `Kampanye "${name}" (ID: ${campaign.id})`);
 
     return NextResponse.json({ campaign });
   } catch (error: any) {
@@ -110,16 +97,16 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Campaign ID is required.' }, { status: 400 });
     }
 
-    const updateData: Record<string, any> = { updatedAt: new Date() };
-    if (name !== undefined) updateData.name = name;
-    if (subject !== undefined) updateData.subject = subject;
-    if (templateId !== undefined) updateData.templateId = templateId;
-    if (scheduledAt !== undefined) updateData.scheduledAt = scheduledAt;
-    if (status !== undefined) updateData.status = status;
-
     const [campaign] = await db
       .update(emailCampaigns)
-      .set(updateData)
+      .set({
+        ...(name !== undefined && { name }),
+        ...(subject !== undefined && { subject }),
+        ...(templateId !== undefined && { templateId }),
+        ...(scheduledAt !== undefined && { scheduledAt }),
+        ...(status !== undefined && { status }),
+        updatedAt: new Date(),
+      })
       .where(eq(emailCampaigns.id, id))
       .returning();
 
@@ -128,12 +115,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAuditForRequest(
-      req,
-      username ?? 'unknown',
-      'update_campaign',
-      `Kampanye "${campaign.name}" (ID: ${id})`,
-    );
+    await logAuditForRequest(req, username ?? 'unknown', 'update_email_campaign', `Kampanye "${campaign.name}" (ID: ${id})`);
 
     return NextResponse.json({ campaign });
   } catch (error: any) {
@@ -164,12 +146,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const username = await getAdminUsername(req);
-    await logAuditForRequest(
-      req,
-      username ?? 'unknown',
-      'delete_campaign',
-      `Kampanye "${deleted.name}" (ID: ${id})`,
-    );
+    await logAuditForRequest(req, username ?? 'unknown', 'delete_email_campaign', `Kampanye "${deleted.name}" (ID: ${id})`);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

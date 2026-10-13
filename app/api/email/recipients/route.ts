@@ -11,17 +11,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(req.url);
-    const campaignId = searchParams.get('campaignId') ? Number(searchParams.get('campaignId')) : undefined;
+    const campaignId = req.nextUrl.searchParams.get('campaignId');
 
-    let query = db.select().from(emailRecipients);
+    const rows = await db
+      .select()
+      .from(emailRecipients)
+      .where(campaignId ? eq(emailRecipients.campaignId, Number(campaignId)) : undefined)
+      .orderBy(desc(emailRecipients.createdAt));
 
-    if (campaignId !== undefined) {
-      query = query.where(eq(emailRecipients.campaignId, campaignId));
-    }
-
-    const recipients = await query.orderBy(desc(emailRecipients.createdAt));
-    return NextResponse.json({ recipients });
+    return NextResponse.json({ recipients: rows });
   } catch (error: any) {
     console.error('Email recipients GET error:', error);
     return NextResponse.json({ error: 'Could not load recipients' }, { status: 500 });
