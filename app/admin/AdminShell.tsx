@@ -111,6 +111,46 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: 'Email',
+    items: [
+      {
+        label: 'Dashboard',
+        short: 'Dashboard',
+        href: '/admin/email',
+        icon: LayoutDashboard,
+        description: 'Email broadcast statistics and overview',
+      },
+      {
+        label: 'Campaigns',
+        short: 'Campaigns',
+        href: '/admin/email/campaigns',
+        icon: ClipboardList,
+        description: 'Manage email campaigns',
+      },
+      {
+        label: 'Templates',
+        short: 'Templates',
+        href: '/admin/email/templates',
+        icon: FileText,
+        description: 'Reusable email template library',
+      },
+      {
+        label: 'Recipients',
+        short: 'Recipients',
+        href: '/admin/email/recipients',
+        icon: Users,
+        description: 'Manage email recipient lists',
+      },
+      {
+        label: 'Configuration',
+        short: 'Config',
+        href: '/admin/email/config',
+        icon: Smartphone,
+        description: 'SMTP server configuration',
+      },
+    ],
+  },
+  {
     title: 'System',
     items: [
       {

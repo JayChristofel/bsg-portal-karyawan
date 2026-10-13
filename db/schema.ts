@@ -129,3 +129,56 @@ export const recipientStatusHistory = pgTable('recipient_status_history', {
   messageId: text('message_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Email Recipients — penerima email untuk campaign
+export const emailRecipients = pgTable('email_recipients', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  cabang: text('cabang'),
+  campaignId: integer('campaign_id'),
+  status: text('status').default('pending'), // pending|sent|delivered|bounced|failed
+  messageId: text('message_id'),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Email Campaigns — kampanye email
+export const emailCampaigns = pgTable('email_campaigns', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  subject: text('subject').notNull(),
+  status: text('status').default('draft'), // draft|scheduled|sending|sent|cancelled
+  templateId: integer('template_id'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  totalRecipients: integer('total_recipients').default(0),
+  sentCount: integer('sent_count').default(0),
+  failCount: integer('fail_count').default(0),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Email Templates — library template email (HTML + text)
+export const emailTemplates = pgTable('email_templates', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  category: text('category').default('umum'),
+  subject: text('subject').notNull(),
+  htmlBody: text('html_body').notNull(),
+  textBody: text('text_body'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Email Delivery Logs — tracking pengiriman
+export const emailLogs = pgTable('email_logs', {
+  id: serial('id').primaryKey(),
+  campaignId: integer('campaign_id'),
+  recipientId: integer('recipient_id'),
+  event: text('event').notNull(), // sent|delivered|opened|clicked|bounced
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
