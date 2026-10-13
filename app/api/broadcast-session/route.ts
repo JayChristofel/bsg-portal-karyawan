@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
     const session = sessions[0] ?? null;
 
     if (session) {
-      const isOnBreak = session.isOnBreak === 'true';
-      const isOutsideTimeWindow = session.isOutsideTimeWindow === 'true';
+      const isOnBreak = session.isOnBreak ?? false;
+      const isOutsideTimeWindow = session.isOutsideTimeWindow ?? false;
       const breakEndTime = session.breakEndTime ? new Date(session.breakEndTime).getTime() : null;
 
       if (isOnBreak && breakEndTime && Date.now() > breakEndTime) {
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         await db
           .update(broadcastSessions)
           .set({
-            isOnBreak: 'false',
+            isOnBreak: false,
             breakEndTime: null,
             batchSent: 0,
             currentBatch: nextBatch,
@@ -98,9 +98,9 @@ export async function POST(req: NextRequest) {
           batchSent,
           currentBatch,
           totalBatches,
-          isOnBreak: String(isOnBreak),
+          isOnBreak: Boolean(isOnBreak),
           breakEndTime: breakEndTime ? new Date(breakEndTime) : null,
-          isOutsideTimeWindow: String(isOutsideTimeWindow),
+          isOutsideTimeWindow: Boolean(isOutsideTimeWindow),
           updatedAt: new Date(),
         })
         .where(eq(broadcastSessions.id, existing[0].id))
@@ -118,9 +118,9 @@ export async function POST(req: NextRequest) {
         batchSent,
         currentBatch,
         totalBatches,
-        isOnBreak: String(isOnBreak),
+        isOnBreak: Boolean(isOnBreak),
         breakEndTime: breakEndTime ? new Date(breakEndTime) : null,
-        isOutsideTimeWindow: String(isOutsideTimeWindow),
+        isOutsideTimeWindow: Boolean(isOutsideTimeWindow),
       })
       .returning();
 

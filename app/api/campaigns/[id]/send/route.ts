@@ -5,7 +5,7 @@ import { campaigns, recipients, messageTemplates } from '@/db/schema';
 import { eq, and, ne, sql } from 'drizzle-orm';
 import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
-import { getGowaConfig, sendMessage } from '@/lib/whatsapp';
+import { getGowaConfig, sendMessageGuarded, getWarmUpState } from '@/lib/whatsapp';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await params;
@@ -38,11 +38,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await db.update(campaigns).set({ status: 'sending', updatedAt: new Date() }).where(eq(campaigns.id, campaignId));
 
     const config = await getGowaConfig();
+    const warmUp = await getWarmUpState(config.deviceId);
     const origin = req.headers.get('origin') || '';
     const portalLink = `${origin}/`;
 
     let successCount = 0;
     let failCount = 0;
+    let quotaBlocked = false;
 
     for (const target of targets) {
       if (!target.phone) {
@@ -55,7 +57,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         : (target.message || '').replace(/\{nama\}/gi, target.label).replace(/\{link\}/gi, portalLink);
 
       try {
-        const result = await sendMessage(target.phone, message, config);
+        const guarded = await sendMessageGuarded(target.phone, message, config.deviceId, config);
+
+        // Quota exhausted: stop the loop rather than burning through the
+        // remaining recipients as failures.
+        if (!guarded.ok) {
+          quotaBlocked = true;
+          break;
+        }
+
+        const result: any = guarded.result;
         const messageId = result?.results?.message_id || result?.results?.id || result?.message_id || null;
         const isSuccess = result?.code === 'SUCCESS' || result?.code === 'OK' || Boolean(messageId);
 
@@ -75,9 +86,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    // A quota-stopped campaign stays 'scheduled' so it can resume tomorrow;
+    // marking it 'sent' would hide the fact that recipients were left behind.
     await db.update(campaigns).set({
-      status: 'sent',
-      sentAt: new Date(),
+      status: quotaBlocked ? 'scheduled' : 'sent',
+      ...(quotaBlocked ? {} : { sentAt: new Date() }),
       updatedAt: new Date(),
     }).where(eq(campaigns.id, campaignId));
 
@@ -85,16 +98,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await logAuditForRequest(
       req,
       username ?? 'unknown',
-      'send_campaign',
-      `Kampanye #${campaignId} "${campaign.name}": ${successCount} berhasil, ${failCount} gagal`,
+      quotaBlocked ? 'send_campaign_quota' : 'send_campaign',
+      quotaBlocked
+        ? `Kampanye #${campaignId} "${campaign.name}" dihentikan: kuota harian habis ` +
+            `(${warmUp.sentToday}/${warmUp.dailyLimit}), ${successCount} terkirim`
+        : `Kampanye #${campaignId} "${campaign.name}": ${successCount} berhasil, ${failCount} gagal`,
     );
 
     return NextResponse.json({
-      success: true,
+      success: !quotaBlocked,
+      quotaBlocked,
       campaignId,
       total: targets.length,
       successCount,
       failCount,
+      sentToday: warmUp.sentToday,
+      dailyLimit: warmUp.dailyLimit,
     });
   } catch (error: any) {
     console.error('Campaign send error:', error);

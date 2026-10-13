@@ -328,6 +328,224 @@ export async function sendMessage(phone: string, message: string, config?: GowaC
   });
 }
 
+/**
+ * Warm-up gate for outbound sends.
+ *
+ * Every broadcast path (admin single-send, campaign loop, and the auto-resume
+ * listener) funnels through here, so the daily quota cannot be side-stepped by
+ * simply using a different entry point. Quota is claimed *before* the message
+ * goes out: claiming late would let concurrent senders overshoot, and the cost
+ * of an occasional unused claim is far lower than overshooting the cap.
+ */
+export async function sendMessageGuarded(
+  phone: string,
+  message: string,
+  numberId: string,
+  config?: GowaConfig,
+): Promise<{ ok: true; result: unknown } | { ok: false; reason: 'quota'; state: WarmUpState }> {
+  const state = await getWarmUpState(numberId);
+
+  if (state.remainingToday <= 0) {
+    return { ok: false, reason: 'quota', state };
+  }
+
+  const claimed = await claimQuota(numberId, state.dailyLimit);
+  if (!claimed) {
+    return { ok: false, reason: 'quota', state: await getWarmUpState(numberId) };
+  }
+
+  const result = await sendMessage(phone, message, config);
+  return { ok: true, result };
+}
+
+/**
+ * Warm-up ladder for a sending number.
+ *
+ * A number that starts sending in bulk gets flagged quickly, so the daily quota
+ * ramps with the number's age rather than jumping straight to full volume.
+ * The ladder is a guardrail against *accidentally* hammering a fresh number --
+ * it is not a way to defeat detection, and it is not a substitute for the
+ * official Business API when volume is genuinely large.
+ */
+const WARMUP_LADDER: Array<{ upToDay: number; dailyLimit: number }> = [
+  { upToDay: 2, dailyLimit: 15 },
+  { upToDay: 5, dailyLimit: 40 },
+  { upToDay: 14, dailyLimit: 100 },
+  { upToDay: Number.POSITIVE_INFINITY, dailyLimit: 250 },
+];
+
+export const WARMUP_LADDER_TABLE = WARMUP_LADDER.map((r) =>
+  r.upToDay === Number.POSITIVE_INFINITY ? '14+ hari' : `0-${r.upToDay} hari`,
+);
+
+export interface WarmUpState {
+  numberId: string;
+  label: string | null;
+  pairedAt: Date;
+  ageDays: number;
+  dailyLimit: number;
+  sentToday: number;
+  remainingToday: number;
+  nextLimitIn: number | null;
+}
+
+function utcDay(d: Date = new Date()): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function limitForAge(ageDays: number): number {
+  for (const rung of WARMUP_LADDER) {
+    if (ageDays <= rung.upToDay) return rung.dailyLimit;
+  }
+  return WARMUP_LADDER[WARMUP_LADDER.length - 1].dailyLimit;
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 86_400_000));
+}
+
+async function loadWarmUpRows(numberId: string) {
+  const { db } = await import('@/db');
+  const { warmupNumbers, sendCounters } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  let [row] = await db
+    .select()
+    .from(warmupNumbers)
+    .where(eq(warmupNumbers.numberId, numberId))
+    .limit(1);
+
+  if (!row) {
+    [row] = await db
+      .insert(warmupNumbers)
+      .values({ numberId })
+      .onConflictDoNothing()
+      .returning();
+    if (!row) {
+      [row] = await db
+        .select()
+        .from(warmupNumbers)
+        .where(eq(warmupNumbers.numberId, numberId))
+        .limit(1);
+    }
+  }
+
+  const [counter] = await db
+    .select()
+    .from(sendCounters)
+    .where(and(eq(sendCounters.numberId, numberId), eq(sendCounters.day, utcDay())))
+    .limit(1);
+
+  return { row, sentToday: counter?.sent ?? 0 };
+}
+
+export async function getWarmUpState(numberId: string): Promise<WarmUpState> {
+  try {
+    const { row, sentToday } = await loadWarmUpRows(numberId);
+    const ageDays = daysBetween(new Date(row.pairedAt), new Date());
+    const dailyLimit = row.dailyLimitOverride ?? limitForAge(ageDays);
+
+    // Only rungs above the current one are candidates; the final rung has an
+    // infinite `upToDay`, which would otherwise yield `Infinity - ageDays`.
+    const nextRung = WARMUP_LADDER.find(
+      (r) => Number.isFinite(r.upToDay) && ageDays + 1 <= r.upToDay,
+    );
+
+    return {
+      numberId,
+      label: row.label,
+      pairedAt: new Date(row.pairedAt),
+      ageDays,
+      dailyLimit,
+      sentToday,
+      remainingToday: Math.max(0, dailyLimit - sentToday),
+      nextLimitIn: nextRung ? nextRung.upToDay - ageDays : null,
+    };
+  } catch (err) {
+    console.error('getWarmUpState failed:', (err as Error).message);
+    return {
+      numberId,
+      label: null,
+      pairedAt: new Date(),
+      ageDays: 0,
+      dailyLimit: 15,
+      sentToday: 0,
+      remainingToday: 15,
+      nextLimitIn: null,
+    };
+  }
+}
+
+/**
+ * Atomically claims one unit of today's quota for a number.
+ *
+ * The guard lives in the UPDATE's WHERE clause rather than in a prior SELECT, so
+ * two concurrent broadcasts cannot both read the same headroom and overrun it.
+ */
+async function claimQuota(numberId: string, dailyLimit: number): Promise<boolean> {
+  const { db } = await import('@/db');
+  const { sendCounters } = await import('@/db/schema');
+  const { sql } = await import('drizzle-orm');
+
+  await db
+    .insert(sendCounters)
+    .values({ numberId, day: utcDay(), sent: 0 })
+    .onConflictDoNothing();
+
+  const result = (await db.execute(sql`
+    UPDATE send_counters
+       SET sent = sent + 1, updated_at = NOW()
+     WHERE number_id = ${numberId}
+       AND day = ${utcDay()}
+       AND sent < ${dailyLimit}
+  `)) as { rowCount?: number; rows?: unknown[] };
+
+  return (result.rowCount ?? result.rows?.length ?? 0) > 0;
+}
+
+export class DailyQuotaExceededError extends Error {
+  readonly code = 'DAILY_QUOTA_EXCEEDED';
+  constructor(readonly state: WarmUpState) {
+    super(
+      `Daily warm-up limit reached (${state.sentToday}/${state.dailyLimit}). ` +
+        'Resumes tomorrow, or sooner if the number ages into a higher rung.',
+    );
+    this.name = 'DailyQuotaExceededError';
+  }
+}
+
+/**
+ * Records accepted sends against the number's daily quota.
+ *
+ * Call this *after* the gateway has accepted a message, so the counter tracks
+ * what actually left the device rather than what was merely attempted.
+ */
+export async function recordSend(numberId: string, count = 1): Promise<void> {
+  const { db } = await import('@/db');
+  const { sendCounters } = await import('@/db/schema');
+  const { sql } = await import('drizzle-orm');
+
+  await db
+    .insert(sendCounters)
+    .values({ numberId, day: utcDay(), sent: count })
+    .onConflictDoUpdate({
+      target: [sendCounters.numberId, sendCounters.day],
+      set: { sent: sql`${sendCounters.sent} + ${count}`, updatedAt: new Date() },
+    });
+}
+
+export async function checkDailyLimit(
+  numberId: string,
+): Promise<{ allowed: boolean; limit: number; sentToday: number; remaining: number }> {
+  const state = await getWarmUpState(numberId);
+  return {
+    allowed: state.remainingToday > 0,
+    limit: state.dailyLimit,
+    sentToday: state.sentToday,
+    remaining: state.remainingToday,
+  };
+}
+
 export async function getDeviceWebhook(config?: GowaConfig) {
   const cfg = config || (await getGowaConfig());
   return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/webhook`);

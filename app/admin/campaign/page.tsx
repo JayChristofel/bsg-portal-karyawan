@@ -194,9 +194,14 @@ export default function BroadcastPage() {
   const [msgTemplates, setMsgTemplates] = React.useState<string[]>(DEFAULT_TEMPLATES);
   const [selectedTemplateIdx, setSelectedTemplateIdx] = React.useState(0);
   const [showTemplateModal, setShowTemplateModal] = React.useState(false);
-  const [warmUpDays, setWarmUpDays] = React.useState(3);
-  const [currentWarmUpDay, setCurrentWarmUpDay] = React.useState(1);
   const [enableRandomBreaks, setEnableRandomBreaks] = React.useState(true);
+  const [warmUpState, setWarmUpState] = React.useState<{
+    ageDays: number;
+    dailyLimit: number;
+    sentToday: number;
+    remainingToday: number;
+    nextLimitIn: number | null;
+  } | null>(null);
   const [mockupSampleName, setMockupSampleName] = React.useState('Andi Pratama, S.E.');
   const [mockupPreviewText, setMockupPreviewText] = React.useState('');
 
@@ -224,9 +229,66 @@ export default function BroadcastPage() {
 
   React.useEffect(() => {
     void fetchData();
+    void fetchWarmUpState();
     const interval = window.setInterval(() => void fetchData(true), 8000);
     return () => window.clearInterval(interval);
   }, [fetchData]);
+
+  // Auto-resume runs server-side with no browser attached, so its state has to
+  // be polled; otherwise the operator has no idea messages are still going out.
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/auto-resume', { cache: 'no-store' });
+        if (res.ok && !cancelled) setAutoResume(await res.json());
+      } catch {
+        /* transient */
+      }
+    };
+
+    void poll();
+    const id = window.setInterval(() => void poll(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const stopAutoResume = async () => {
+    if (!window.confirm('Hentikan auto-resume yang sedang berjalan?')) return;
+    try {
+      await fetch('/api/auto-resume?action=stop', { method: 'POST' });
+    } finally {
+      void fetchWarmUpState();
+    }
+  };
+
+  const [autoResume, setAutoResume] = React.useState<{
+    latest: {
+      id: number;
+      status: string;
+      startedAt: string;
+      finishedAt: string | null;
+      messagesSent: number;
+      queuedRemaining: number;
+      stopReason: string | null;
+      detail: string | null;
+    } | null;
+  }>({ latest: null });
+
+  const fetchWarmUpState = async () => {
+    try {
+      const res = await fetch('/api/warmup', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setWarmUpState(data.state);
+      }
+    } catch (err) {
+      console.error('Failed to fetch warm-up state:', err);
+    }
+  };
 
   // Live mockup preview
   React.useEffect(() => {
@@ -511,13 +573,36 @@ export default function BroadcastPage() {
       return;
     }
 
-    const warmUpMultiplier = currentWarmUpDay <= warmUpDays ? (currentWarmUpDay / warmUpDays) : 1;
-    const adjustedBatchSize = Math.max(10, Math.floor(batchConfig.batchSize * warmUpMultiplier));
-    const confirmMsg = `Send a WhatsApp broadcast to ${targets.length} recipients?\n\nBatch settings:\n- Batch size: ${adjustedBatchSize} per batch (warm-up day ${currentWarmUpDay}/${warmUpDays})\n- Break: ${batchConfig.batchBreakMinutes} min between batches\n- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Templates: ${msgTemplates.length} variations rotated\n- Random breaks: ${enableRandomBreaks ? 'On' : 'Off'}\n- Time window: ${batchConfig.timeWindowStart}:00–${batchConfig.timeWindowEnd}:00`;
+    // The daily warm-up quota is enforced server-side, so the useful number here is
+// today's remaining headroom, not a client-side guess at batch size.
+const remainingToday = warmUpState?.remainingToday ?? null;
+const dailyLimit = warmUpState?.dailyLimit ?? null;
+
+const confirmMsg =
+      `Send a WhatsApp broadcast to ${targets.length} recipients?\n\n` +
+      (remainingToday !== null
+        ? `Daily warm-up quota: ${warmUpState!.sentToday}/${dailyLimit} used, ` +
+          `${remainingToday} left today\n`
+        : '') +
+      `Batch settings:\n- Batch size: ${batchConfig.batchSize} per batch\n` +
+      `- Break: ${batchConfig.batchBreakMinutes} min between batches\n` +
+      `- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n` +
+      `- Templates: ${msgTemplates.length} variations rotated\n` +
+      `- Random breaks: ${enableRandomBreaks ? 'On' : 'Off'}\n` +
+      `- Time window: ${batchConfig.timeWindowStart}:00–${batchConfig.timeWindowEnd}:00`;
 
     if (!window.confirm(confirmMsg)) return;
 
-    startBroadcast(targets.length);
+    // Stop before the first send when the quota is already spent.
+    if (remainingToday !== null && remainingToday <= 0) {
+      setNotice({
+        tone: 'err',
+        text: `Kuota harian sudah habis (${warmUpState!.sentToday}/${dailyLimit}). Coba lagi besok.`,
+      });
+      return;
+    }
+
+    await startBroadcast(targets.length);
     setIsBulkSending(true);
     let successCount = 0;
     const portalLink = `${window.location.origin}/`;
@@ -561,6 +646,23 @@ export default function BroadcastPage() {
         });
 
         const json = await res.json();
+
+        // Quota exhausted: abort the run instead of looping through the rest.
+        if (res.status === 429 || json.code === 'DAILY_QUOTA_EXCEEDED') {
+          setBulkProgress(null);
+          setIsBulkSending(false);
+          setNotice({
+            tone: 'err',
+            text:
+              `Broadcast dihentikan: kuota harian habis ` +
+              `(${json.sentToday}/${json.dailyLimit}). ${successCount} terkirim. Sisa-target masih pending.`,
+          });
+          await resetBroadcast();
+          void fetchWarmUpState();
+          void fetchData();
+          return;
+        }
+
         if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
           successCount++;
         }
@@ -568,7 +670,7 @@ export default function BroadcastPage() {
         // continue to next recipient
       }
 
-      recordSend();
+      await recordSend();
 
       if (enableCooldown && (i + 1) % 20 === 0 && i + 1 < targets.length) {
         for (let cd = 60; cd > 0; cd--) {
@@ -873,6 +975,16 @@ export default function BroadcastPage() {
         description="Manage recipients, tune anti-ban pacing, and send bulk messages with spintax."
         actions={
           <>
+            {autoResume.latest?.status === 'running' ? (
+              <Badge
+                variant="outline"
+                className="gap-1.5 border-accent/40 bg-accent/10 text-accent"
+                aria-live="polite"
+              >
+                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                Auto-resume berjalan
+              </Badge>
+            ) : null}
             <Button variant="outline" onClick={() => setShowTemplateModal(true)}>
               <MessageSquareText aria-hidden="true" />
               Template Pesan
@@ -888,6 +1000,46 @@ export default function BroadcastPage() {
           </>
         }
       />
+
+      {autoResume.latest ? (
+        <div
+          role="status"
+          className={cn(
+            'mb-4 flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm sm:flex-row sm:items-center',
+            autoResume.latest.status === 'running'
+              ? 'border-accent/30 bg-accent/10 text-accent'
+              : 'border-border/60 bg-muted/30 text-muted-foreground',
+          )}
+        >
+          {autoResume.latest.status === 'running' ? (
+            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+          ) : (
+            <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+          )}
+
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">
+              Auto-resume {autoResume.latest.status === 'running' ? 'sedang berjalan' : 'selesai'}
+              {autoResume.latest.finishedAt
+                ? ` · ${new Date(autoResume.latest.finishedAt).toLocaleString('id-ID')}`
+                : ''}
+            </p>
+            <p className="tabular text-xs opacity-90">
+              {autoResume.latest.messagesSent} terkirim · {autoResume.latest.queuedRemaining} masih
+              antre
+              {autoResume.latest.stopReason ? ` · berhenti: ${autoResume.latest.stopReason}` : ''}
+              {autoResume.latest.detail ? ` — ${autoResume.latest.detail}` : ''}
+            </p>
+          </div>
+
+          {autoResume.latest.status === 'running' ? (
+            <Button size="sm" variant="outline" onClick={() => void stopAutoResume()}>
+              <PauseCircle className="size-3.5" aria-hidden="true" />
+              Hentikan
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {notice ? (
         <div
@@ -1027,19 +1179,48 @@ export default function BroadcastPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="warmup-days">Warm-up period (days)</Label>
-              <Input
-                id="warmup-days"
-                type="number"
-                min={1}
-                max={14}
-                value={warmUpDays}
-                onChange={(e) => setWarmUpDays(Number(e.target.value))}
-                disabled={isBulkSending}
-                className="tabular"
-              />
+              <Label>Daily warm-up quota</Label>
+              <div className="rounded-md border border-border/60 bg-background/40 px-3 py-2">
+                {warmUpState ? (
+                  <>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="tabular text-sm font-semibold text-foreground">
+                        {warmUpState.sentToday}/{warmUpState.dailyLimit}
+                      </span>
+                      <span className="tabular text-[11px] text-muted-foreground">
+                        {warmUpState.remainingToday} left today
+                      </span>
+                    </div>
+                    <div
+                      className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-background/60"
+                      aria-hidden="true"
+                    >
+                      <span
+                        className={cn(
+                          'block h-full rounded-full',
+                          warmUpState.remainingToday === 0 ? 'bg-destructive' : 'bg-accent',
+                        )}
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (warmUpState.sentToday / Math.max(1, warmUpState.dailyLimit)) * 100,
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-muted-foreground">
+                      Number age: {warmUpState.ageDays} day{warmUpState.ageDays === 1 ? '' : 's'}
+                      {warmUpState.nextLimitIn !== null
+                        ? ` · limit rises in ${warmUpState.nextLimitIn} day(s)`
+                        : ' · at full quota'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Loading quota…</p>
+                )}
+              </div>
               <p className="text-[10px] text-muted-foreground">
-                Gradually increase batch size over {warmUpDays} days. Day {currentWarmUpDay}/{warmUpDays}.
+                Enforced server-side on every send path. Quota resets daily (UTC).
               </p>
             </div>
 

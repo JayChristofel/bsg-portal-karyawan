@@ -1,4 +1,13 @@
-import { customType, index, integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  customType,
+  index,
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  boolean,
+} from 'drizzle-orm/pg-core';
 import { encrypt, decrypt } from '@/lib/crypto';
 
 // Custom encrypted type: Automatically encrypts on INSERT/UPDATE, decrypts on SELECT
@@ -183,6 +192,24 @@ export const emailLogs = pgTable('email_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Auto-resume runs — one row per background drain of the pending queue.
+//
+// Auto-resume sends from the business number with no browser attached, so its
+// progress has to be inspectable from the admin UI. Without a row here the
+// operator cannot tell whether messages are still going out.
+export const autoResumeRuns = pgTable('auto_resume_runs', {
+  id: serial('id').primaryKey(),
+  status: text('status').notNull().default('running'), // running | completed | stopped | error
+  trigger: text('trigger').default('reconnect'),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  messagesSent: integer('messages_sent').default(0),
+  queuedRemaining: integer('queued_remaining').default(0),
+  stopReason: text('stop_reason'), // quota | time_window | empty | device_error | cancelled
+  detail: text('detail'),
+  createdBy: text('created_by'),
+});
+
 // Broadcast Session State — batch progress tracking
 export const broadcastSessions = pgTable('broadcast_sessions', {
   id: serial('id').primaryKey(),
@@ -192,9 +219,33 @@ export const broadcastSessions = pgTable('broadcast_sessions', {
   batchSent: integer('batch_sent').default(0),
   currentBatch: integer('current_batch').default(1),
   totalBatches: integer('total_batches').default(1),
-  isOnBreak: text('is_on_break').default('false'),
+  isOnBreak: boolean('is_on_break').default(false),
   breakEndTime: timestamp('break_end_time', { withTimezone: true }),
-  isOutsideTimeWindow: text('is_outside_time_window').default('false'),
+  isOutsideTimeWindow: boolean('is_outside_time_window').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Sending-number warm-up registry. One row per number that sends through the
+// gateway; `pairedAt` is when it was first seen, which anchors the age ladder.
+export const warmupNumbers = pgTable('warmup_numbers', {
+  numberId: text('number_id').primaryKey(),
+  label: text('label'),
+  pairedAt: timestamp('paired_at', { withTimezone: true }).defaultNow().notNull(),
+  dailyLimitOverride: integer('daily_limit_override'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Per-day send counters. Composite primary key makes the daily roll-over
+// implicit: a new UTC day is simply a new row.
+export const sendCounters = pgTable(
+  'send_counters',
+  {
+    numberId: text('number_id').notNull(),
+    day: text('day').notNull(), // YYYY-MM-DD (UTC)
+    sent: integer('sent').default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('send_counters_number_day_idx').on(t.numberId, t.day)],
+);
