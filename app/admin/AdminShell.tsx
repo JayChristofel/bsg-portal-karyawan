@@ -7,6 +7,7 @@ import {
   Activity,
   BarChart3,
   Building2,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
   Download,
@@ -210,6 +211,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [lastChecked, setLastChecked] = React.useState<Date | null>(null);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => {
+    try {
+      const stored = window.localStorage.getItem('admin:collapsed-groups');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
 
@@ -310,6 +319,32 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     [pathname],
   );
 
+  const activeSection = React.useMemo(
+    () => NAV_SECTIONS.find((s) => s.items.some(isActive))?.title,
+    [pathname],
+  );
+
+  const toggleGroup = (title: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      window.localStorage.setItem('admin:collapsed-groups', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  React.useEffect(() => {
+    if (activeSection && collapsedGroups.has(activeSection)) {
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        next.delete(activeSection);
+        window.localStorage.setItem('admin:collapsed-groups', JSON.stringify([...next]));
+        return next;
+      });
+    }
+  }, [activeSection]);
+
   const meta = GATEWAY_META[gateway];
 
   /* ── Sidebar body (shared between desktop & mobile drawer) ── */
@@ -346,62 +381,81 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Main navigation">
-        {NAV_SECTIONS.map((section) => (
-          <div key={section.title} className="mb-4 last:mb-0">
-            <p
-              className={cn(
-                'mb-1 px-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase',
-                collapsed && 'lg:hidden',
-              )}
-            >
-              {section.title}
-            </p>
+        {NAV_SECTIONS.map((section) => {
+          const isCollapsed = collapsedGroups.has(section.title);
+          return (
+            <div key={section.title} className="mb-2 last:mb-0">
+              <button
+                type="button"
+                onClick={() => toggleGroup(section.title)}
+                className={cn(
+                  'mb-1 flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-left',
+                  'text-[10px] font-semibold tracking-widest text-muted-foreground uppercase',
+                  'transition-colors duration-150 hover:bg-muted/60 hover:text-foreground',
+                  collapsed && 'lg:justify-center lg:px-0',
+                )}
+                aria-expanded={!isCollapsed}
+              >
+                <ChevronDown
+                  className={cn(
+                    'size-3 shrink-0 transition-transform duration-200',
+                    isCollapsed && '-rotate-90',
+                  )}
+                  aria-hidden="true"
+                />
+                <span className={cn('truncate', collapsed && 'lg:hidden')}>
+                  {section.title}
+                </span>
+              </button>
 
-            <ul className="space-y-0.5" role="list">
-              {section.items.map((item) => {
-                const active = isActive(item);
-                const Icon = item.icon;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      title={collapsed ? item.label : undefined}
-                      aria-current={active ? 'page' : undefined}
-                      onClick={() => setMobileOpen(false)}
-                      className={cn(
-                        'relative flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
-                        'text-[13px] font-medium transition-colors duration-150',
-                        collapsed && 'lg:justify-center lg:px-0',
-                        active
-                          ? 'nav-item-active text-emerald-500 font-semibold dark:text-emerald-400'
-                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          'size-4 shrink-0 transition-colors duration-150',
-                          active
-                            ? 'text-emerald-500 dark:text-emerald-400'
-                            : 'text-muted-foreground group-hover:text-foreground',
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span className={cn('truncate', collapsed && 'lg:hidden')}>
-                        {item.label}
-                      </span>
-                      {active && !collapsed && (
-                        <ChevronRight
-                          className="ml-auto size-3.5 shrink-0 text-emerald-500/50"
-                          aria-hidden="true"
-                        />
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+              {!isCollapsed && (
+                <ul className="space-y-0.5" role="list">
+                  {section.items.map((item) => {
+                    const active = isActive(item);
+                    const Icon = item.icon;
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          title={collapsed ? item.label : undefined}
+                          aria-current={active ? 'page' : undefined}
+                          onClick={() => setMobileOpen(false)}
+                          className={cn(
+                            'relative flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2',
+                            'text-[13px] font-medium transition-colors duration-150',
+                            collapsed && 'lg:justify-center lg:px-0',
+                            active
+                              ? 'nav-item-active text-emerald-500 font-semibold dark:text-emerald-400'
+                              : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              'size-4 shrink-0 transition-colors duration-150',
+                              active
+                                ? 'text-emerald-500 dark:text-emerald-400'
+                                : 'text-muted-foreground group-hover:text-foreground',
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className={cn('truncate', collapsed && 'lg:hidden')}>
+                            {item.label}
+                          </span>
+                          {active && !collapsed && (
+                            <ChevronRight
+                              className="ml-auto size-3.5 shrink-0 text-emerald-500/50"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
 
         {/* Quick access */}
         <div>
