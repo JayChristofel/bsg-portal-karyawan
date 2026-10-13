@@ -115,11 +115,11 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'Email',
     items: [
       {
-        label: 'Dashboard',
-        short: 'Dashboard',
-        href: '/admin/email',
-        icon: LayoutDashboard,
-        description: 'Email broadcast statistics and overview',
+        label: 'Mass Messaging',
+        short: 'Mass Msg',
+        href: '/admin/email/mass-messaging',
+        icon: Megaphone,
+        description: 'Send bulk emails to employees',
       },
       {
         label: 'Campaigns',

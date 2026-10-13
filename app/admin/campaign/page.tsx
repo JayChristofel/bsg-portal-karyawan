@@ -107,6 +107,7 @@ import { EmptyState, PageHeader, SectionCard, StatStrip, StatusBadge } from '../
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
+import { useBatchBroadcast } from '@/lib/batch-broadcast';
 import { cn } from '@/lib/utils';
 
 export interface RecipientRow {
@@ -123,8 +124,13 @@ export interface RecipientRow {
   formSubmittedAt?: string | null;
 }
 
-const DEFAULT_TEMPLATE =
-  '{Yth.|Dear Sir/Madam} {nama},\n\nRegarding the *update of Bank SulutGo employee position data*, we kindly ask you to confirm your position and work unit through the official portal below:\n\n{link}\n\nPlease complete the confirmation by *today, 4:00 PM WITA* so your position and work unit data are verified.\n\nThank you for your cooperation.\n\n*Human Resources Division*\n*Bank SulutGo*';
+const DEFAULT_TEMPLATES = [
+  '{Yth.|Dear Sir/Madam} {nama},\n\nRegarding the *update of Bank SulutGo employee position data*, we kindly ask you to confirm your position and work unit through the official portal below:\n\n{link}\n\nPlease complete the confirmation by *today, 4:00 PM WITA* so your position and work unit data are verified.\n\nThank you for your cooperation.\n\n*Human Resources Division*\n*Bank SulutGo*',
+  '{Yth.|Dear} {nama},\n\nKami mengingatkan untuk *memperbarui data pegawai Bank SulutGo* melalui portal berikut:\n\n{link}\n\nMohon selesai *hari ini jam 4:00 PM WITA* agar data posisi dan unit kerja Anda terverifikasi.\n\nTerima kasih atas kerja samanya.\n\n*Divisi SDM*\n*Bank SulutGo*',
+  '{Yth.|Bapak/Ibu} {nama},\n\nMohon konfirmasi posisi dan unit kerja Anda melalui portal resmi Bank SulutGo:\n\n{link}\n\nBatas waktu: *hari ini jam 4:00 PM WITA*.\n\nTerima kasih atas perhatian dan kerja samanya.\n\n*SDM*\n*Bank SulutGo*',
+  '{Yth.|Bapak/Ibu} {nama},\n\nJangan lupa *memperbarui data* posisi dan unit kerja Anda melalui portal berikut:\n\n{link}\n\nMohon diselesaikan sebelum *hari ini jam 4:00 PM WITA*.\n\nTerima kasih atas kerja samanya.\n\n*Divisi Sumber Daya Manusia*\n*Bank SulutGo*',
+  '{Yth.|Bapak/Ibu} {nama},\n\nIni adalah pengingat untuk *memperbarui data pegawai* melalui portal Bank SulutGo:\n\n{link}\n\nMohon selesai *hari ini jam 4:00 PM WITA* agar data Anda terverifikasi.\n\nTerima kasih atas perhatian dan kerja samanya.\n\n*SDM*\n*Bank SulutGo*',
+];
 
 /** Spintax: replaces {a|b|c} with one random pick; leaves {nama}/{link} intact. */
 function processSpintax(text: string): string {
@@ -159,9 +165,9 @@ const WA_STATUS_LABEL: Record<string, string> = {
 };
 
 const DELAY_META: Record<DelayProfile, { label: string; range: string }> = {
-  safe: { label: 'Safe', range: '4–8s random' },
-  balanced: { label: 'Balanced', range: '2.5–5s random' },
-  fast: { label: 'Fast', range: '2–3s' },
+  safe: { label: 'Safe', range: '60–120s random' },
+  balanced: { label: 'Balanced', range: '30–60s random' },
+  fast: { label: 'Fast', range: '15–30s' },
 };
 
 const TONE_OK: React.CSSProperties = { background: 'transparent', color: '#e9edef' };
@@ -185,8 +191,12 @@ export default function BroadcastPage() {
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
   const [isBulkEditing, setIsBulkEditing] = React.useState(false);
 
-  const [msgTemplate, setMsgTemplate] = React.useState(DEFAULT_TEMPLATE);
+  const [msgTemplates, setMsgTemplates] = React.useState<string[]>(DEFAULT_TEMPLATES);
+  const [selectedTemplateIdx, setSelectedTemplateIdx] = React.useState(0);
   const [showTemplateModal, setShowTemplateModal] = React.useState(false);
+  const [warmUpDays, setWarmUpDays] = React.useState(3);
+  const [currentWarmUpDay, setCurrentWarmUpDay] = React.useState(1);
+  const [enableRandomBreaks, setEnableRandomBreaks] = React.useState(true);
   const [mockupSampleName, setMockupSampleName] = React.useState('Andi Pratama, S.E.');
   const [mockupPreviewText, setMockupPreviewText] = React.useState('');
 
@@ -200,6 +210,7 @@ export default function BroadcastPage() {
 
   const [sendingMap, setSendingMap] = React.useState<Record<number, boolean>>({});
   const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const { config: batchConfig, state: batchState, saveConfig: saveBatchConfig, startBroadcast, recordSend, advanceAfterBreak, resetBroadcast, checkTimeWindow, isWithinTimeWindow } = useBatchBroadcast();
 
   const fetchData = React.useCallback(async (isSilent = false) => {
     if (!isSilent) setIsLoading(true);
@@ -221,11 +232,12 @@ export default function BroadcastPage() {
   React.useEffect(() => {
     const origin =
       typeof window !== 'undefined' ? window.location.origin : 'https://portal-pegawai.internal';
-    const spun = processSpintax(msgTemplate);
+    const template = msgTemplates[selectedTemplateIdx] || msgTemplates[0];
+    const spun = processSpintax(template);
     setMockupPreviewText(
       spun.replace(/\{nama\}/gi, mockupSampleName).replace(/\{link\}/gi, `${origin}/`),
     );
-  }, [msgTemplate, mockupSampleName]);
+  }, [msgTemplates, selectedTemplateIdx, mockupSampleName]);
 
   const handlePullFromPegawai = async () => {
     if (
@@ -450,7 +462,8 @@ export default function BroadcastPage() {
     setSendingMap((prev) => ({ ...prev, [row.id]: true }));
     try {
       const portalLink = `${window.location.origin}/`;
-      const message = processSpintax(msgTemplate)
+      const template = msgTemplates[selectedTemplateIdx] || msgTemplates[0];
+      const message = processSpintax(template)
         .replace(/\{nama\}/gi, row.label)
         .replace(/\{link\}/gi, portalLink);
 
@@ -481,6 +494,14 @@ export default function BroadcastPage() {
   };
 
   const handleBulkSendWA = async () => {
+    if (!isWithinTimeWindow(batchConfig)) {
+      setNotice({
+        tone: 'err',
+        text: `Broadcast hanya bisa dikirim jam ${batchConfig.timeWindowStart}:00–${batchConfig.timeWindowEnd}:00.`,
+      });
+      return;
+    }
+
     const targets = view.rows.filter((r) => r.phone && (r.waStatus === 'pending' || !r.waSentAt));
     if (targets.length === 0) {
       setNotice({
@@ -490,20 +511,46 @@ export default function BroadcastPage() {
       return;
     }
 
-    const confirmMsg = `Send a WhatsApp broadcast to ${targets.length} recipients with status Pending?\n\nAnti-Ban settings:\n- Delay profile: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 messages)' : 'Off'}`;
+    const warmUpMultiplier = currentWarmUpDay <= warmUpDays ? (currentWarmUpDay / warmUpDays) : 1;
+    const adjustedBatchSize = Math.max(10, Math.floor(batchConfig.batchSize * warmUpMultiplier));
+    const confirmMsg = `Send a WhatsApp broadcast to ${targets.length} recipients?\n\nBatch settings:\n- Batch size: ${adjustedBatchSize} per batch (warm-up day ${currentWarmUpDay}/${warmUpDays})\n- Break: ${batchConfig.batchBreakMinutes} min between batches\n- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Templates: ${msgTemplates.length} variations rotated\n- Random breaks: ${enableRandomBreaks ? 'On' : 'Off'}\n- Time window: ${batchConfig.timeWindowStart}:00–${batchConfig.timeWindowEnd}:00`;
 
     if (!window.confirm(confirmMsg)) return;
 
+    startBroadcast(targets.length);
     setIsBulkSending(true);
     let successCount = 0;
     const portalLink = `${window.location.origin}/`;
 
     for (let i = 0; i < targets.length; i++) {
+      if (!isWithinTimeWindow(batchConfig)) {
+        setBulkProgress(null);
+        setIsBulkSending(false);
+        setNotice({ tone: 'err', text: 'Broadcast stopped: outside allowed time window.' });
+        return;
+      }
+
       const row = targets[i];
-      setBulkProgress(`Mengirim ${i + 1} dari ${targets.length}: ${row.label} (${row.phone})…`);
+      const currentBatch = batchState;
+      if (currentBatch?.isOnBreak) {
+        const remainingMs = (currentBatch.breakEndTime ?? 0) - Date.now();
+        const remainingSec = Math.ceil(remainingMs / 1000);
+        for (let s = remainingSec; s > 0; s--) {
+          setCooldownCountdown(s);
+          setBulkProgress(`Batch break: lanjut dalam ${s}s…`);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        setCooldownCountdown(null);
+        advanceAfterBreak();
+      }
+
+      const templateIdx = i % msgTemplates.length;
+      const currentTemplate = msgTemplates[templateIdx] || msgTemplates[0];
+
+      setBulkProgress(`Mengirim ${i + 1}/${targets.length} (Batch ${(batchState?.currentBatch ?? 1)}/${batchState?.totalBatches ?? 1}): ${row.label} (${row.phone})…`);
 
       try {
-        const message = processSpintax(msgTemplate)
+        const message = processSpintax(currentTemplate)
           .replace(/\{nama\}/gi, row.label)
           .replace(/\{link\}/gi, portalLink);
 
@@ -521,26 +568,31 @@ export default function BroadcastPage() {
         // continue to next recipient
       }
 
+      recordSend();
+
       if (enableCooldown && (i + 1) % 20 === 0 && i + 1 < targets.length) {
-        for (let cd = 20; cd > 0; cd--) {
+        for (let cd = 60; cd > 0; cd--) {
           setCooldownCountdown(cd);
-          setBulkProgress(
-            `Anti-Spam Cooldown: resting ${cd}s before the next batch…`,
-          );
+          setBulkProgress(`Cooldown: resting ${cd}s…`);
           await new Promise((r) => setTimeout(r, 1000));
         }
         setCooldownCountdown(null);
+      } else if (enableRandomBreaks && Math.random() < 0.15 && i + 1 < targets.length) {
+        const randomBreakSec = Math.floor(Math.random() * 600) + 300;
+        setBulkProgress(`Random break: ${Math.floor(randomBreakSec / 60)} menit…`);
+        await new Promise((r) => setTimeout(r, randomBreakSec * 1000));
       } else {
-        let delayMs = 3000;
-        if (delayProfile === 'safe') delayMs = Math.floor(Math.random() * 4001) + 4000;
-        else if (delayProfile === 'fast') delayMs = Math.floor(Math.random() * 1001) + 2000;
-        else delayMs = Math.floor(Math.random() * 2501) + 2500;
+        let delayMs = 60000;
+        if (delayProfile === 'safe') delayMs = Math.floor(Math.random() * 60001) + 60000;
+        else if (delayProfile === 'fast') delayMs = Math.floor(Math.random() * 15001) + 15000;
+        else delayMs = Math.floor(Math.random() * 30001) + 30000;
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
 
     setIsBulkSending(false);
     setBulkProgress(null);
+    resetBroadcast();
     setNotice({
       tone: 'ok',
       text: `Broadcast finished. Sent to ${successCount} of ${targets.length} recipients.`,
@@ -620,7 +672,8 @@ export default function BroadcastPage() {
       setBulkProgress(`Mengirim ${i + 1} dari ${targets.length}: ${row.label} (${row.phone})…`);
 
       try {
-        const message = processSpintax(msgTemplate)
+        const template = msgTemplates[selectedTemplateIdx] || msgTemplates[0];
+      const message = processSpintax(template)
           .replace(/\{nama\}/gi, row.label)
           .replace(/\{link\}/gi, portalLink);
 
@@ -914,6 +967,128 @@ export default function BroadcastPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="batch-size">Batch size</Label>
+                <Input
+                  id="batch-size"
+                  type="number"
+                  min={10}
+                  max={500}
+                  value={batchConfig.batchSize}
+                  onChange={(e) => saveBatchConfig({ ...batchConfig, batchSize: Number(e.target.value) })}
+                  disabled={isBulkSending}
+                  className="tabular"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="batch-break">Break (min)</Label>
+                <Input
+                  id="batch-break"
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={batchConfig.batchBreakMinutes}
+                  onChange={(e) => saveBatchConfig({ ...batchConfig, batchBreakMinutes: Number(e.target.value) })}
+                  disabled={isBulkSending}
+                  className="tabular"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="time-start">Start hour</Label>
+                <Input
+                  id="time-start"
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={batchConfig.timeWindowStart}
+                  onChange={(e) => saveBatchConfig({ ...batchConfig, timeWindowStart: Number(e.target.value) })}
+                  disabled={isBulkSending}
+                  className="tabular"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="time-end">End hour</Label>
+                <Input
+                  id="time-end"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={batchConfig.timeWindowEnd}
+                  onChange={(e) => saveBatchConfig({ ...batchConfig, timeWindowEnd: Number(e.target.value) })}
+                  disabled={isBulkSending}
+                  className="tabular"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="warmup-days">Warm-up period (days)</Label>
+              <Input
+                id="warmup-days"
+                type="number"
+                min={1}
+                max={14}
+                value={warmUpDays}
+                onChange={(e) => setWarmUpDays(Number(e.target.value))}
+                disabled={isBulkSending}
+                className="tabular"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Gradually increase batch size over {warmUpDays} days. Day {currentWarmUpDay}/{warmUpDays}.
+              </p>
+            </div>
+
+            <button
+              id="random-break-toggle"
+              type="button"
+              role="switch"
+              aria-checked={enableRandomBreaks}
+              disabled={isBulkSending}
+              onClick={() => setEnableRandomBreaks((v) => !v)}
+              className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-transparent px-3 py-2 text-left transition-colors hover:bg-secondary/40 disabled:opacity-50"
+            >
+              <span className="min-w-0 text-sm text-foreground">
+                Random breaks (5–15 min)
+              </span>
+              <span
+                className={cn(
+                  'relative h-5 w-9 shrink-0 rounded-full transition-colors',
+                  enableRandomBreaks ? 'bg-accent' : 'bg-muted',
+                )}
+                aria-hidden="true"
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 size-4 rounded-full bg-white transition-transform',
+                    enableRandomBreaks ? 'translate-x-4' : 'translate-x-0',
+                  )}
+                />
+              </span>
+            </button>
+
+            {batchState && (
+              <div className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Batch</span>
+                  <span className="font-medium text-foreground tabular">{batchState.currentBatch}/{batchState.totalBatches}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sent</span>
+                  <span className="font-medium text-foreground tabular">{batchState.totalSent}</span>
+                </div>
+                {batchState.isOnBreak && (
+                  <div className="mt-1 flex items-center gap-1 text-amber-500">
+                    <PauseCircle className="size-3" aria-hidden="true" />
+                    <span>On break</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               id="cooldown-toggle"
@@ -1217,109 +1392,132 @@ export default function BroadcastPage() {
       <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
         <DialogContent className="glass-strong max-h-[92vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Message Template &amp; Preview</DialogTitle>
+            <DialogTitle className="base">Message Templates &amp; Preview</DialogTitle>
             <DialogDescription>
-              Tag: <code className="tabular">{'{nama}'}</code>,{' '}
-              <code className="tabular">{'{link}'}</code>, spintax{' '}
-              <code className="tabular">{'{opsi1|opsi2}'}</code>
+              {msgTemplates.length} template variations — rotated automatically per message. Tags: <code className="tabular">{'{nama}'}</code>, <code className="tabular">{'{link}'}</code>, spintax <code className="tabular">{'{opsi1|opsi2}'}</code>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="tpl-broadcast">Message Body</Label>
-              <textarea
-                id="tpl-broadcast"
-                rows={14}
-                value={msgTemplate}
-                onChange={(e) => setMsgTemplate(e.target.value)}
-                className="tabular w-full resize-vertical rounded-md border border-input bg-transparent px-3 py-2 text-xs leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              />
+          <div className="space-y-3">
+            <div className="flex gap-1.5 flex-wrap">
+              {msgTemplates.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedTemplateIdx(idx)}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    selectedTemplateIdx === idx
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  Template {idx + 1}
+                </button>
+              ))}
             </div>
 
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-accent">
-                  Preview Tampilan di Layar HP Target
-                </p>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => {
-                    const origin =
-                      typeof window !== 'undefined'
-                        ? window.location.origin
-                        : 'https://portal-pegawai.internal';
-                    setMockupPreviewText(
-                      processSpintax(msgTemplate)
-                        .replace(/\{nama\}/gi, mockupSampleName)
-                        .replace(/\{link\}/gi, `${origin}/`),
-                    );
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-broadcast">Message Body (Template {selectedTemplateIdx + 1})</Label>
+                <textarea
+                  id="tpl-broadcast"
+                  rows={14}
+                  value={msgTemplates[selectedTemplateIdx] || ''}
+                  onChange={(e) => {
+                    const next = [...msgTemplates];
+                    next[selectedTemplateIdx] = e.target.value;
+                    setMsgTemplates(next);
                   }}
-                >
-                  <AlertTriangle className="size-3" aria-hidden="true" />
-                  Acak Spintax Baru
-                </Button>
+                  className="tabular w-full resize-vertical rounded-md border border-input bg-transparent px-3 py-2 text-xs leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                />
               </div>
 
-              {/* Phone frame */}
-              <div
-                style={TONE_OK}
-                className="overflow-hidden rounded-[28px] border-[8px] border-[#1f2c34] shadow-[0_15px_35px_rgba(0,0,0,0.6)]"
-              >
-                <div
-                  className="flex items-center gap-2.5 border-b border-white/6 px-3.5 py-2.5"
-                  style={{ background: '#202c33' }}
-                >
-                  <div
-                    className="flex size-8 items-center justify-center rounded-full text-[13px] font-bold text-white"
-                    style={{ background: '#00a884' }}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-accent">
+                    Preview Tampilan di Layar HP Target
+                  </p>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => {
+                      const origin =
+                        typeof window !== 'undefined'
+                          ? window.location.origin
+                          : 'https://portal-pegawai.internal';
+                      const template = msgTemplates[selectedTemplateIdx] || msgTemplates[0];
+                      setMockupPreviewText(
+                        processSpintax(template)
+                          .replace(/\{nama\}/gi, mockupSampleName)
+                          .replace(/\{link\}/gi, `${origin}/`),
+                      );
+                    }}
                   >
-                    BSG
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-[#e9edef]">Bank SulutGo SDM</div>
-                    <div className="text-[10px] text-[#8696a0]">Akun Resmi / Online</div>
-                  </div>
+                    <AlertTriangle className="size-3" aria-hidden="true" />
+                    Acak Spintax Baru
+                  </Button>
                 </div>
 
+                {/* Phone frame */}
                 <div
-                  className="min-h-64 px-3 py-4"
-                  style={{
-                    background: '#0b141a',
-                    backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 0)',
-                    backgroundSize: '16px 16px',
-                  }}
+                  style={TONE_OK}
+                  className="overflow-hidden rounded-[28px] border-[8px] border-[#1f2c34] shadow-[0_15px_35px_rgba(0,0,0,0.6)]"
                 >
-                  <div className="mb-3 text-center">
-                    <span
-                      className="rounded-md px-2.5 py-0.5 text-[10px] text-[#8696a0]"
-                      style={{ background: '#182229' }}
-                    >
-                      HARI INI
-                    </span>
-                  </div>
                   <div
-                    className="max-w-[92%] rounded-lg px-3 py-2.5 text-xs leading-relaxed break-words whitespace-pre-wrap text-[#e9edef]"
-                    style={{ background: '#005c4b', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+                    className="flex items-center gap-2.5 border-b border-white/6 px-3.5 py-2.5"
+                    style={{ background: '#202c33' }}
                   >
-                    {mockupPreviewText}
-                    <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-[#8696a0]">
-                      <span>09:15</span>
-                      <span style={{ color: '#53bdeb' }}>✓✓</span>
+                    <div
+                      className="flex size-8 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                      style={{ background: '#00a884' }}
+                    >
+                      BSG
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-[#e9edef]">Bank SulutGo SDM</div>
+                      <div className="text-[10px] text-[#8696a0]">Akun Resmi / Online</div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="min-h-64 px-3 py-4"
+                    style={{
+                      background: '#0b141a',
+                      backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 0)',
+                      backgroundSize: '16px 16px',
+                    }}
+                  >
+                    <div className="mb-3 text-center">
+                      <span
+                        className="rounded-md px-2.5 py-0.5 text-[10px] text-[#8696a0]"
+                        style={{ background: '#182229' }}
+                      >
+                        HARI INI
+                      </span>
+                    </div>
+                    <div
+                      className="max-w-[92%] rounded-lg px-3 py-2.5 text-xs leading-relaxed break-words whitespace-pre-wrap text-[#e9edef]"
+                      style={{ background: '#005c4b', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+                    >
+                      {mockupPreviewText}
+                      <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-[#8696a0]">
+                        <span>09:15</span>
+                        <span style={{ color: '#53bdeb' }}>✓✓</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>Sample Target Name:</span>
-                <Input
-                  value={mockupSampleName}
-                  onChange={(e) => setMockupSampleName(e.target.value)}
-                  className="h-7 max-w-48 text-xs"
-                  aria-label="Sample target name for the preview"
-                />
+                <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span>Sample Target Name:</span>
+                  <Input
+                    value={mockupSampleName}
+                    onChange={(e) => setMockupSampleName(e.target.value)}
+                    className="h-7 max-w-48 text-xs"
+                    aria-label="Sample target name for the preview"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1329,7 +1527,6 @@ export default function BroadcastPage() {
               Tutup
             </Button>
             <Button onClick={() => setShowTemplateModal(false)}>
-              <Plus aria-hidden="true" />
               Done
             </Button>
           </DialogFooter>

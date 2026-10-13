@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ClipboardList,
   Eye,
+  Mail,
   Megaphone,
   RefreshCw,
   Send,
@@ -46,6 +47,15 @@ interface CampaignStats {
   createdAt: string;
 }
 
+interface EmailCampaignStats {
+  id: number;
+  name: string;
+  status: string;
+  totalRecipients: number;
+  sentCount: number;
+  failCount: number;
+}
+
 interface PegawaiStats {
   total: number;
   submitted: number;
@@ -54,6 +64,7 @@ interface PegawaiStats {
 
 export default function DashboardPage() {
   const [campaigns, setCampaigns] = React.useState<CampaignStats[]>([]);
+  const [emailCampaigns, setEmailCampaigns] = React.useState<EmailCampaignStats[]>([]);
   const [pegawaiStats, setPegawaiStats] = React.useState<PegawaiStats>({
     total: 0,
     submitted: 0,
@@ -66,14 +77,20 @@ export default function DashboardPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [campaignsRes, pegawaiRes] = await Promise.all([
+      const [campaignsRes, emailCampaignsRes, pegawaiRes] = await Promise.all([
         fetch('/api/campaigns', { cache: 'no-store' }),
+        fetch('/api/email/campaigns', { cache: 'no-store' }),
         fetch('/api/recipients', { cache: 'no-store' }),
       ]);
 
       if (campaignsRes.ok) {
         const data = await campaignsRes.json();
         setCampaigns(data.campaigns ?? []);
+      }
+
+      if (emailCampaignsRes.ok) {
+        const data = await emailCampaignsRes.json();
+        setEmailCampaigns(data.campaigns ?? []);
       }
 
       if (pegawaiRes.ok) {
@@ -105,7 +122,13 @@ export default function DashboardPage() {
   const overallSubmitRate =
     pegawaiStats.total > 0 ? Math.round((pegawaiStats.submitted / pegawaiStats.total) * 100) : 0;
 
+  const emailTotalRecipients = emailCampaigns.reduce((sum, c) => sum + c.totalRecipients, 0);
+  const emailTotalSent = emailCampaigns.reduce((sum, c) => sum + c.sentCount, 0);
+  const emailTotalFailed = emailCampaigns.reduce((sum, c) => sum + c.failCount, 0);
+  const emailSuccessRate = emailTotalRecipients > 0 ? Math.round((emailTotalSent / emailTotalRecipients) * 100) : 0;
+
   const maxRecipients = Math.max(...campaigns.map((c) => c.totalRecipients), 1);
+  const maxEmailRecipients = Math.max(...emailCampaigns.map((c) => c.totalRecipients), 1);
 
   const campaignStatusOptions = React.useMemo(() => {
     const present = new Set(campaigns.map((c) => c.status));
@@ -146,11 +169,15 @@ export default function DashboardPage() {
   });
 
   const metrics = [
-    { label: 'Total Campaigns', value: campaigns.length, icon: ClipboardList, hint: 'All time' },
-    { label: 'Total Recipients', value: totalRecipients, icon: Users, hint: 'Across all campaigns' },
-    { label: 'Total Sent', value: totalSent, icon: Send, hint: 'Messages out of the gateway' },
-    { label: 'Total Read', value: totalRead, icon: Eye, hint: 'Confirmed read' },
-    { label: 'Read Rate', value: `${overallReadRate}%`, icon: TrendingUp, hint: `${totalRead} dari ${totalRecipients}` },
+    { label: 'WA Campaigns', value: campaigns.length, icon: ClipboardList, hint: 'WhatsApp' },
+    { label: 'Email Campaigns', value: emailCampaigns.length, icon: Mail, hint: 'Email' },
+    { label: 'Total Recipients', value: totalRecipients, icon: Users, hint: 'WhatsApp' },
+    { label: 'Email Recipients', value: emailTotalRecipients, icon: Mail, hint: 'Email' },
+    { label: 'Total Sent', value: totalSent, icon: Send, hint: 'WhatsApp messages' },
+    { label: 'Email Sent', value: emailTotalSent, icon: Mail, hint: 'Email messages' },
+    { label: 'Total Read', value: totalRead, icon: Eye, hint: 'WhatsApp' },
+    { label: 'Read Rate', value: `${overallReadRate}%`, icon: TrendingUp, hint: 'WhatsApp' },
+    { label: 'Email Success', value: `${emailSuccessRate}%`, icon: Mail, hint: 'Email' },
     { label: 'Submit Rate', value: `${overallSubmitRate}%`, icon: UserCheck, hint: `${pegawaiStats.submitted} submitted the form` },
   ];
 
@@ -193,8 +220,8 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
         <SectionCard
-          title="Campaign Comparison"
-          description="Recipients per campaign"
+          title="WhatsApp Campaign Comparison"
+          description="Recipients per WhatsApp campaign"
           actions={
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin/campaigns">
@@ -216,7 +243,7 @@ export default function DashboardPage() {
           ) : campaigns.length === 0 ? (
             <EmptyState
               icon={Megaphone}
-              title="No campaigns yet"
+              title="No WhatsApp campaigns yet"
               description="Create your first campaign to compare performance here."
               action={{ label: 'Create Campaign', href: '/admin/campaigns' }}
             />
@@ -251,6 +278,67 @@ export default function DashboardPage() {
           )}
         </SectionCard>
 
+        <SectionCard
+          title="Email Campaign Comparison"
+          description="Recipients per email campaign"
+          actions={
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/email/campaigns">
+                Kelola
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          }
+        >
+          {isLoading ? (
+            <div className="space-y-4" aria-busy="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-5 w-full" />
+                </div>
+              ))}
+            </div>
+          ) : emailCampaigns.length === 0 ? (
+            <EmptyState
+              icon={Mail}
+              title="No email campaigns yet"
+              description="Create your first email campaign to compare performance here."
+              action={{ label: 'Create Email Campaign', href: '/admin/email/campaigns' }}
+            />
+          ) : (
+            <ul className="space-y-3.5">
+              {emailCampaigns.map((c) => {
+                const width = (c.totalRecipients / maxEmailRecipients) * 100;
+                return (
+                  <li key={c.id}>
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                      <span className="truncate text-xs font-medium text-foreground">{c.name}</span>
+                      <span className="tabular shrink-0 text-[11px] text-muted-foreground">
+                        {c.sentCount}/{c.totalRecipients} sent
+                      </span>
+                    </div>
+                    <div
+                      className="h-5 w-full overflow-hidden rounded bg-background/60"
+                      role="img"
+                      aria-label={`${c.name}: ${c.totalRecipients} recipients`}
+                    >
+                      <div
+                        className="flex h-full min-w-fit items-center rounded bg-linear-to-r from-chart-3 to-chart-4 px-2 text-[11px] font-semibold text-white"
+                        style={{ width: `${width}%` }}
+                      >
+                        {c.totalRecipients}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
         <SectionCard title="Employee Response Rate" description="Employee form completion progress">
           {isLoading ? (
             <div className="flex items-center gap-6" aria-busy="true">

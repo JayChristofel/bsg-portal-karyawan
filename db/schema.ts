@@ -182,3 +182,19 @@ export const emailLogs = pgTable('email_logs', {
   detail: text('detail'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Broadcast Session State — batch progress tracking
+export const broadcastSessions = pgTable('broadcast_sessions', {
+  id: serial('id').primaryKey(),
+  channel: text('channel').notNull(), // 'whatsapp' | 'email'
+  totalTargets: integer('total_targets').notNull(),
+  totalSent: integer('total_sent').default(0),
+  batchSent: integer('batch_sent').default(0),
+  currentBatch: integer('current_batch').default(1),
+  totalBatches: integer('total_batches').default(1),
+  isOnBreak: text('is_on_break').default('false'),
+  breakEndTime: timestamp('break_end_time', { withTimezone: true }),
+  isOutsideTimeWindow: text('is_outside_time_window').default('false'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
