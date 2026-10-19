@@ -6,7 +6,7 @@ import {
 } from '@/lib/whatsapp';
 import { db } from '@/db';
 import { recipients, campaigns, messageTemplates, autoResumeRuns } from '@/db/schema';
-import { eq, and, or, isNull, isNotNull, inArray, sql, asc, type AnyColumn } from 'drizzle-orm';
+import { eq, and, or, isNull, isNotNull, inArray, lte, sql, asc, type AnyColumn } from 'drizzle-orm';
 import { tryStartRun, heartbeat, isCancelRequested } from '@/lib/auto-resume-control';
 import {
   claimRecipient,
@@ -130,6 +130,8 @@ export async function drainPendingQueue(opts: { requireConnected?: boolean } = {
               and(isNull(recipients.campaignId), hasText(recipients.message)),
               and(
                 inArray(campaigns.status, ['scheduled', 'sending']),
+                // A campaign scheduled for later must not go out just because the device reconnected.
+                or(isNull(campaigns.scheduledAt), lte(campaigns.scheduledAt, new Date())),
                 or(isNotNull(messageTemplates.id), hasText(recipients.message)),
               ),
             ),

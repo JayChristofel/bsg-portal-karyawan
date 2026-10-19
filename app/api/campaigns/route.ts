@@ -39,9 +39,10 @@ export async function GET(req: NextRequest) {
         createdBy: campaigns.createdBy,
         createdAt: campaigns.createdAt,
         updatedAt: campaigns.updatedAt,
-        totalRecipients: sql<number>`(SELECT COUNT(*) FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id})`,
-        sentCount: sql<number>`(SELECT COUNT(*) FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id} AND ${recipients.waStatus} != 'pending')`,
-        readCount: sql<number>`(SELECT COUNT(*) FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id} AND ${recipients.waStatus} = 'read')`,
+        totalRecipients: sql<number>`(SELECT COUNT(*)::int FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id})`,
+        sentCount: sql<number>`(SELECT COUNT(*)::int FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id} AND ${recipients.waStatus} IN ('sent','delivered','read'))`,
+        failedCount: sql<number>`(SELECT COUNT(*)::int FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id} AND ${recipients.waStatus} = 'failed')`,
+        readCount: sql<number>`(SELECT COUNT(*)::int FROM ${recipients} WHERE ${recipients.campaignId} = ${campaigns.id} AND ${recipients.waStatus} = 'read')`,
       })
       .from(campaigns)
       .leftJoin(messageTemplates, eq(campaigns.templateId, messageTemplates.id))

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
-import { emailCampaigns, emailTemplates, emailRecipients } from '@/db/schema';
+import { emailCampaigns, emailTemplates, emailRecipients, emailLogs } from '@/db/schema';
 import { eq, and, or, isNull, inArray, lt, sql } from 'drizzle-orm';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
@@ -133,6 +133,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               .update(emailRecipients)
               .set({ status: 'sent', messageId: result.messageId ?? null, sentAt: new Date() })
               .where(eq(emailRecipients.id, rec.id));
+            await db.insert(emailLogs).values({ campaignId, recipientId: rec.id, event: 'sent' });
           } else {
             failCount++;
             if (firstErrors.length < 3) firstErrors.push(result.error ?? 'unknown');
@@ -140,6 +141,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               .update(emailRecipients)
               .set({ status: 'failed' })
               .where(eq(emailRecipients.id, rec.id));
+            await db.insert(emailLogs).values({
+              campaignId,
+              recipientId: rec.id,
+              event: 'failed',
+              detail: (result.error ?? 'unknown').slice(0, 200),
+            });
           }
           await db
             .update(emailCampaigns)

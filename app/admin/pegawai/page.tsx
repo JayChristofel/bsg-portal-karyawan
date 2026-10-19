@@ -195,11 +195,11 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
                 icon={<Monitor className="size-3.5" />}
                 title="Device & Browser"
                 items={[
-                  { label: 'Device Type', value: row.device_type || 'Desktop' },
+                  { label: 'Device Type', value: row.device_type || '-' },
                   { label: 'Operating System', value: row.os || '-' },
                   { label: 'Browser', value: row.browser || '-' },
                   { label: 'Screen Resolution', value: row.screen_resolution || '-' },
-                  { label: 'Language / Locale', value: row.language || 'id-ID' },
+                  { label: 'Language / Locale', value: row.language || '-' },
                   { label: 'Connection Type', value: row.connection_type || '-' },
                 ]}
               />
@@ -210,8 +210,8 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
                 items={[
                   { label: 'IP Address', value: row.ip_address || '-', mono: true },
                   { label: 'ASN / ISP', value: row.asn_isp || '-' },
-                  { label: 'Approx. Location', value: row.approx_location || 'Indonesia' },
-                  { label: 'Referrer Asal', value: row.referrer || 'Direct' },
+                  { label: 'Approx. Location', value: row.approx_location || '-' },
+                  { label: 'Referrer Asal', value: row.referrer || '-' },
                 ]}
               />
 
@@ -680,7 +680,7 @@ export default function PegawaiPage() {
                           <span className="font-medium text-foreground">{row.os || 'OS'}</span>
                         </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {row.browser || '-'} · {row.device_type || 'Desktop'}
+                          {row.browser || '-'} · {row.device_type || '-'}
                         </div>
                       </TableCell>
 
@@ -688,7 +688,7 @@ export default function PegawaiPage() {
                         <div className="tabular text-xs text-chart-2">{row.ip_address || '-'}</div>
                         <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                           <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                          <span className="max-w-40 truncate">{row.approx_location || 'Indonesia'}</span>
+                          <span className="max-w-40 truncate">{row.approx_location || '-'}</span>
                         </div>
                       </TableCell>
 

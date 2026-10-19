@@ -207,6 +207,23 @@ const STATUS_META: Record<
     className: 'border-destructive/30 bg-destructive/10 text-destructive',
   },
 
+  bounced: {
+    label: 'Bounced',
+    icon: AlertCircle,
+    className: 'border-destructive/30 bg-destructive/10 text-destructive',
+  },
+  complained: {
+    label: 'Complained',
+    icon: AlertCircle,
+    className: 'border-destructive/30 bg-destructive/10 text-destructive',
+  },
+
+  cancelled: {
+    label: 'Cancelled',
+    icon: AlertCircle,
+    className: 'border-muted-foreground/30 bg-muted/40 text-muted-foreground',
+  },
+
   /* Campaign lifecycle */
   draft: {
     label: 'Draft',

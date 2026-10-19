@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
-import { emailRecipients } from '@/db/schema';
-import { and, eq, desc, sql } from 'drizzle-orm';
+import { emailRecipients, emailCampaigns } from '@/db/schema';
+import { and, eq, desc, sql, inArray, or, isNull } from 'drizzle-orm';
 import { readJsonObject, str, parseId } from '@/lib/validate';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
@@ -119,5 +119,65 @@ export async function DELETE(req: NextRequest) {
   } catch (error: unknown) {
     console.error('Email recipients DELETE error:', error);
     return NextResponse.json({ error: 'Could not delete the recipient' }, { status: 500 });
+  }
+}
+/**
+ * Assigns recipients to an email campaign, or takes them out (campaignId: null).
+ * Only rows that have not been sent are moved, and only into/out of a campaign that
+ * is not mid-send, so a campaign's history is never rewritten.
+ */
+export async function PATCH(req: NextRequest) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const body = await readJsonObject(req);
+    const rawIds = body?.ids;
+    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 5000) {
+      return NextResponse.json({ error: 'Select between 1 and 5000 recipients.' }, { status: 400 });
+    }
+    const ids = rawIds.map((v) => parseId(v));
+    if (ids.some((v) => v === null)) {
+      return NextResponse.json({ error: 'ids must be positive integers.' }, { status: 400 });
+    }
+    const target = body?.campaignId === null ? null : parseId(body?.campaignId);
+    if (body?.campaignId !== null && target === null) {
+      return NextResponse.json({ error: 'campaignId must be a campaign id or null.' }, { status: 400 });
+    }
+    const from = parseId(body?.fromCampaignId);
+
+    for (const cid of [target, from]) {
+      if (cid === null) continue;
+      const [c] = await db.select({ status: emailCampaigns.status }).from(emailCampaigns).where(eq(emailCampaigns.id, cid));
+      if (!c) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
+      if (c.status === 'sending') return NextResponse.json({ error: 'Campaign is sending.' }, { status: 409 });
+    }
+
+    const moved = await db
+      .update(emailRecipients)
+      .set({ campaignId: target })
+      .where(
+        and(
+          inArray(emailRecipients.id, ids as number[]),
+          or(isNull(emailRecipients.status), inArray(emailRecipients.status, ['pending', 'failed'])),
+          from === null ? undefined : eq(emailRecipients.campaignId, from),
+        ),
+      )
+      .returning({ id: emailRecipients.id });
+
+    await logAuditForRequest(
+      req,
+      actor,
+      target === null ? 'unassign_email_recipients' : 'assign_email_recipients',
+      target === null
+        ? `${moved.length} penerima email dikeluarkan dari kampanye #${from ?? '-'}`
+        : `Kampanye email #${target}: ${moved.length} penerima ditambahkan`,
+    );
+    return NextResponse.json({ success: true, count: moved.length });
+  } catch (error: unknown) {
+    console.error('Email recipients PATCH error:', error);
+    return NextResponse.json({ error: 'Could not update the recipients' }, { status: 500 });
   }
 }

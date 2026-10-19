@@ -42,9 +42,10 @@ export async function GET(req: NextRequest) {
         templateId: emailCampaigns.templateId,
         scheduledAt: emailCampaigns.scheduledAt,
         sentAt: emailCampaigns.sentAt,
-        totalRecipients: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id})`,
-        sentCount: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} IN ('sent','delivered'))`,
-        failCount: sql<number>`(SELECT COUNT(*) FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} IN ('failed','bounced','complained'))`,
+        totalRecipients: sql<number>`(SELECT COUNT(*)::int FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id})`,
+        sentCount: sql<number>`(SELECT COUNT(*)::int FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} IN ('sent','delivered'))`,
+        deliveredCount: sql<number>`(SELECT COUNT(*)::int FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} = 'delivered')`,
+        failCount: sql<number>`(SELECT COUNT(*)::int FROM ${emailRecipients} WHERE ${emailRecipients.campaignId} = ${emailCampaigns.id} AND ${emailRecipients.status} IN ('failed','bounced','complained'))`,
       })
       .from(emailCampaigns)
       .where(status ? eq(emailCampaigns.status, status) : undefined)

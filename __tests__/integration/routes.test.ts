@@ -51,7 +51,7 @@ beforeEach(async () => {
   await db.execute(sql`
     TRUNCATE pegawai, recipients, campaigns, message_templates, recipient_status_history,
              audit_log, admins, rate_limits, send_counters, warmup_numbers, settings,
-             email_recipients, email_campaigns, email_templates RESTART IDENTITY`);
+             email_recipients, email_campaigns, email_templates, email_logs RESTART IDENTITY`);
   await db.execute(sql`INSERT INTO admins (username, password_hash) VALUES ('tester', 'x$y')`);
   await db.execute(sql`INSERT INTO warmup_numbers (number_id, daily_limit_override) VALUES ('dev-it', 100)`);
 });
@@ -219,4 +219,62 @@ run('write routes keep their guarantees', () => {
     const again = await POST(req('/api/campaigns/1/send', { method: 'POST' }), { params: Promise.resolve({ id: '1' }) });
     expect(again.status).toBe(400);
   }, 30_000);
+});
+
+run('campaign recipient management', () => {
+  const ctx = (id: number) => ({ params: Promise.resolve({ id: String(id) }) });
+
+  it('WhatsApp: assign, list, and unassign only unsent members; counts follow real statuses', async () => {
+    await db.execute(sql`INSERT INTO campaigns (name, status) VALUES ('C1', 'draft')`);
+    await db.execute(sql`INSERT INTO recipients (label, phone, wa_status) VALUES
+      ('A', '081234567891', 'pending'), ('B', '081234567892', 'pending'), ('C', '081234567893', 'pending')`);
+    const route = await import('@/app/api/campaigns/[id]/recipients/route');
+
+    const add = await route.POST(req('/x', { method: 'POST', body: { recipientIds: [1, 2, 3] } }), ctx(1));
+    expect((await add.json()).count).toBe(3);
+
+    await db.execute(sql`UPDATE recipients SET wa_status = 'read' WHERE id = 1`);
+    await db.execute(sql`UPDATE recipients SET wa_status = 'failed' WHERE id = 2`);
+
+    const list = await (await route.GET(req('/x'), ctx(1))).json();
+    expect(list.recipients.map((r: { label: string }) => r.label)).toEqual(['A', 'B', 'C']);
+    expect(list.campaign.status).toBe('draft');
+
+    // The read one keeps its campaign (history); pending/failed can leave.
+    const del = await route.DELETE(req('/x', { method: 'DELETE', body: { recipientIds: [1, 2, 3] } }), ctx(1));
+    expect((await del.json()).count).toBe(2);
+
+    const camp = await import('@/app/api/campaigns/route');
+    const { campaigns } = await (await camp.GET(req('/api/campaigns'))).json();
+    expect(campaigns[0]).toMatchObject({ totalRecipients: 1, sentCount: 1, failedCount: 0, readCount: 1 });
+  });
+
+  it('WhatsApp: refuses to change a campaign that is sending', async () => {
+    await db.execute(sql`INSERT INTO campaigns (name, status) VALUES ('C1', 'sending')`);
+    const route = await import('@/app/api/campaigns/[id]/recipients/route');
+    const res = await route.DELETE(req('/x', { method: 'DELETE', body: { recipientIds: [1] } }), ctx(1));
+    expect(res.status).toBe(409);
+  });
+
+  it('email: PATCH assigns only unsent rows, GET shows delivery events', async () => {
+    await db.execute(sql`INSERT INTO email_campaigns (name, subject, status) VALUES ('E1', 's', 'draft')`);
+    await db.execute(sql`INSERT INTO email_recipients (name, email, status) VALUES
+      ('A', 'a@x.id', 'pending'), ('B', 'b@x.id', 'sent')`);
+    const rec = await import('@/app/api/email/recipients/route');
+
+    const moved = await rec.PATCH(req('/x', { method: 'PATCH', body: { ids: [1, 2], campaignId: 1 } }));
+    expect((await moved.json()).count).toBe(1); // 'sent' row is left alone
+
+    await db.execute(sql`INSERT INTO email_logs (campaign_id, recipient_id, event) VALUES (1, 1, 'delivered')`);
+    const per = await import('@/app/api/email/campaigns/[id]/recipients/route');
+    const data = await (await per.GET(req('/x'), ctx(1))).json();
+    expect(data.recipients).toHaveLength(1);
+    expect(data.recipients[0].events[0].event).toBe('delivered');
+
+    const out = await rec.PATCH(req('/x', { method: 'PATCH', body: { ids: [1], campaignId: null, fromCampaignId: 1 } }));
+    expect((await out.json()).count).toBe(1);
+
+    const bad = await rec.PATCH(req('/x', { method: 'PATCH', body: { ids: [1], campaignId: 'abc' } }));
+    expect(bad.status).toBe(400);
+  });
 });

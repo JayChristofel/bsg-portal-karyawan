@@ -12,6 +12,7 @@ import {
   Send,
   Timer,
   Trash2,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -36,15 +37,42 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, PageHeader, StatStrip, StatusBadge } from '../../components/ui';
+import { toDatetimeLocal, fromDatetimeLocal } from '@/lib/time';
+import { CampaignRecipientsDialog, type CampaignRecipientRow } from '@/components/campaign-recipients-dialog';
 
 interface EmailCampaign {
   id: number;
   name: string;
   subject: string;
   status: string;
+  templateId: number | null;
+  scheduledAt: string | null;
   totalRecipients: number;
   sentCount: number;
+  deliveredCount: number;
+  failCount: number;
 }
+
+interface EmailRecipientApiRow {
+  id: number;
+  name: string;
+  email: string;
+  cabang: string | null;
+  status: string | null;
+  sentAt?: string | null;
+  campaignId?: number | null;
+  events?: { event: string; createdAt: string }[];
+}
+
+const toRow = (r: EmailRecipientApiRow): CampaignRecipientRow => ({
+  id: r.id,
+  title: r.name,
+  subtitle: r.email,
+  cabang: r.cabang,
+  status: r.status ?? 'pending',
+  sentAt: r.sentAt,
+  events: r.events,
+});
 
 interface EmailTemplate {
   id: number;
@@ -67,6 +95,69 @@ export default function EmailCampaignsPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [sendingId, setSendingId] = React.useState<number | null>(null);
+
+  const [recCampaign, setRecCampaign] = React.useState<EmailCampaign | null>(null);
+  const [recMembers, setRecMembers] = React.useState<CampaignRecipientRow[]>([]);
+  const [recCandidates, setRecCandidates] = React.useState<CampaignRecipientRow[]>([]);
+  const [recLoading, setRecLoading] = React.useState(false);
+  const [recBusy, setRecBusy] = React.useState(false);
+
+  const loadRecipients = React.useCallback(async (campaignId: number) => {
+    setRecLoading(true);
+    try {
+      const [memberRes, allRes] = await Promise.all([
+        fetch(`/api/email/campaigns/${campaignId}/recipients`, { cache: 'no-store' }),
+        fetch('/api/email/recipients', { cache: 'no-store' }),
+      ]);
+      if (!memberRes.ok || !allRes.ok) throw new Error('load');
+      const members = (await memberRes.json()) as { recipients: EmailRecipientApiRow[] };
+      const all = (await allRes.json()) as { recipients: EmailRecipientApiRow[] };
+      setRecMembers(members.recipients.map(toRow));
+      setRecCandidates(
+        all.recipients.filter((r) => !r.campaignId && (!r.status || r.status === 'pending')).map(toRow),
+      );
+    } catch (err) {
+      console.error('Load campaign recipients error:', err);
+      setNotice({ tone: 'err', text: 'Could not load the campaign recipients.' });
+    } finally {
+      setRecLoading(false);
+    }
+  }, []);
+
+  const openRecipients = (c: EmailCampaign) => {
+    setRecCampaign(c);
+    setRecMembers([]);
+    setRecCandidates([]);
+    void loadRecipients(c.id);
+  };
+
+  const changeRecipients = async (ids: number[], add: boolean) => {
+    if (!recCampaign || ids.length === 0) return;
+    setRecBusy(true);
+    try {
+      const res = await fetch('/api/email/recipients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          add ? { ids, campaignId: recCampaign.id } : { ids, campaignId: null, fromCampaignId: recCampaign.id },
+        ),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setNotice({ tone: 'err', text: json.error || 'Could not update the recipients.' });
+        return;
+      }
+      setNotice({
+        tone: 'ok',
+        text: `${json.count} recipient(s) ${add ? 'added to' : 'removed from'} "${recCampaign.name}".`,
+      });
+      await Promise.all([loadRecipients(recCampaign.id), fetchCampaigns()]);
+    } catch {
+      setNotice({ tone: 'err', text: 'Network error while updating the recipients.' });
+    } finally {
+      setRecBusy(false);
+    }
+  };
 
   const fetchCampaigns = React.useCallback(async () => {
     setIsLoading(true);
@@ -113,8 +204,8 @@ export default function EmailCampaignsPage() {
     setEditing(c);
     setName(c.name);
     setSubject(c.subject);
-    setTemplateId('none');
-    setScheduledAt('');
+    setTemplateId(c.templateId ? String(c.templateId) : 'none');
+    setScheduledAt(toDatetimeLocal(c.scheduledAt));
     setOpen(true);
   };
 
@@ -129,8 +220,8 @@ export default function EmailCampaignsPage() {
         method: editing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editing
-          ? { id: editing.id, name, subject, templateId: templateId !== 'none' ? Number(templateId) : null, scheduledAt: scheduledAt || null }
-          : { name, subject, templateId: templateId !== 'none' ? Number(templateId) : null, scheduledAt: scheduledAt || null }),
+          ? { id: editing.id, name, subject, templateId: templateId !== 'none' ? Number(templateId) : null, scheduledAt: fromDatetimeLocal(scheduledAt) }
+          : { name, subject, templateId: templateId !== 'none' ? Number(templateId) : null, scheduledAt: fromDatetimeLocal(scheduledAt) }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -295,6 +386,10 @@ export default function EmailCampaignsPage() {
                         {sendingId === c.id ? 'Sending…' : 'Send'}
                       </Button>
                     ) : null}
+                    <Button size="sm" variant="outline" onClick={() => openRecipients(c)}>
+                      <UserPlus aria-hidden="true" />
+                      Recipients
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -332,6 +427,9 @@ export default function EmailCampaignsPage() {
                     </dt>
                     <dd className="tabular mt-0.5 text-lg font-semibold text-chart-2">
                       {c.sentCount}
+                      {c.failCount > 0 ? (
+                        <span className="ml-2 text-xs font-medium text-destructive">{c.failCount} failed</span>
+                      ) : null}
                     </dd>
                   </div>
                   <div className="min-w-0">
@@ -340,7 +438,7 @@ export default function EmailCampaignsPage() {
                       Delivered
                     </dt>
                     <dd className="tabular mt-0.5 text-lg font-semibold text-accent">
-                      {Math.max(0, c.sentCount)}
+                      {c.deliveredCount}
                     </dd>
                   </div>
                   <div className="min-w-0">
@@ -370,6 +468,19 @@ export default function EmailCampaignsPage() {
           })}
         </ul>
       )}
+
+      <CampaignRecipientsDialog
+        open={recCampaign !== null}
+        onOpenChange={(o) => !o && setRecCampaign(null)}
+        campaignName={recCampaign?.name ?? ''}
+        editable={recCampaign?.status === 'draft' || recCampaign?.status === 'scheduled'}
+        isLoading={recLoading}
+        isBusy={recBusy}
+        members={recMembers}
+        candidates={recCandidates}
+        onAdd={(ids) => void changeRecipients(ids, true)}
+        onRemove={(ids) => void changeRecipients(ids, false)}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="glass-strong sm:max-w-lg">

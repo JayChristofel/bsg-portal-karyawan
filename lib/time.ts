@@ -27,3 +27,23 @@ export function endOfDayAppTz(date: string): Date {
 export function formatAppDateTime(d: Date | string | number): string {
   return new Date(d).toLocaleString('id-ID', { timeZone: APP_TZ });
 }
+
+/** ISO instant -> value for <input type="datetime-local"> in the browser's own zone. */
+export function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * <input type="datetime-local"> value -> ISO instant. The browser knows the viewer's
+ * zone; the server (UTC on Vercel) does not, so a bare "2026-10-20T09:00" sent as-is
+ * would be read as 09:00 UTC.
+ */
+export function fromDatetimeLocal(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}

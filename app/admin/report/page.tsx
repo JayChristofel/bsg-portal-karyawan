@@ -56,6 +56,7 @@ interface CampaignReport {
   sentAt: string | null;
   totalRecipients: number;
   pending: number;
+  failed: number;
   sent: number;
   delivered: number;
   read: number;
@@ -75,6 +76,7 @@ interface ReportData {
     totalCampaigns: number;
     totalRecipients: number;
     pending: number;
+    failed: number;
     sent: number;
     delivered: number;
     read: number;
@@ -86,6 +88,7 @@ interface ReportData {
 
 const STATUS_COLOR: Record<string, string> = {
   pending: 'var(--color-chart-3)',
+  failed: 'var(--destructive)',
   sent: 'var(--color-chart-2)',
   delivered: 'var(--color-chart-4)',
   read: 'var(--color-chart-1)',
@@ -93,6 +96,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',
+  failed: 'Failed',
   sent: 'Sent',
   delivered: 'Delivered',
   read: 'Read',
@@ -337,7 +341,12 @@ export default function BroadcastReportPage() {
         items={[
           { label: 'Campaigns', value: summary?.totalCampaigns ?? 0, icon: ClipboardList },
           { label: 'Recipients', value: summary?.totalRecipients ?? 0, icon: Users },
-          { label: 'Sent', value: (summary?.sent ?? 0) + (summary?.delivered ?? 0), icon: Send },
+          {
+            label: 'Sent',
+            value: (summary?.sent ?? 0) + (summary?.delivered ?? 0) + (summary?.read ?? 0),
+            icon: Send,
+            hint: summary?.failed ? `${summary.failed} failed` : undefined,
+          },
           { label: 'Read', value: summary?.read ?? 0, icon: Eye },
           { label: 'Read Rate', value: `${readRate}%`, icon: TrendingUp },
           { label: 'Forms', value: summary?.submitted ?? 0, icon: UserCheck, hint: `${submitRate}% submit` },
@@ -382,7 +391,7 @@ export default function BroadcastReportPage() {
             <ul className="space-y-3.5">
               {campaigns.map((c) => {
                 const total = Math.max(c.totalRecipients, 1);
-                const segments = (['pending', 'sent', 'delivered', 'read'] as const)
+                const segments = (['pending', 'failed', 'sent', 'delivered', 'read'] as const)
                   .map((key) => ({ key, value: c[key] }))
                   .filter((s) => s.value > 0);
                 return (
@@ -396,7 +405,7 @@ export default function BroadcastReportPage() {
                     <div
                       className="flex h-5 w-full gap-0.5 overflow-hidden rounded bg-background/60"
                       role="img"
-                      aria-label={`${c.name}: ${c.pending} pending, ${c.sent} sent, ${c.delivered} delivered, ${c.read} read`}
+                      aria-label={`${c.name}: ${c.pending} pending, ${c.failed} failed, ${c.sent} sent, ${c.delivered} delivered, ${c.read} read`}
                     >
                       {segments.map((s) => (
                         <div
@@ -483,6 +492,7 @@ export default function BroadcastReportPage() {
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Pending</TableHead>
+                  <TableHead className="text-right">Failed</TableHead>
                   <TableHead className="text-right">Sent</TableHead>
                   <TableHead className="text-right">Delivered</TableHead>
                   <TableHead className="text-right">Read</TableHead>
@@ -498,6 +508,7 @@ export default function BroadcastReportPage() {
                     </TableCell>
                     <TableCell className="tabular text-right">{c.totalRecipients}</TableCell>
                     <TableCell className="tabular text-right text-muted-foreground">{c.pending}</TableCell>
+                    <TableCell className="tabular text-right text-destructive">{c.failed}</TableCell>
                     <TableCell className="tabular text-right text-chart-2">{c.sent}</TableCell>
                     <TableCell className="tabular text-right text-chart-4">{c.delivered}</TableCell>
                     <TableCell className="tabular text-right text-chart-1">{c.read}</TableCell>

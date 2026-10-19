@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
-import { emailRecipients, emailCampaigns } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { emailRecipients, emailCampaigns, emailLogs } from '@/db/schema';
+import { eq, desc, asc } from 'drizzle-orm';
 import { parseId } from '@/lib/validate';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,12 +30,37 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         email: emailRecipients.email,
         cabang: emailRecipients.cabang,
         status: emailRecipients.status,
+        sentAt: emailRecipients.sentAt,
       })
       .from(emailRecipients)
       .where(eq(emailRecipients.campaignId, campaignId))
       .orderBy(desc(emailRecipients.createdAt));
 
-    return NextResponse.json({ recipients, campaignName: campaign.name });
+    // Delivery events recorded by the provider webhook (delivered/opened/bounced...), per recipient.
+    const logs = await db
+      .select({
+        recipientId: emailLogs.recipientId,
+        event: emailLogs.event,
+        detail: emailLogs.detail,
+        createdAt: emailLogs.createdAt,
+      })
+      .from(emailLogs)
+      .where(eq(emailLogs.campaignId, campaignId))
+      .orderBy(asc(emailLogs.createdAt))
+      .limit(5000);
+    const events: Record<number, { event: string; detail: string | null; createdAt: Date }[]> = {};
+    for (const l of logs) {
+      if (l.recipientId === null) continue;
+      const list = events[l.recipientId] ?? [];
+      list.push({ event: l.event, detail: l.detail, createdAt: l.createdAt });
+      events[l.recipientId] = list;
+    }
+
+    return NextResponse.json({
+      recipients: recipients.map((r) => ({ ...r, events: events[r.id] ?? [] })),
+      campaign: { name: campaign.name, status: campaign.status },
+      campaignName: campaign.name,
+    });
   } catch (error: unknown) {
     console.error('Email campaign recipients GET error:', error);
     return NextResponse.json({ error: 'Could not load recipients' }, { status: 500 });

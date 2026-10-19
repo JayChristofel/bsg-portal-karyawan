@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Eye,
   Plus,
+  UserPlus,
   Rocket,
   Send,
   Timer,
@@ -36,6 +37,9 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, PageHeader, StatStrip, StatusBadge } from '../components/ui';
+import { toDatetimeLocal, fromDatetimeLocal } from '@/lib/time';
+import { CampaignRecipientsDialog, type CampaignRecipientRow } from '@/components/campaign-recipients-dialog';
+import { fetchAllRows } from '@/lib/fetch-all';
 
 interface Campaign {
   id: number;
@@ -49,8 +53,28 @@ interface Campaign {
   createdAt: string;
   totalRecipients: number;
   sentCount: number;
+  failedCount: number;
   readCount: number;
 }
+
+interface RecipientApiRow {
+  id: number;
+  label: string;
+  phone: string | null;
+  cabang: string | null;
+  waStatus: string | null;
+  waSentAt: string | null;
+  campaignId?: number | null;
+}
+
+const toRow = (r: RecipientApiRow): CampaignRecipientRow => ({
+  id: r.id,
+  title: r.label,
+  subtitle: r.phone,
+  cabang: r.cabang,
+  status: r.waStatus ?? 'pending',
+  sentAt: r.waSentAt,
+});
 
 interface Template {
   id: number;
@@ -71,6 +95,70 @@ export default function CampaignsPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [sendingId, setSendingId] = React.useState<number | null>(null);
+  const [editing, setEditing] = React.useState<Campaign | null>(null);
+
+  const [recCampaign, setRecCampaign] = React.useState<Campaign | null>(null);
+  const [recMembers, setRecMembers] = React.useState<CampaignRecipientRow[]>([]);
+  const [recCandidates, setRecCandidates] = React.useState<CampaignRecipientRow[]>([]);
+  const [recLoading, setRecLoading] = React.useState(false);
+  const [recBusy, setRecBusy] = React.useState(false);
+
+  const loadRecipients = React.useCallback(async (campaignId: number) => {
+    setRecLoading(true);
+    try {
+      const [res, all] = await Promise.all([
+        fetch(`/api/campaigns/${campaignId}/recipients`, { cache: 'no-store' }),
+        fetchAllRows<RecipientApiRow>('/api/recipients'),
+      ]);
+      if (!res.ok) throw new Error('members');
+      const data = (await res.json()) as { recipients: RecipientApiRow[] };
+      setRecMembers(data.recipients.map(toRow));
+      // Only contacts that can actually be messaged and are not in any campaign yet.
+      setRecCandidates(
+        all
+          .filter((r) => !r.campaignId && r.phone && (!r.waStatus || r.waStatus === 'pending'))
+          .map(toRow),
+      );
+    } catch (err) {
+      console.error('Load campaign recipients error:', err);
+      setNotice({ tone: 'err', text: 'Could not load the campaign recipients.' });
+    } finally {
+      setRecLoading(false);
+    }
+  }, []);
+
+  const openRecipients = (c: Campaign) => {
+    setRecCampaign(c);
+    setRecMembers([]);
+    setRecCandidates([]);
+    void loadRecipients(c.id);
+  };
+
+  const changeRecipients = async (method: 'POST' | 'DELETE', ids: number[]) => {
+    if (!recCampaign || ids.length === 0) return;
+    setRecBusy(true);
+    try {
+      const res = await fetch(`/api/campaigns/${recCampaign.id}/recipients`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientIds: ids }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setNotice({ tone: 'err', text: json.error || 'Could not update the recipients.' });
+        return;
+      }
+      setNotice({
+        tone: 'ok',
+        text: `${json.count} recipient(s) ${method === 'POST' ? 'added to' : 'removed from'} "${recCampaign.name}".`,
+      });
+      await Promise.all([loadRecipients(recCampaign.id), fetchCampaigns()]);
+    } catch {
+      setNotice({ tone: 'err', text: 'Network error while updating the recipients.' });
+    } finally {
+      setRecBusy(false);
+    }
+  };
 
   const fetchCampaigns = React.useCallback(async () => {
     setIsLoading(true);
@@ -104,6 +192,46 @@ export default function CampaignsPage() {
     void fetchTemplates();
   }, [fetchCampaigns, fetchTemplates]);
 
+  const openNew = () => {
+    setEditing(null);
+    setName('');
+    setTemplateId('none');
+    setScheduledAt('');
+    setOpen(true);
+  };
+
+  const openEdit = (c: Campaign) => {
+    setEditing(c);
+    setName(c.name);
+    setTemplateId(c.templateId ? String(c.templateId) : 'none');
+    setScheduledAt(toDatetimeLocal(c.scheduledAt));
+    setOpen(true);
+  };
+
+  const setStatus = async (c: Campaign, status: 'cancelled' | 'draft') => {
+    if (
+      status === 'cancelled' &&
+      !(await confirm({ title: `Cancel campaign "${c.name}"?`, description: 'A cancelled campaign cannot be sent until it is reopened.' }))
+    )
+      return;
+    try {
+      const res = await fetch('/api/campaigns', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, status }),
+      });
+      const data = await res.json();
+      setNotice(
+        res.ok
+          ? { tone: 'ok', text: `Campaign "${c.name}" ${status === 'cancelled' ? 'cancelled' : 'reopened as a draft'}.` }
+          : { tone: 'err', text: data.error || 'Could not change the campaign status.' },
+      );
+      if (res.ok) void fetchCampaigns();
+    } catch (err) {
+      setNotice({ tone: 'err', text: `Error: ${(err as Error).message}` });
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       setNotice({ tone: 'err', text: 'Campaign name is required.' });
@@ -112,17 +240,19 @@ export default function CampaignsPage() {
     setIsSaving(true);
     try {
       const res = await fetch('/api/campaigns', {
-        method: 'POST',
+        method: editing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(editing ? { id: editing.id } : {}),
           name,
           templateId: templateId !== 'none' ? Number(templateId) : null,
-          scheduledAt: scheduledAt || null,
+          scheduledAt: fromDatetimeLocal(scheduledAt),
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        setNotice({ tone: 'ok', text: `Campaign "${name}" was created.` });
+        setNotice({ tone: 'ok', text: `Campaign "${name}" was ${editing ? 'updated' : 'created'}.` });
+        setEditing(null);
         setOpen(false);
         setName('');
         setTemplateId('none');
@@ -193,7 +323,7 @@ export default function CampaignsPage() {
         title="Campaign Management"
         description="Create a broadcast campaign, pick a template, schedule the send, and track delivery status."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={() => openNew()}>
             <Plus aria-hidden="true" />
             New Campaign
           </Button>
@@ -245,7 +375,7 @@ export default function CampaignsPage() {
             icon={ClipboardList}
             title="No campaigns yet"
             description="Create your first campaign to start broadcasting to employees."
-            action={{ label: 'New Campaign', onClick: () => setOpen(true) }}
+            action={{ label: 'New Campaign', onClick: () => openNew() }}
           />
         </div>
       ) : (
@@ -306,6 +436,25 @@ export default function CampaignsPage() {
                         {sendingId === c.id ? 'Sending…' : 'Send'}
                       </Button>
                     ) : null}
+                    {canSend ? (
+                      <Button size="sm" variant="outline" onClick={() => openEdit(c)}>
+                        Edit
+                      </Button>
+                    ) : null}
+                    {canSend ? (
+                      <Button size="sm" variant="ghost" onClick={() => void setStatus(c, 'cancelled')}>
+                        Cancel
+                      </Button>
+                    ) : null}
+                    {c.status === 'cancelled' ? (
+                      <Button size="sm" variant="outline" onClick={() => void setStatus(c, 'draft')}>
+                        Reopen
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="outline" onClick={() => openRecipients(c)}>
+                      <UserPlus aria-hidden="true" />
+                      Recipients
+                    </Button>
                     <Button
                       size="icon-sm"
                       variant="ghost"
@@ -336,6 +485,9 @@ export default function CampaignsPage() {
                     </dt>
                     <dd className="tabular mt-0.5 text-lg font-semibold text-chart-2">
                       {c.sentCount}
+                      {c.failedCount > 0 ? (
+                        <span className="ml-2 text-xs font-medium text-destructive">{c.failedCount} failed</span>
+                      ) : null}
                     </dd>
                   </div>
                   <div className="min-w-0">
@@ -369,11 +521,24 @@ export default function CampaignsPage() {
         </ul>
       )}
 
+      <CampaignRecipientsDialog
+        open={recCampaign !== null}
+        onOpenChange={(o) => !o && setRecCampaign(null)}
+        campaignName={recCampaign?.name ?? ''}
+        editable={recCampaign?.status === 'draft' || recCampaign?.status === 'scheduled'}
+        isLoading={recLoading}
+        isBusy={recBusy}
+        members={recMembers}
+        candidates={recCandidates}
+        onAdd={(ids) => void changeRecipients('POST', ids)}
+        onRemove={(ids) => void changeRecipients('DELETE', ids)}
+      />
+
       {/* Create dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="glass-strong sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">New Campaign</DialogTitle>
+            <DialogTitle className="text-base">{editing ? 'Edit Campaign' : 'New Campaign'}</DialogTitle>
             <DialogDescription>
               Pick a message template and set a send schedule if needed.
             </DialogDescription>
