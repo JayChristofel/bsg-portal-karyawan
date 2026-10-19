@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
-import { readJsonObject, str } from '@/lib/validate';
+import { readJsonObject, str, parseId } from '@/lib/validate';
+import { db } from '@/db';
+import { emailRecipients } from '@/db/schema';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -27,19 +30,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'to must be a single valid email address.' }, { status: 400 });
     }
 
+    // Optional: when the send is on behalf of a stored recipient, claim it first so a
+    // double click / second tab / re-run cannot mail the same person twice, and record
+    // the outcome so the list reflects it.
+    const recipientId = body.recipientId == null ? null : parseId(body.recipientId);
+    if (body.recipientId != null && recipientId === null) {
+      return NextResponse.json({ error: 'Invalid recipientId.' }, { status: 400 });
+    }
+    if (recipientId !== null) {
+      const claimed = await db
+        .update(emailRecipients)
+        .set({ status: 'sending' })
+        .where(
+          and(
+            eq(emailRecipients.id, recipientId),
+            or(isNull(emailRecipients.status), inArray(emailRecipients.status, ['pending', 'failed'])),
+          ),
+        )
+        .returning({ id: emailRecipients.id });
+      if (claimed.length === 0) {
+        return NextResponse.json({ error: 'Recipient is not pending (already sent or in progress).' }, { status: 409 });
+      }
+    }
+
     const config = await import('@/lib/email').then((mod) => mod.getEmailConfig());
 
-    const result = await sendEmail({
-      to,
-      subject,
-      html,
-      text: text || '',
-      config: {
-        ...config,
-        fromEmail: config.fromEmail || 'no-reply@portal-pegawai.id',
-        fromName: config.fromName || 'Portal Pegawai',
-      },
-    });
+    let result;
+    try {
+      result = await sendEmail({
+        to,
+        subject,
+        html,
+        text: text || '',
+        config: {
+          ...config,
+          fromEmail: config.fromEmail || 'no-reply@portal-pegawai.id',
+          fromName: config.fromName || 'Portal Pegawai',
+        },
+      });
+    } catch (err) {
+      if (recipientId !== null) {
+        await db.update(emailRecipients).set({ status: 'failed' }).where(eq(emailRecipients.id, recipientId));
+      }
+      throw err;
+    }
+
+    if (recipientId !== null) {
+      await db
+        .update(emailRecipients)
+        .set({ status: 'sent', messageId: result.messageId ?? null, sentAt: new Date() })
+        .where(eq(emailRecipients.id, recipientId));
+    }
 
     return NextResponse.json({
       success: true,

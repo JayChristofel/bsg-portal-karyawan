@@ -156,7 +156,12 @@ export default function AuditPage() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  // Changing a filter fires overlapping requests (the page reset triggers another);
+  // only the newest one may update the screen.
+  const fetchSeqRef = React.useRef(0);
+
   const fetchLogs = React.useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -174,6 +179,7 @@ export default function AuditPage() {
       const res = await fetch(`/api/audit?${params.toString()}`, { cache: 'no-store' });
       if (!res.ok) return;
       const data: AuditResponse = await res.json();
+      if (seq !== fetchSeqRef.current) return;
       setLogs(data.logs ?? []);
       setTotal(data.total ?? 0);
       setTotalPages(data.totalPages ?? 1);
@@ -182,7 +188,7 @@ export default function AuditPage() {
     } catch (err) {
       console.error('Fetch audit logs error:', err);
     } finally {
-      setIsLoading(false);
+      if (seq === fetchSeqRef.current) setIsLoading(false);
     }
   }, [page, pageSize, search, actionFilter, adminFilter, range.from, range.to, sortKey, sortDir]);
 

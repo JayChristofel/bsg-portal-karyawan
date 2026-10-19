@@ -152,9 +152,12 @@ export default function EmailCampaignsPage() {
       const res = await fetch(`/api/email/campaigns/${id}/send`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
+        const left = Number(data.remaining ?? 0);
         setNotice({
-          tone: 'ok',
-          text: `Kampanye "${campaignName}" selesai: ${data.successCount} berhasil, ${data.failCount} gagal.`,
+          tone: data.failCount > 0 ? 'err' : 'ok',
+          text:
+            `Kampanye "${campaignName}": ${data.successCount} berhasil, ${data.failCount} gagal` +
+            (left > 0 ? `. ${left} penerima masih menunggu, tekan Kirim lagi untuk melanjutkan.` : '.'),
         });
         void fetchCampaigns();
       } else {

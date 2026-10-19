@@ -217,7 +217,27 @@ export default function BroadcastPage() {
 
   const [sendingMap, setSendingMap] = React.useState<Record<number, boolean>>({});
   const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const { config: batchConfig, state: batchState, saveConfig: saveBatchConfig, startBroadcast, recordSend, advanceAfterBreak, resetBroadcast, checkTimeWindow, isWithinTimeWindow } = useBatchBroadcast();
+  const { config: batchConfig, state: batchState, saveConfig: saveBatchConfig, startBroadcast, recordSend, advanceAfterBreak, resetBroadcast, checkTimeWindow, getState: getBatchState, isWithinTimeWindow } = useBatchBroadcast();
+
+  // The send loops run for minutes; this flag lets the operator stop them, and stops
+  // them for good when the page is left (they would otherwise keep sending unseen).
+  const stopRequestedRef = React.useRef(false);
+  React.useEffect(() => {
+    stopRequestedRef.current = false;
+    return () => {
+      stopRequestedRef.current = true;
+    };
+  }, []);
+
+  /** Sleeps up to `ms`, waking early once a stop is requested. Returns true if stopped. */
+  const sleepOrStop = React.useCallback(async (ms: number): Promise<boolean> => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (stopRequestedRef.current) return true;
+      await new Promise((r) => setTimeout(r, Math.min(500, Math.max(0, end - Date.now()))));
+    }
+    return stopRequestedRef.current;
+  }, []);
 
   const fetchData = React.useCallback(async (isSilent = false) => {
     if (!isSilent) setIsLoading(true);
@@ -375,6 +395,13 @@ export default function BroadcastPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const MAX_FILE_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_FILE_BYTES) {
+      setNotice({ tone: 'err', text: 'File terlalu besar (maksimal 5 MB).' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setImportFileName(file.name);
     const reader = new FileReader();
 
@@ -463,7 +490,17 @@ export default function BroadcastPage() {
       }
     };
 
-    reader.readAsBinaryString(file);
+    // Without these a failed read left the dialog state stuck with no message at all.
+    reader.onerror = () => {
+      setImportFileName(null);
+      setNotice({ tone: 'err', text: 'Could not read the file (it may be corrupted or unreadable).' });
+    };
+    reader.onabort = reader.onerror;
+
+    // CSV is text; XLSX is a zip and must be read as bytes. (readAsBinaryString, used
+    // before, returns a string, so the XLSX branch below could never succeed.)
+    if (/\.csv$/i.test(file.name)) reader.readAsText(file);
+    else reader.readAsArrayBuffer(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -604,12 +641,30 @@ const confirmMsg =
       return;
     }
 
+    stopRequestedRef.current = false;
     await startBroadcast(targets.length);
     setIsBulkSending(true);
     let successCount = 0;
+    let failCount = 0;
+    let consecutiveFailures = 0;
     const portalLink = `${window.location.origin}/`;
 
+    const finishStopped = (reason: string) => {
+      setBulkProgress(null);
+      setCooldownCountdown(null);
+      setIsBulkSending(false);
+      setNotice({
+        tone: 'err',
+        text: `${reason} ${successCount} dari ${targets.length} terkirim; sisanya tetap pending.`,
+      });
+      void fetchData();
+    };
+
     for (let i = 0; i < targets.length; i++) {
+      if (stopRequestedRef.current) {
+        finishStopped('Broadcast dihentikan.');
+        return;
+      }
       if (!isWithinTimeWindow(batchConfig)) {
         setBulkProgress(null);
         setIsBulkSending(false);
@@ -618,23 +673,27 @@ const confirmMsg =
       }
 
       const row = targets[i];
-      const currentBatch = batchState;
+      // Read the live batch state: `batchState` would be the value from when the loop began.
+      const currentBatch = getBatchState();
       if (currentBatch?.isOnBreak) {
         const remainingMs = (currentBatch.breakEndTime ?? 0) - Date.now();
         const remainingSec = Math.ceil(remainingMs / 1000);
         for (let s = remainingSec; s > 0; s--) {
           setCooldownCountdown(s);
           setBulkProgress(`Batch break: lanjut dalam ${s}s…`);
-          await new Promise((r) => setTimeout(r, 1000));
+          if (await sleepOrStop(1000)) {
+            finishStopped('Broadcast dihentikan.');
+            return;
+          }
         }
         setCooldownCountdown(null);
-        advanceAfterBreak();
+        await advanceAfterBreak();
       }
 
       const templateIdx = i % msgTemplates.length;
       const currentTemplate = msgTemplates[templateIdx] || msgTemplates[0];
 
-      setBulkProgress(`Mengirim ${i + 1}/${targets.length} (Batch ${(batchState?.currentBatch ?? 1)}/${batchState?.totalBatches ?? 1}): ${row.label} (${row.phone})…`);
+      setBulkProgress(`Mengirim ${i + 1}/${targets.length} (Batch ${getBatchState()?.currentBatch ?? 1}/${getBatchState()?.totalBatches ?? 1}): ${row.label} (${row.phone})…`);
 
       try {
         const message = processSpintax(currentTemplate)
@@ -665,41 +724,79 @@ const confirmMsg =
           return;
         }
 
-        if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
+        if (res.status === 409 || json.code === 'RECIPIENT_NOT_PENDING') {
+          // Another sender already took this recipient (auto-resume, another tab); not a failure.
+        } else if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
           successCount++;
+          consecutiveFailures = 0;
+        } else {
+          failCount++;
+          consecutiveFailures++;
         }
       } catch {
-        // continue to next recipient
+        failCount++;
+        consecutiveFailures++;
       }
 
-      await recordSend();
+      // Several refusals in a row mean the device/gateway is down; pushing on would
+      // only mark every remaining recipient as failed.
+      if (consecutiveFailures >= 3) {
+        setBulkProgress(null);
+        setIsBulkSending(false);
+        setNotice({
+          tone: 'err',
+          text:
+            `Broadcast dihentikan: ${consecutiveFailures} pengiriman gagal berturut-turut. ` +
+            `Periksa koneksi WhatsApp. ${successCount} terkirim, ${failCount} gagal.`,
+        });
+        await resetBroadcast();
+        void fetchData();
+        return;
+      }
+
+      try {
+        await recordSend();
+      } catch {
+        // Progress bookkeeping must never abort the run.
+      }
 
       if (enableCooldown && (i + 1) % 20 === 0 && i + 1 < targets.length) {
         for (let cd = 60; cd > 0; cd--) {
           setCooldownCountdown(cd);
           setBulkProgress(`Cooldown: resting ${cd}s…`);
-          await new Promise((r) => setTimeout(r, 1000));
+          if (await sleepOrStop(1000)) {
+            finishStopped('Broadcast dihentikan.');
+            return;
+          }
         }
         setCooldownCountdown(null);
       } else if (enableRandomBreaks && Math.random() < 0.15 && i + 1 < targets.length) {
         const randomBreakSec = Math.floor(Math.random() * 600) + 300;
         setBulkProgress(`Random break: ${Math.floor(randomBreakSec / 60)} menit…`);
-        await new Promise((r) => setTimeout(r, randomBreakSec * 1000));
+        if (await sleepOrStop(randomBreakSec * 1000)) {
+          finishStopped('Broadcast dihentikan.');
+          return;
+        }
       } else {
         let delayMs = 60000;
         if (delayProfile === 'safe') delayMs = Math.floor(Math.random() * 60001) + 60000;
         else if (delayProfile === 'fast') delayMs = Math.floor(Math.random() * 15001) + 15000;
         else delayMs = Math.floor(Math.random() * 30001) + 30000;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (await sleepOrStop(delayMs)) {
+          finishStopped('Broadcast dihentikan.');
+          return;
+        }
       }
     }
 
     setIsBulkSending(false);
     setBulkProgress(null);
-    resetBroadcast();
+    await resetBroadcast();
     setNotice({
-      tone: 'ok',
-      text: `Broadcast finished. Sent to ${successCount} of ${targets.length} recipients.`,
+      tone: failCount > 0 ? 'err' : 'ok',
+      text:
+        `Broadcast finished. Sent to ${successCount} of ${targets.length} recipients` +
+        (failCount > 0 ? `; ${failCount} gagal (status Failed, bisa dikirim ulang manual).` : '.'),
     });
     void fetchData();
   };
@@ -767,11 +864,29 @@ const confirmMsg =
 
     if (!window.confirm(confirmMsg)) return;
 
+    stopRequestedRef.current = false;
     setIsBulkSending(true);
     let successCount = 0;
+    let failCount = 0;
+    let consecutiveFailures = 0;
     const portalLink = `${window.location.origin}/`;
 
+    const finishEarly = (reason: string) => {
+      setBulkProgress(null);
+      setCooldownCountdown(null);
+      setIsBulkSending(false);
+      setNotice({
+        tone: 'err',
+        text: `${reason} ${successCount} dari ${targets.length} terkirim; sisanya tetap pending.`,
+      });
+      void fetchData();
+    };
+
     for (let i = 0; i < targets.length; i++) {
+      if (stopRequestedRef.current) {
+        finishEarly('Broadcast dihentikan.');
+        return;
+      }
       const row = targets[i];
       setBulkProgress(`Mengirim ${i + 1} dari ${targets.length}: ${row.label} (${row.phone})…`);
 
@@ -788,18 +903,39 @@ const confirmMsg =
         });
 
         const json = await res.json();
-        if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
+
+        if (res.status === 429 || json.code === 'DAILY_QUOTA_EXCEEDED') {
+          finishEarly('Broadcast dihentikan: kuota harian habis.');
+          void fetchWarmUpState();
+          return;
+        }
+        if (res.status === 409 || json.code === 'RECIPIENT_NOT_PENDING') {
+          // Already taken by another sender; not a failure.
+        } else if (json.isSuccess || json.code === 'SUCCESS' || json.code === 'OK' || json.message_id) {
           successCount++;
+          consecutiveFailures = 0;
+        } else {
+          failCount++;
+          consecutiveFailures++;
         }
       } catch {
-        // continue
+        failCount++;
+        consecutiveFailures++;
+      }
+
+      if (consecutiveFailures >= 3) {
+        finishEarly(`Broadcast dihentikan: ${consecutiveFailures} pengiriman gagal berturut-turut. Periksa koneksi WhatsApp.`);
+        return;
       }
 
       if (enableCooldown && (i + 1) % 20 === 0 && i + 1 < targets.length) {
         for (let cd = 20; cd > 0; cd--) {
           setCooldownCountdown(cd);
           setBulkProgress(`Anti-Spam Cooldown: Beristirahat ${cd} detik…`);
-          await new Promise((r) => setTimeout(r, 1000));
+          if (await sleepOrStop(1000)) {
+            finishEarly('Broadcast dihentikan.');
+            return;
+          }
         }
         setCooldownCountdown(null);
       } else {
@@ -807,7 +943,10 @@ const confirmMsg =
         if (delayProfile === 'safe') delayMs = Math.floor(Math.random() * 4001) + 4000;
         else if (delayProfile === 'fast') delayMs = Math.floor(Math.random() * 1001) + 2000;
         else delayMs = Math.floor(Math.random() * 2501) + 2500;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (await sleepOrStop(delayMs)) {
+          finishEarly('Broadcast dihentikan.');
+          return;
+        }
       }
     }
 
@@ -815,8 +954,10 @@ const confirmMsg =
     setBulkProgress(null);
     setSelectedIds(new Set());
     setNotice({
-      tone: 'ok',
-      text: `Broadcast finished. Sent to ${successCount} of ${targets.length} selected recipients.`,
+      tone: failCount > 0 ? 'err' : 'ok',
+      text:
+        `Broadcast finished. Sent to ${successCount} of ${targets.length} selected recipients` +
+        (failCount > 0 ? `; ${failCount} gagal.` : '.'),
     });
     void fetchData();
   };
@@ -1065,6 +1206,18 @@ const confirmMsg =
         >
           <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
           <span className="flex-1 tabular">{bulkProgress}</span>
+          {isBulkSending ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                stopRequestedRef.current = true;
+              }}
+            >
+              Stop
+            </Button>
+          ) : null}
           {cooldownCountdown !== null ? (
             <Badge variant="outline" className="border-chart-3/30 bg-chart-3/10 text-[10px] text-chart-3">
               <PauseCircle className="size-3" aria-hidden="true" />

@@ -26,6 +26,7 @@ export default function PortalPage() {
   // Submit status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successTime, setSuccessTime] = useState('');
+  const [submitError, setSubmitError] = useState('');
 
   // Telemetry references
   const startTimeRef = useRef<number>(Date.now());
@@ -103,6 +104,7 @@ export default function PortalPage() {
       return;
     }
 
+    setSubmitError('');
     setIsSubmitting(true);
     const now = new Date();
     const timeFormatted = now.toLocaleDateString('id-ID', {
@@ -128,7 +130,7 @@ export default function PortalPage() {
     }
 
     try {
-      await fetch('/api/submit', {
+      const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -147,13 +149,26 @@ export default function PortalPage() {
           event: 'submit',
         }),
       });
-    } catch (err) {
-      console.warn('Submit notice:', err);
-    } finally {
-      setIsSubmitting(false);
+
+      // Only a stored record counts as success. Showing "berhasil" for a 429 or a
+      // network failure would leave the employee believing their data was recorded.
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setSubmitError(
+          res.status === 429
+            ? 'Terlalu banyak percobaan. Mohon tunggu sebentar lalu coba lagi.'
+            : data?.error || 'Data belum tersimpan. Silakan coba lagi.',
+        );
+        return;
+      }
+
       setSuccessTime(`Tercatat pada: ${timeFormatted}`);
       setCurrentView('success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setSubmitError('Tidak dapat terhubung ke server. Periksa koneksi Anda lalu coba lagi.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -360,6 +375,12 @@ export default function PortalPage() {
                 </div>
                 {errors.cabang && <div className="mt-1.5 block text-[12px] text-portal-error">Kantor Cabang wajib dipilih.</div>}
               </div>
+
+              {submitError && (
+                <div role="alert" className="mb-3 rounded-[4px] border border-portal-error bg-portal-bg-error px-3 py-2 text-[13px] text-portal-error">
+                  {submitError}
+                </div>
+              )}
 
               <button type="submit" className="w-full cursor-pointer rounded-[6px] border-none bg-portal-primary py-[13px] text-[15px] font-semibold text-white shadow-[0_2px_6px_rgba(0,120,212,0.3)] transition-[background,box-shadow,transform] duration-200 hover:bg-portal-primary-hover hover:shadow-[0_4px_12px_rgba(0,120,212,0.4)] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-[#c8c6c4] lg:py-3.5 lg:text-[16px]" disabled={isSubmitting}>
                 {isSubmitting ? 'Menyimpan Data...' : 'Kirim'}
