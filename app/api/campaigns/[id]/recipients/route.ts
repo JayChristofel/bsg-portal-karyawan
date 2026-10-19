@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
 
     return NextResponse.json({ success: true, count: moved.length });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Campaign recipients POST error:', error);
     return NextResponse.json({ error: 'Could not add recipients to the campaign' }, { status: 500 });
   }

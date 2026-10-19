@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
 import { readJsonObject, str, parseId } from '@/lib/validate';
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     const config = await import('@/lib/email').then((mod) => mod.getEmailConfig());
 
-    let result;
+    let result: Awaited<ReturnType<typeof sendEmail>>;
     try {
       result = await sendEmail({
         to,
@@ -87,11 +88,11 @@ export async function POST(req: NextRequest) {
       messageId: result.messageId,
       response: result.response,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email send error:', error);
     // Admin-only endpoint used to test SMTP settings, so the transport's reason is
     // shown (truncated) -- without it a bad host/password is impossible to diagnose.
-    const reason = String(error?.message ?? '').replace(/\s+/g, ' ').slice(0, 200);
+    const reason = String(asNetError(error).message ?? '').replace(/\s+/g, ' ').slice(0, 200);
     return NextResponse.json({ error: `Could not send email${reason ? `: ${reason}` : ''}` }, { status: 500 });
   }
 }

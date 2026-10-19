@@ -52,7 +52,6 @@ export async function getEmailConfig(): Promise<EmailConfig> {
   try {
     const { db } = await import('@/db');
     const { settings } = await import('@/db/schema');
-    const { sql } = await import('drizzle-orm');
     const rows = await db.select().from(settings);
     const map = new Map(rows.map((r) => [r.key, r.value] as [string, string]));
 
@@ -138,7 +137,7 @@ export async function createSmtpTransport(config: EmailConfig) {
   return nodemailer.createTransport({
     host,
     port: port || 587,
-    secure: secure === true ? true : false, // false means STARTTLS on port 587
+    secure: secure === true, // false means STARTTLS on port 587
     auth,
   });
 }

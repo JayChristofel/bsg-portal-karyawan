@@ -118,7 +118,7 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true, recipient: updated });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update recipient error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not update the record in the database.' },
@@ -162,7 +162,7 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Delete recipient error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not delete the record from the database.' },

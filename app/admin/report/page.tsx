@@ -213,7 +213,6 @@ export default function BroadcastReportPage() {
 
   const readRate = summary ? pct(summary.read, summary.totalRecipients) : 0;
   const submitRate = summary ? pct(summary.submitted, summary.totalRecipients) : 0;
-  const maxRecipients = Math.max(...campaigns.map((c) => c.totalRecipients), 1);
 
   const campaignStatusOptions = React.useMemo(() => {
     const present = new Set(campaigns.map((c) => c.status));

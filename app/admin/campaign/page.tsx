@@ -219,7 +219,7 @@ export default function BroadcastPage() {
 
   const [sendingMap, setSendingMap] = React.useState<Record<number, boolean>>({});
   const [notice, setNotice] = React.useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const { config: batchConfig, state: batchState, saveConfig: saveBatchConfig, startBroadcast, recordSend, advanceAfterBreak, resetBroadcast, checkTimeWindow, getState: getBatchState, isWithinTimeWindow } = useBatchBroadcast();
+  const { config: batchConfig, state: batchState, saveConfig: saveBatchConfig, startBroadcast, recordSend, advanceAfterBreak, resetBroadcast, getState: getBatchState, isWithinTimeWindow } = useBatchBroadcast();
 
   // The send loops run for minutes; this flag lets the operator stop them, and stops
   // them for good when the page is left (they would otherwise keep sending unseen).

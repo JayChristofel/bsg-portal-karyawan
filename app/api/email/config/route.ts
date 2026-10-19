@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       config: { ...config, password: '', apiKey: '', hasPassword: Boolean(password), hasApiKey: Boolean(apiKey) },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email config GET error:', error);
     return NextResponse.json({ error: 'Could not load email configuration' }, { status: 500 });
   }
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email config POST error:', error);
     return NextResponse.json({ error: 'Could not save email configuration' }, { status: 500 });
   }

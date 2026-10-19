@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       .orderBy(desc(emailRecipients.createdAt));
 
     return NextResponse.json({ recipients: rows });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email recipients GET error:', error);
     return NextResponse.json({ error: 'Could not load recipients' }, { status: 500 });
   }
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     await logAuditForRequest(req, actor ?? 'unknown', 'create_email_recipient', `Penerima email #${recipient.id} ditambahkan`);
 
     return NextResponse.json({ recipient });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email recipients POST error:', error);
     return NextResponse.json({ error: 'Could not create the recipient' }, { status: 500 });
   }
@@ -116,7 +116,7 @@ export async function DELETE(req: NextRequest) {
     await logAuditForRequest(req, actor ?? 'unknown', 'delete_email_recipient', `Penerima email #${id} dihapus`);
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email recipients DELETE error:', error);
     return NextResponse.json({ error: 'Could not delete the recipient' }, { status: 500 });
   }

@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
         'X-Content-Type-Options': 'nosniff',
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Export error:', error);
     return NextResponse.json({ error: 'Could not export the data' }, { status: 500 });
   }

@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
         'X-Content-Type-Options': 'nosniff',
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Export CSV error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not export CSV.' },

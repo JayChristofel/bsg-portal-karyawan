@@ -124,7 +124,6 @@ export default function DashboardPage() {
 
   const emailTotalRecipients = emailCampaigns.reduce((sum, c) => sum + c.totalRecipients, 0);
   const emailTotalSent = emailCampaigns.reduce((sum, c) => sum + c.sentCount, 0);
-  const emailTotalFailed = emailCampaigns.reduce((sum, c) => sum + c.failCount, 0);
   const emailSuccessRate = emailTotalRecipients > 0 ? Math.round((emailTotalSent / emailTotalRecipients) * 100) : 0;
 
   const maxRecipients = Math.max(...campaigns.map((c) => c.totalRecipients), 1);

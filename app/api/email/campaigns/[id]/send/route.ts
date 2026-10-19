@@ -200,7 +200,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       remaining: counts.remaining,
       ...(failCount > 0 ? { sampleErrors: firstErrors } : {}),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email campaign send error:', error);
     // Do not strand the campaign (or its claimed rows) on 'sending'.
     await db

@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
         createdAt: l.createdAt ? new Date(l.createdAt).toLocaleString('id-ID') : '-',
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Fetch webhook info error:', error);
     return NextResponse.json({ error: 'Could not load the webhook configuration' }, { status: 500 });
   }
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update webhook error:', error);
     return NextResponse.json({ error: 'Could not update the webhook in GOWA' }, { status: 500 });
   }

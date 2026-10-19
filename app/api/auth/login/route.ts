@@ -15,7 +15,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function POST(req: NextRequest) {
   const clientIp = getClientIp(req);
 
-  let body: any;
+  let body: Record<string, unknown> | null;
   try {
     body = await req.json();
   } catch {
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Login error:', error);
     return NextResponse.json(
       { success: false, error: 'A server error occurred while processing the login.' },

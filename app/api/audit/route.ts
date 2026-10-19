@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
       destructive,
       facets: { admins: facets.admins, actions: facets.actions },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Audit GET error:', error);
     return NextResponse.json({ error: 'Could not load the audit log' }, { status: 500 });
   }

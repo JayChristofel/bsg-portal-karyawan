@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true, message: 'Data recorded' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Submit error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not save the record to the database.' },

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { asNetError } from '@/lib/utils';
 import { gatewayFetch, gatewayTlsMode } from './gowa-tls';
 import { isPrivateHostname, readHostAllowlist } from './net-guard';
 import { rowsOf } from './db-util';
@@ -214,8 +215,8 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
       redirect: 'manual',
       signal: options.signal ?? AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });
-  } catch (err: any) {
-    console.error('GOWA FETCH ERROR:', err?.message, '| cause:', err?.cause?.code, err?.cause?.message);
+  } catch (err: unknown) {
+    console.error('GOWA FETCH ERROR:', asNetError(err).message, '| cause:', asNetError(err).cause?.code, asNetError(err).cause?.message);
     throw err;
   }
 
@@ -273,8 +274,8 @@ export async function requestQr(config?: GowaConfig): Promise<QrResult> {
   let raw: { code?: string; message?: string; status?: number; results?: { qr_link?: string; qr_url?: string; qr_duration?: number } };
   try {
     raw = await getQRCode(cfg);
-  } catch (err: any) {
-    const cause = err?.cause?.code || '';
+  } catch (err: unknown) {
+    const cause = asNetError(err).cause?.code || '';
     const tls = cause.includes('CERT') || cause.includes('SELF_SIGNED') || cause.includes('UNABLE_TO_VERIFY');
     const mode = gatewayTlsMode();
     return {
@@ -287,7 +288,7 @@ export async function requestQr(config?: GowaConfig): Promise<QrResult> {
           (mode === 'system'
             ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
             : 'The configured CA did not match the certificate the gateway presented — it may have been rotated.')
-        : `Could not reach the gateway: ${err?.message ?? 'unknown network error'} (trust mode: ${mode})`,
+        : `Could not reach the gateway: ${asNetError(err).message ?? 'unknown network error'} (trust mode: ${mode})`,
     };
   }
 
@@ -340,7 +341,7 @@ export interface SendMessagePayload {
  * "123@g.us" and other junk never reach the gateway.
  */
 export function normalizeWaPhone(phone: string): string | null {
-  let normalized = phone.replace(/[\s\-\+\(\)]/g, '');
+  let normalized = phone.replace(/[\s\-+()]/g, '');
   if (normalized.startsWith('0')) {
     normalized = '62' + normalized.slice(1);
   } else if (normalized.startsWith('8') && normalized.length >= 9) {

@@ -94,7 +94,7 @@ describe('admin palette contrast', () => {
   const luminance = (color: string) => {
     const channel = (v: number) => {
       const s = v / 255;
-      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
     };
     const n = parseInt(color.slice(1), 16);
     return (

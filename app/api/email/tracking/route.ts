@@ -1,10 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const recipientId = searchParams.get('recipientId');
-  const campaignId = searchParams.get('campaignId');
-
+export function GET() {
   const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAh', 'base64');
 
   return new NextResponse(pixel, {

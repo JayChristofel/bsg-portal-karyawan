@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ session: null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Broadcast session GET error:', error);
     return NextResponse.json({ error: 'Could not load session' }, { status: 500 });
   }
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       .returning();
 
     return NextResponse.json({ session: created });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Broadcast session POST error:', error);
     return NextResponse.json({ error: 'Could not save session' }, { status: 500 });
   }
@@ -145,7 +145,7 @@ export async function DELETE(req: NextRequest) {
       .where(eq(broadcastSessions.channel, channel));
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Broadcast session DELETE error:', error);
     return NextResponse.json({ error: 'Could not reset session' }, { status: 500 });
   }

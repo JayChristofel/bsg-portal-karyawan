@@ -110,7 +110,6 @@ export function getAsnIsp(req: NextRequest | Request): string {
  * Parse User-Agent string to extract OS, Browser, and Device Type.
  */
 export function parseUserAgent(ua: string): { os: string; browser: string; deviceType: string } {
-  const lower = ua.toLowerCase();
 
   // 1. Device Type
   let deviceType = 'Desktop';

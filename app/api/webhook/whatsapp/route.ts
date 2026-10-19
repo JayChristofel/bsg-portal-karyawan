@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { db } from '@/db';
 import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
 import { and, inArray, isNull, or } from 'drizzle-orm';
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    let body: any = {};
+    let body: Record<string, any> = {};
     try {
       body = JSON.parse(rawBody);
     } catch {
@@ -116,9 +117,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ status: 'OK', message: 'Webhook received' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Do not leak internal error messages to an unauthenticated caller.
-    console.error('Error processing WhatsApp webhook:', error?.message);
+    console.error('Error processing WhatsApp webhook:', asNetError(error).message);
     // 5xx so GOWA retries; replying 200 here would silently drop the event.
     return NextResponse.json({ status: 'ERROR' }, { status: 500 });
   }

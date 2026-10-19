@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json({ latest: withStale[0] ?? null, history: withStale });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Auto-resume GET error:', error);
     return NextResponse.json({ error: 'Could not load auto-resume status' }, { status: 500 });
   }
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       success: stopped > 0,
       message: stopped > 0 ? 'Auto-resume akan berhenti.' : 'Tidak ada auto-resume yang sedang berjalan.',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Auto-resume POST error:', error);
     return NextResponse.json({ error: 'Could not stop auto-resume' }, { status: 500 });
   }

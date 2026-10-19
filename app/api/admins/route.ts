@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     );
 
     return NextResponse.json({ admins: rows });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Admins GET error:', error);
     return NextResponse.json({ error: 'Could not load the admin list' }, { status: 500 });
   }
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ admin: { id: admin.id, username: admin.username, createdAt: admin.createdAt } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Admins POST error:', error);
     return NextResponse.json({ error: 'Could not create the admin' }, { status: 500 });
   }
@@ -135,7 +135,7 @@ export async function DELETE(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Admins DELETE error:', error);
     return NextResponse.json({ error: 'Could not delete the admin' }, { status: 500 });
   }
@@ -169,7 +169,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Admin not found.' }, { status: 404 });
     }
 
-    let updated;
+    let updated: typeof admins.$inferSelect;
     try {
       [updated] = await db
         .update(admins)
@@ -191,7 +191,7 @@ export async function PUT(req: NextRequest) {
     );
 
     return NextResponse.json({ admin: { id: updated.id, username: updated.username, createdAt: updated.createdAt } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Admins PUT error:', error);
     return NextResponse.json({ error: 'Could not update the admin' }, { status: 500 });
   }

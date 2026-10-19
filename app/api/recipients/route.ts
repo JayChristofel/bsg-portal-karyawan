@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ rows: rowsWithSubmission, nextBefore });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Fetch recipients error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not read data from the database.' },
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
 
     // Same guarded path as every other sender, so the warm-up quota applies.
     const config = await getGowaConfig();
-    let guarded;
+    let guarded: Awaited<ReturnType<typeof sendMessageGuarded>>;
     try {
       guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
     } catch (err) {
@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const waResult = guarded.result as any;
+    const waResult = guarded.result;
     const { messageId, isSuccess: sent } = parseSendResult(waResult);
 
     if (sent) await markRecipientSent(newRecipient.id, messageId);
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest) {
       recipient: { ...newRecipient, waStatus: sent ? 'sent' : 'failed' },
       waResult,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create recipient/send error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not process the request.' },

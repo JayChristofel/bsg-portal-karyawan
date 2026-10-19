@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
       })),
       timeline,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Report broadcast error:', error);
     return NextResponse.json({ error: 'Could not load the broadcast report' }, { status: 500 });
   }

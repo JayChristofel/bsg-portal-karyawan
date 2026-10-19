@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .orderBy(desc(emailRecipients.createdAt));
 
     return NextResponse.json({ recipients, campaignName: campaign.name });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email campaign recipients GET error:', error);
     return NextResponse.json({ error: 'Could not load recipients' }, { status: 500 });
   }

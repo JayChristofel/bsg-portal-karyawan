@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const config = await getGowaConfig();
     const state = await getWarmUpState(config.deviceId);
     return NextResponse.json({ state });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Warm-up GET error:', error);
     return NextResponse.json({ error: 'Could not load warm-up state' }, { status: 500 });
   }

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ templates });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Templates GET error:', error);
     return NextResponse.json({ error: 'Could not load templates' }, { status: 500 });
   }
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ template });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Templates POST error:', error);
     return NextResponse.json({ error: 'Could not save the template' }, { status: 500 });
   }
@@ -116,7 +116,7 @@ export async function PUT(req: NextRequest) {
     );
 
     return NextResponse.json({ template });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Templates PUT error:', error);
     return NextResponse.json({ error: 'Could not update the template' }, { status: 500 });
   }
@@ -152,7 +152,7 @@ export async function DELETE(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Templates DELETE error:', error);
     return NextResponse.json({ error: 'Could not delete the template' }, { status: 500 });
   }

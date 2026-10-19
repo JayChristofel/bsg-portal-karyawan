@@ -57,7 +57,7 @@ export async function GET(
     );
 
     return NextResponse.json({ admin, activity: rows });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Admin activity GET error:', error);
     return NextResponse.json({ error: 'Could not load the admin activity' }, { status: 500 });
   }

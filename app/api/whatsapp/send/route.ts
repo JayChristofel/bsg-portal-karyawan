@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import {
   sendMessageGuarded,
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     const config = await getGowaConfig();
-    let guarded;
+    let guarded: Awaited<ReturnType<typeof sendMessageGuarded>>;
     try {
       guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
     } catch (err) {
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result: any = guarded.result;
+    const result = guarded.result as Record<string, unknown>;
     const { messageId, isSuccess } = parseSendResult(result);
 
     if (recipientId !== null) {
@@ -122,8 +123,8 @@ export async function POST(req: NextRequest) {
       message_id: messageId,
       isSuccess,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('WA action error:', err);
-    return NextResponse.json({ code: 'ERROR', message: err?.message || 'Could not send via the WhatsApp Gateway.' }, { status: 500 });
+    return NextResponse.json({ code: 'ERROR', message: asNetError(err).message || 'Could not send via the WhatsApp Gateway.' }, { status: 500 });
   }
 }

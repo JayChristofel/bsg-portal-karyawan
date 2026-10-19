@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         connection_type: r.connectionType || '-',
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Fetch employee records error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not read data from the database.' },
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Manual insert error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not add the record to the database.' },

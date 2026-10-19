@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { emailLogs, emailRecipients } from '@/db/schema';
@@ -100,9 +101,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 5xx so the provider retries instead of the event being lost.
-    console.error('Email webhook error:', error?.message);
+    console.error('Email webhook error:', asNetError(error).message);
     return NextResponse.json({ error: 'Could not process webhook' }, { status: 500 });
   }
 }
@@ -125,7 +126,7 @@ export async function GET(req: NextRequest) {
       .limit(50);
 
     return NextResponse.json({ logs });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email logs GET error:', error);
     return NextResponse.json({ error: 'Could not load logs' }, { status: 500 });
   }

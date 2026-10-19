@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ campaigns: rows });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email campaigns GET error:', error);
     return NextResponse.json({ error: 'Could not load campaigns' }, { status: 500 });
   }
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     await logAuditForRequest(req, username ?? 'unknown', 'create_email_campaign', `Kampanye "${name}" (ID: ${campaign.id})`);
 
     return NextResponse.json({ campaign });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email campaigns POST error:', error);
     return NextResponse.json({ error: 'Could not create the campaign' }, { status: 500 });
   }
@@ -164,7 +164,7 @@ export async function PUT(req: NextRequest) {
     await logAuditForRequest(req, username ?? 'unknown', 'update_email_campaign', `Kampanye "${campaign.name}" (ID: ${id})`);
 
     return NextResponse.json({ campaign });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email campaigns PUT error:', error);
     return NextResponse.json({ error: 'Could not update the campaign' }, { status: 500 });
   }
@@ -200,7 +200,7 @@ export async function DELETE(req: NextRequest) {
     await logAuditForRequest(req, username ?? 'unknown', 'delete_email_campaign', `Kampanye "${deleted.name}" (ID: ${id})`);
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email campaigns DELETE error:', error);
     return NextResponse.json({ error: 'Could not delete the campaign' }, { status: 500 });
   }

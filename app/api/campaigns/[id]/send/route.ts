@@ -186,7 +186,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       sentToday: warmUp.sentToday,
       dailyLimit: warmUp.dailyLimit,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Campaign send error:', error);
     // Release the campaign so a crashed request does not leave it stuck on 'sending'.
     await db

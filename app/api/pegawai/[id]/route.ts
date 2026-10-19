@@ -89,7 +89,7 @@ export async function PUT(
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not update the record.' },
@@ -133,7 +133,7 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Delete error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not delete the record.' },
