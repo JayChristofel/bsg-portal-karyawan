@@ -3,12 +3,13 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
   boolean,
 } from 'drizzle-orm/pg-core';
-import { encrypt, decrypt } from '@/lib/crypto';
+import { encrypt, safeDecrypt, DECRYPT_FAILED } from '@/lib/crypto';
 
 // Custom encrypted type: Automatically encrypts on INSERT/UPDATE, decrypts on SELECT
 export const encryptedText = customType<{ data: string; driverData: string }>({
@@ -17,11 +18,15 @@ export const encryptedText = customType<{ data: string; driverData: string }>({
   },
   toDriver(value: string) {
     if (!value) return '';
+    // A placeholder from a failed read must never overwrite the real ciphertext.
+    if (value === DECRYPT_FAILED) {
+      throw new Error('Refusing to persist the decrypt-failure placeholder.');
+    }
     return encrypt(value);
   },
   fromDriver(value: string) {
     if (!value) return '';
-    return decrypt(value);
+    return safeDecrypt(value);
   },
 });
 
@@ -203,6 +208,8 @@ export const autoResumeRuns = pgTable('auto_resume_runs', {
   trigger: text('trigger').default('reconnect'),
   startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
+  // Bumped on every send; a 'running' row with an old heartbeat belongs to a dead worker.
+  lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true }).defaultNow().notNull(),
   messagesSent: integer('messages_sent').default(0),
   queuedRemaining: integer('queued_remaining').default(0),
   stopReason: text('stop_reason'), // quota | time_window | empty | device_error | cancelled
@@ -247,5 +254,5 @@ export const sendCounters = pgTable(
     sent: integer('sent').default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index('send_counters_number_day_idx').on(t.numberId, t.day)],
+  (t) => [primaryKey({ columns: [t.numberId, t.day] })],
 );

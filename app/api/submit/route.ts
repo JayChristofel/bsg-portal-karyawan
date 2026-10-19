@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const asnIsp = (body.asn_isp || getAsnIsp(req)).slice(0, 150);
 
     // Insert record with AES-256-GCM encryption on sensitive columns handled by customType
-    await db.insert(pegawai).values({
+    const [created] = await db.insert(pegawai).values({
       name,
       nip,
       jabatanSk,
@@ -83,12 +83,12 @@ export async function POST(req: NextRequest) {
     .returning({ id: pegawai.id });
 
     // The public form has no admin session, so the actor is the literal
-    // 'public'. The NIP is enough to correlate this entry with the employee
-    // record it produced.
-    void logAudit(
+    // 'public'. The record id correlates this entry with the employee row; the
+    // NIP itself stays out of the plaintext audit log.
+    await logAudit(
       PUBLIC_ACTOR,
       'public_submit',
-      `Form jabatan diisi — NIP: ${nip}, cabang: ${cabang}, event: ${event}`,
+      `Form jabatan diisi — ID: ${created?.id ?? '-'}, cabang: ${cabang}, event: ${event}`,
       getClientIp(req),
     );
 

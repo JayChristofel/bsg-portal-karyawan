@@ -1,40 +1,81 @@
+import { db } from '@/db';
+import { autoResumeRuns } from '@/db/schema';
+import { and, eq, gt, sql } from 'drizzle-orm';
+
 /**
- * Shared control channel for the auto-resume background drain.
+ * Control channel for the auto-resume drain, persisted in `auto_resume_runs`.
  *
- * The drain lives inside the WhatsApp send route module, which cannot be
- * imported by another route. Its cancel flag therefore has to live here so both
- * the drain and the admin API observe the same module instance.
- *
- * Scope: this is per-process. On a multi-instance deployment each instance has
- * its own flag, so "stop" only reaches the instance that is draining. The
- * persisted run row in `auto_resume_runs` remains the source of truth for
- * progress reporting.
+ * On Vercel every request may land on a different instance, so in-memory flags
+ * cannot coordinate "is a drain running" or "stop it". A run is 'running' while
+ * its worker keeps bumping `last_heartbeat_at`; a run whose heartbeat is older
+ * than HEARTBEAT_TTL_MS is considered dead and no longer blocks a new one.
+ * 'stopping' is the cancel request the worker polls for.
  */
 
-let cancelRequested = false;
-let inFlight = false;
+const HEARTBEAT_TTL_MS = 5 * 60_000;
 
-export function requestAutoResumeCancel(): void {
-  cancelRequested = true;
+function liveSince(): Date {
+  return new Date(Date.now() - HEARTBEAT_TTL_MS);
 }
 
-export function isCancelRequested(): boolean {
-  return cancelRequested;
+/** Atomically registers a run unless a live one exists. Returns the run id or null. */
+export async function tryStartRun(queued: number): Promise<number | null> {
+  const result = (await db.execute(sql`
+    INSERT INTO auto_resume_runs (status, messages_sent, queued_remaining, last_heartbeat_at)
+    SELECT 'running', 0, ${queued}, NOW()
+    WHERE NOT EXISTS (
+      SELECT 1 FROM auto_resume_runs
+       WHERE status IN ('running', 'stopping')
+         AND finished_at IS NULL
+         AND last_heartbeat_at > ${liveSince()}
+    )
+    RETURNING id
+  `)) as unknown as Array<{ id: number }> | { rows?: Array<{ id: number }> };
+  const rows = Array.isArray(result) ? result : (result.rows ?? []);
+  return rows[0]?.id ?? null;
 }
 
-export function clearAutoResumeCancel(): void {
-  cancelRequested = false;
+export async function heartbeat(runId: number, sent: number): Promise<void> {
+  await db
+    .update(autoResumeRuns)
+    .set({ lastHeartbeatAt: new Date(), messagesSent: sent })
+    .where(eq(autoResumeRuns.id, runId));
 }
 
-export function markAutoResumeStarted(): void {
-  inFlight = true;
-  cancelRequested = false;
+export async function isCancelRequested(runId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ status: autoResumeRuns.status })
+    .from(autoResumeRuns)
+    .where(eq(autoResumeRuns.id, runId));
+  return row?.status === 'stopping';
 }
 
-export function markAutoResumeFinished(): void {
-  inFlight = false;
+/** Returns how many live runs were asked to stop (0 = nothing was running). */
+export async function requestAutoResumeCancel(): Promise<number> {
+  const rows = await db
+    .update(autoResumeRuns)
+    .set({ status: 'stopping' })
+    .where(
+      and(
+        eq(autoResumeRuns.status, 'running'),
+        gt(autoResumeRuns.lastHeartbeatAt, liveSince()),
+      ),
+    )
+    .returning({ id: autoResumeRuns.id });
+  return rows.length;
 }
 
-export function isAutoResumeRunning(): boolean {
-  return inFlight;
+export async function isAutoResumeRunning(): Promise<boolean> {
+  const rows = await db
+    .select({ id: autoResumeRuns.id })
+    .from(autoResumeRuns)
+    .where(
+      and(
+        sql`${autoResumeRuns.status} IN ('running', 'stopping')`,
+        sql`${autoResumeRuns.finishedAt} IS NULL`,
+        gt(autoResumeRuns.lastHeartbeatAt, liveSince()),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }

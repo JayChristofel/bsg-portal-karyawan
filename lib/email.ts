@@ -189,6 +189,37 @@ export async function createSmtpTransport(config: EmailConfig) {
   });
 }
 
+/** Structured address: a name containing `<`, `>` or `,` cannot rewrite the From header. */
+function fromAddress(config: EmailConfig) {
+  return { name: (config.fromName || '').replace(/[\r\n]+/g, ' '), address: config.fromEmail };
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Replaces every `{{name}}` / `{{cabang}}` / `{{email}}` (any case, optional
+ * inner spaces). Function replacers keep `$&`-style sequences literal; HTML
+ * output escapes the values so a name cannot inject markup.
+ */
+export function renderEmailTemplate(
+  template: string,
+  vars: { name?: string; cabang?: string; email: string },
+  { html }: { html: boolean },
+): string {
+  const val = (v: string | undefined) => (html ? escapeHtml(v ?? '') : (v ?? ''));
+  return template
+    .replace(/\{\{\s*name\s*\}\}/gi, () => val(vars.name))
+    .replace(/\{\{\s*cabang\s*\}\}/gi, () => val(vars.cabang))
+    .replace(/\{\{\s*email\s*\}\}/gi, () => val(vars.email));
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -203,64 +234,79 @@ export async function sendEmail({
   config: EmailConfig;
 }) {
   const transport = await createSmtpTransport(config);
-  const mailOptions = {
-    from: `${config.fromName} <${config.fromEmail}>`,
-    to,
-    subject,
-    text,
-    html,
-  };
-  const result = await transport.sendMail(mailOptions);
-  await transport.close(); // close the connection
-  return result;
+  try {
+    return await transport.sendMail({ from: fromAddress(config), to, subject, text, html });
+  } finally {
+    transport.close();
+  }
 }
 
+export interface BulkEmailResult {
+  email: string;
+  ok: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+/**
+ * Sends one personalised message per recipient over a single SMTP transport.
+ *
+ * One failing recipient never aborts the others, and `onResult` fires as each
+ * finishes so the caller can persist progress immediately (a crash mid-run then
+ * loses at most the messages in flight, not the whole batch).
+ */
 export async function sendBulkEmails({
   recipients,
   subject,
   html,
   text,
   config,
-  onProgress,
+  concurrency = 5,
+  onResult,
 }: {
-  recipients: Array<{ email: string; name?: string; cabang?: string }>;
+  recipients: Array<{ id?: number; email: string; name?: string; cabang?: string }>;
   subject: string;
   html: string;
   text: string;
   config: EmailConfig;
-  onProgress?: (progress: { sent: number; failed: number; current: string }) => void;
-}) {
+  concurrency?: number;
+  onResult?: (
+    result: BulkEmailResult,
+    recipient: { id?: number; email: string; name?: string; cabang?: string },
+  ) => void | Promise<void>;
+}): Promise<BulkEmailResult[]> {
   const transport = await createSmtpTransport(config);
-  const results = { sent: 0, failed: 0 };
-  const batchSize = 50;
+  const results: BulkEmailResult[] = new Array(recipients.length);
+  let next = 0;
 
-  for (let i = 0; i < recipients.length; i += batchSize) {
-    const batch = recipients.slice(i, i + batchSize);
-    const Promises = batch.map((rec) =>
-      transport.sendMail({
-        from: `${config.fromName} <${config.fromEmail}>`,
-        to: rec.email,
-        subject,
-        text: text.replace('{{name}}', rec.name || '').replace('{{cabang}}', rec.cabang || ''),
-        html: html
-          .replace('{{name}}', rec.name || '')
-          .replace('{{cabang}}', rec.cabang || '')
-          .replace('{{email}}', rec.email),
-      })
-    );
-    await Promise.all(Promises);
-    results.sent += batch.length;
-    if (onProgress) {
-      onProgress({
-        sent: results.sent,
-        failed: results.failed,
-        current: batch[0]?.email || '',
-      });
+  const worker = async () => {
+    while (next < recipients.length) {
+      const i = next++;
+      const rec = recipients[i];
+      let result: BulkEmailResult;
+      try {
+        const info = await transport.sendMail({
+          from: fromAddress(config),
+          to: rec.email,
+          subject,
+          text: renderEmailTemplate(text, rec, { html: false }),
+          html: renderEmailTemplate(html, rec, { html: true }),
+        });
+        result = { email: rec.email, ok: true, messageId: info.messageId };
+      } catch (err) {
+        result = { email: rec.email, ok: false, error: (err as Error).message };
+      }
+      results[i] = result;
+      if (onResult) await onResult(result, rec);
     }
-  }
+  };
 
-  await transport.close();
-  return { success: results.sent, failed: results.failed };
+  try {
+    await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
+  } finally {
+    transport.close();
+  }
+  return results;
 }
 
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {

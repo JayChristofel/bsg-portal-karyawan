@@ -49,21 +49,26 @@ export async function logAuditForRequest(
  * Build a before/after description for an update, listing only the fields that
  * actually changed.
  *
- * Values are passed through unchanged: these tables already hold encrypted or
- * redacted content where that is the case, and logging is not the place to
- * introduce a second, weaker copy of a secret.
+ * Fields listed in `sensitive` (decrypted PII such as NIP or phone numbers) are
+ * reported by name only: the audit log is plaintext, so writing their values
+ * would be a second, weaker copy of data the database encrypts.
  */
 export function describeChanges(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
   fields: string[],
+  sensitive: string[] = [],
 ): string {
   const parts: string[] = [];
   for (const field of fields) {
     const a = before[field];
     const b = after[field];
     if (a === b) continue;
-    parts.push(`${field}: "${a ?? ''}" → "${b ?? ''}"`);
+    parts.push(
+      sensitive.includes(field)
+        ? `${field}: (diubah)`
+        : `${field}: "${a ?? ''}" → "${b ?? ''}"`,
+    );
   }
   return parts.length ? parts.join('; ') : 'no field changes';
 }

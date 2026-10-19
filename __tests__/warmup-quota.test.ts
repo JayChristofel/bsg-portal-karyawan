@@ -20,6 +20,7 @@ let queryResult: { rows: unknown[]; rowCount: number };
 // that should trigger registration of an unseen number.
 let numbersRowMissing = false;
 const insertedNumbers: Array<Record<string, unknown>> = [];
+const executed: string[] = [];
 
 vi.mock('drizzle-orm', () => ({
   eq: (a: unknown, b: unknown) => ({ kind: 'eq', a, b }),
@@ -74,9 +75,23 @@ vi.mock('@/db', () => ({
         ]);
       return chain;
     },
-    execute: () => Promise.resolve(queryResult),
+    execute: (q: { strings?: readonly string[] }) => {
+      executed.push((q?.strings ?? []).join('?'));
+      return Promise.resolve(queryResult);
+    },
   },
 }));
+
+// Deterministic gateway failure: no DNS/network involved.
+let gatewayShouldThrow = false;
+vi.mock('@/lib/gowa-tls', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gowa-tls')>('@/lib/gowa-tls');
+  return {
+    ...actual,
+    gatewayFetch: (...args: Parameters<typeof actual.gatewayFetch>) =>
+      gatewayShouldThrow ? Promise.reject(new Error('gateway down')) : actual.gatewayFetch(...args),
+  };
+});
 
 const lib = await import('@/lib/whatsapp');
 
@@ -91,6 +106,7 @@ beforeEach(() => {
   storedSent = 0;
   queryResult = { rows: [], rowCount: 0 };
   insertedNumbers.length = 0;
+  executed.length = 0;
   numbersRowMissing = false;
 });
 
@@ -228,5 +244,25 @@ describe('quota guard', () => {
     if (!result.ok) {
       expect(result.state.remainingToday).toBe(0);
     }
+  });
+
+  it('gives the claimed unit back when the gateway call throws', async () => {
+    limitOverride = 5;
+    storedSent = 0;
+    queryResult = { rows: [], rowCount: 1 };
+    gatewayShouldThrow = true;
+
+    await expect(
+      lib.sendMessageGuarded('081234', 'hello', 'device-1', {
+        baseUrl: 'https://gateway.invalid',
+        deviceId: 'device-1',
+      }),
+    ).rejects.toThrow('gateway down');
+    gatewayShouldThrow = false;
+
+    const claims = executed.filter((q) => q.includes('sent = sent + 1'));
+    const refunds = executed.filter((q) => q.includes('sent = sent - 1'));
+    expect(claims).toHaveLength(1);
+    expect(refunds).toHaveLength(1);
   });
 });

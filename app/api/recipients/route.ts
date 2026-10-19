@@ -3,7 +3,8 @@ import { db } from '@/db';
 import { recipients, pegawai } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { sendMessage } from '@/lib/whatsapp';
+import { sendMessageGuarded, getGowaConfig } from '@/lib/whatsapp';
+import { markRecipientSent, markRecipientFailed, releaseRecipient, parseSendResult } from '@/lib/recipient-queue';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
 
@@ -204,37 +205,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert as pending first
+    // Insert already claimed ('sending'): this request owns the send, so the
+    // auto-resume drain can never pick the row up and send it a second time.
     const [newRecipient] = await db
       .insert(recipients)
-      .values({ label, phone, message, cabang, waStatus: 'pending' })
+      .values({ label, phone, message, cabang, waStatus: 'sending', waSentAt: new Date() })
       .returning();
 
-    // Send via GOWA
-    const waResult = await sendMessage(phone, message);
-    const messageId =
-      waResult?.results?.message_id ||
-      waResult?.results?.id ||
-      waResult?.message_id ||
-      null;
-
-    const sent = waResult?.code === 'SUCCESS' || waResult?.code === 'OK' || Boolean(messageId);
-
-    if (sent) {
-      const { eq } = await import('drizzle-orm');
-      await db
-        .update(recipients)
-        .set({
-          waMessageId: messageId,
-          waStatus: 'sent',
-          waSentAt: new Date(),
-        })
-        .where(eq(recipients.id, newRecipient.id));
+    // Same guarded path as every other sender, so the warm-up quota applies.
+    const config = await getGowaConfig();
+    let guarded;
+    try {
+      guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
+    } catch (err) {
+      await markRecipientFailed(newRecipient.id);
+      throw err;
     }
+
+    if (!guarded.ok) {
+      await releaseRecipient(newRecipient.id);
+      const { state } = guarded;
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'DAILY_QUOTA_EXCEEDED',
+          error: `Daily warm-up limit reached (${state.sentToday}/${state.dailyLimit}). Try again tomorrow.`,
+          recipient: { ...newRecipient, waStatus: 'pending' },
+        },
+        { status: 429 },
+      );
+    }
+
+    const waResult = guarded.result as any;
+    const { messageId, isSuccess: sent } = parseSendResult(waResult);
+
+    if (sent) await markRecipientSent(newRecipient.id, messageId);
+    else await markRecipientFailed(newRecipient.id);
+
+    const actor = await getAdminUsername(req);
+    await logAuditForRequest(
+      req,
+      actor ?? 'unknown',
+      'send_message',
+      `Tambah + kirim WA ke recipient #${newRecipient.id}`,
+    );
 
     return NextResponse.json({
       success: sent,
-      recipient: { ...newRecipient, waStatus: sent ? 'sent' : 'pending' },
+      recipient: { ...newRecipient, waStatus: sent ? 'sent' : 'failed' },
       waResult,
     });
   } catch (error: any) {

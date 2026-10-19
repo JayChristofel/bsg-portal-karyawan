@@ -66,6 +66,7 @@ export async function PATCH(
         before as unknown as Record<string, unknown>,
         updated as unknown as Record<string, unknown>,
         fields,
+        ['phone'],
       );
       void logAuditForRequest(
         req,

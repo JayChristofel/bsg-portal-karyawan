@@ -111,11 +111,11 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
-    void logAuditForRequest(
+    await logAuditForRequest(
       req,
       session.username,
       'create_employee',
-      `Data pegawai "${name}" (ID: ${created?.id ?? '-'}, NIP: ${nip}) ditambahkan manual`,
+      `Data pegawai "${name}" (ID: ${created?.id ?? '-'}) ditambahkan manual`,
     );
 
     return NextResponse.json({ success: true });

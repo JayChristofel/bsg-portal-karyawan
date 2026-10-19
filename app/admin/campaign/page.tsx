@@ -159,6 +159,8 @@ type DelayProfile = 'safe' | 'balanced' | 'fast';
 
 const WA_STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',
+  sending: 'Sending',
+  failed: 'Failed',
   sent: 'Sent',
   delivered: 'Delivered',
   read: 'Read',

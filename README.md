@@ -34,28 +34,41 @@ Sistem Portal Pengkinian Data Pegawai & Simulasi Security Awareness internal yan
 ## 🛠️ Persiapan & Instalasi
 
 ### 1. Buat Tabel di Supabase
-Buka **Supabase Dashboard** -> **SQL Editor**, lalu jalankan seluruh isi skrip:
-```sql
-db/schema.sql
+Skema didefinisikan di `db/schema.ts` dan diterapkan lewat migrasi di folder `drizzle/`.
+
+**DB baru** — jalankan semua migrasi berurutan (SQL Editor Supabase atau `psql`):
 ```
-Skrip ini akan membuat tabel `pegawai`, `admins`, `recipients`, dan `events` beserta index-nya.
+drizzle/0000_talented_daredevil.sql
+drizzle/0001_broadcast_warmup_tables.sql
+```
+**DB yang sudah ada** — `0001` bersifat idempoten (aman dijalankan ulang): ia membuat
+tabel broadcast/warm-up bila belum ada, menggabungkan baris ganda `send_counters`, lalu
+memasang primary key `(number_id, day)`. **Backup dulu**, coba di staging, baru produksi.
+
+> Jangan jalankan `db/schema.sql` (sudah usang). Setelah mengubah `db/schema.ts`,
+> buat migrasi baru dengan `npm run db:generate` dan review SQL-nya sebelum diterapkan.
 
 ### 2. Konfigurasi Environment Variables
 Salin template `.env.example` menjadi `.env.local`:
 ```bash
 cp .env.example .env.local
 ```
-Lalu isi nilainya:
+Lalu isi nilainya. Variabel wajib:
 ```env
 # 1. URL Koneksi Supabase Pooler (Gunakan Transaction Pooler port 6543)
 DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres"
 
-# 2. Kunci Enkripsi AES-256-GCM (string acak minimal 32 karakter)
-ENCRYPTION_KEY="kunci-rahasia-enkripsi-data-sensitif-anda"
+# 2. Kunci Enkripsi AES-256-GCM (string acak minimal 32 karakter; buat dengan `openssl rand -hex 32`)
+ENCRYPTION_KEY=""
 
-# 3. Kunci Rahasia JWT Session Admin
-JWT_SECRET="kunci-rahasia-jwt-session-admin"
+# 3. Kunci Rahasia JWT Session Admin (minimal 32 karakter)
+JWT_SECRET=""
 ```
+Variabel integrasi WhatsApp/email dan opsi lain (lihat `.env.example`):
+`WHATSAPP_API_URL`, `WHATSAPP_DEVICE_ID`, `WHATSAPP_API_USERNAME`, `WHATSAPP_API_PASSWORD`,
+`WHATSAPP_WEBHOOK_SECRET`, `GOWA_ALLOWED_HOSTS`, `TRUST_PROXY_HEADERS`, `APP_URL`
+(dipakai untuk `{link}` di pesan otomatis). Konfigurasi SMTP hanya diisi dari halaman admin
+(`/admin/email/config`) dan disimpan terenkripsi di tabel `settings`; variabel `SMTP_*` tidak dibaca aplikasi.
 
 ### 3. Buat Akun Admin Pertama Kali (Seed CLI)
 Jalankan perintah berikut di terminal (tanpa perlu mencatat password di file `.env`):
@@ -93,8 +106,6 @@ Buka browser di:
 
 1. Push repository ini ke GitHub / GitLab.
 2. Impor project di **Vercel Dashboard**.
-3. Di tab **Environment Variables** Vercel, tambahkan 3 variabel berikut:
-   - `DATABASE_URL`
-   - `ENCRYPTION_KEY`
-   - `JWT_SECRET`
+3. Di tab **Environment Variables** Vercel, tambahkan minimal `DATABASE_URL`, `ENCRYPTION_KEY`, `JWT_SECRET`
+   (plus variabel WhatsApp bila broadcast dipakai).
 4. Klik **Deploy**. Aplikasi langsung live secara serverless dengan performa maksimal!

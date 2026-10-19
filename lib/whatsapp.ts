@@ -349,13 +349,20 @@ export async function sendMessageGuarded(
     return { ok: false, reason: 'quota', state };
   }
 
+  const day = utcDay();
   const claimed = await claimQuota(numberId, state.dailyLimit);
   if (!claimed) {
     return { ok: false, reason: 'quota', state: await getWarmUpState(numberId) };
   }
 
-  const result = await sendMessage(phone, message, config);
-  return { ok: true, result };
+  try {
+    const result = await sendMessage(phone, message, config);
+    return { ok: true, result };
+  } catch (err) {
+    // Nothing left the device, so the claimed unit must not count against today.
+    await releaseQuota(numberId, day);
+    throw err;
+  }
 }
 
 /**
@@ -468,9 +475,10 @@ export async function getWarmUpState(numberId: string): Promise<WarmUpState> {
       label: null,
       pairedAt: new Date(),
       ageDays: 0,
+      // Fail closed: if the counters can't be read, don't pretend there is headroom.
       dailyLimit: 15,
-      sentToday: 0,
-      remainingToday: 15,
+      sentToday: 15,
+      remainingToday: 0,
       nextLimitIn: null,
     };
   }
@@ -487,20 +495,40 @@ async function claimQuota(numberId: string, dailyLimit: number): Promise<boolean
   const { sendCounters } = await import('@/db/schema');
   const { sql } = await import('drizzle-orm');
 
+  // Computed once: a call straddling 00:00 UTC must insert and update the same row.
+  const day = utcDay();
+
+  // send_counters has a (number_id, day) primary key, so concurrent first
+  // claims of the day collapse into one row instead of inserting duplicates.
   await db
     .insert(sendCounters)
-    .values({ numberId, day: utcDay(), sent: 0 })
+    .values({ numberId, day, sent: 0 })
     .onConflictDoNothing();
 
   const result = (await db.execute(sql`
     UPDATE send_counters
        SET sent = sent + 1, updated_at = NOW()
      WHERE number_id = ${numberId}
-       AND day = ${utcDay()}
+       AND day = ${day}
        AND sent < ${dailyLimit}
   `)) as { rowCount?: number; rows?: unknown[] };
 
   return (result.rowCount ?? result.rows?.length ?? 0) > 0;
+}
+
+/** Gives back a claimed unit when the message never left (gateway threw). */
+async function releaseQuota(numberId: string, day: string): Promise<void> {
+  try {
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+    await db.execute(sql`
+      UPDATE send_counters
+         SET sent = sent - 1, updated_at = NOW()
+       WHERE number_id = ${numberId} AND day = ${day} AND sent > 0
+    `);
+  } catch (err) {
+    console.error('releaseQuota failed:', (err as Error).message);
+  }
 }
 
 export class DailyQuotaExceededError extends Error {
@@ -512,26 +540,6 @@ export class DailyQuotaExceededError extends Error {
     );
     this.name = 'DailyQuotaExceededError';
   }
-}
-
-/**
- * Records accepted sends against the number's daily quota.
- *
- * Call this *after* the gateway has accepted a message, so the counter tracks
- * what actually left the device rather than what was merely attempted.
- */
-export async function recordSend(numberId: string, count = 1): Promise<void> {
-  const { db } = await import('@/db');
-  const { sendCounters } = await import('@/db/schema');
-  const { sql } = await import('drizzle-orm');
-
-  await db
-    .insert(sendCounters)
-    .values({ numberId, day: utcDay(), sent: count })
-    .onConflictDoUpdate({
-      target: [sendCounters.numberId, sendCounters.day],
-      set: { sent: sql`${sendCounters.sent} + ${count}`, updatedAt: new Date() },
-    });
 }
 
 export async function checkDailyLimit(

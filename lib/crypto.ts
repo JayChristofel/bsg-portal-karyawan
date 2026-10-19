@@ -93,3 +93,21 @@ export function decrypt(ciphertext: string): string {
   const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
   return decrypted.toString('utf8');
 }
+
+/**
+ * Shown instead of a value that cannot be decrypted (wrong key, corrupted or
+ * tampered ciphertext). Reads must degrade per field: one bad row may not take
+ * down list, export, edit and delete for everyone else. The placeholder must
+ * never be written back, see `encryptedText.toDriver`.
+ */
+export const DECRYPT_FAILED = '[GAGAL DEKRIPSI]';
+
+export function safeDecrypt(ciphertext: string): string {
+  try {
+    return decrypt(ciphertext);
+  } catch (err) {
+    // Never log the ciphertext itself, only that a read failed.
+    console.error('decrypt failed:', (err as Error).message);
+    return DECRYPT_FAILED;
+  }
+}

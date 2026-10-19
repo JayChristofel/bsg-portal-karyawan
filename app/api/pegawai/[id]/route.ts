@@ -5,6 +5,9 @@ import { db } from '@/db';
 import { pegawai } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logAuditForRequest, describeChanges } from '@/lib/audit';
+import { DECRYPT_FAILED } from '@/lib/crypto';
+
+const SENSITIVE_FIELDS = ['nip', 'jabatanSk', 'jabatanSekarang', 'cabang'];
 
 async function checkAuth(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -43,6 +46,13 @@ export async function PUT(
       );
     }
 
+    if ([nip, jabatanSk, jabatanSekarang, cabang].includes(DECRYPT_FAILED)) {
+      return NextResponse.json(
+        { success: false, error: 'Nilai asli tidak dapat dibaca; isi ulang field yang bertanda [GAGAL DEKRIPSI].' },
+        { status: 400 },
+      );
+    }
+
     // Snapshot the current values before the write so the audit entry can show
     // a real before/after diff rather than just "record updated".
     const [before] = await db.select().from(pegawai).where(eq(pegawai.id, recordId));
@@ -70,10 +80,11 @@ export async function PUT(
       before as unknown as Record<string, unknown>,
       { name, nip, jabatanSk, jabatanSekarang, cabang },
       ['name', 'nip', 'jabatanSk', 'jabatanSekarang', 'cabang'],
+      SENSITIVE_FIELDS,
     );
 
     if (actor) {
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         actor,
         'update_employee',
@@ -117,11 +128,11 @@ export async function DELETE(
     }
 
     if (actor) {
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         actor,
         'delete_employee',
-        `Data pegawai "${deleted.name}" (ID: ${recordId}, NIP: ${deleted.nip}) dihapus`,
+        `Data pegawai "${deleted.name}" (ID: ${recordId}) dihapus`,
       );
     }
 
