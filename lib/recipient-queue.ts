@@ -1,6 +1,6 @@
 import { db } from '@/db';
-import { recipients, recipientStatusHistory } from '@/db/schema';
-import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { recipients, recipientStatusHistory, webhookLogs } from '@/db/schema';
+import { and, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 
 /**
  * Recipient send lifecycle: pending -> sending -> sent | failed.
@@ -53,6 +53,51 @@ export async function markRecipientSent(
   await db
     .insert(recipientStatusHistory)
     .values({ recipientId: id, status: 'sent', messageId });
+
+  if (messageId) await applyEarlyAcks(id, messageId);
+}
+
+const EARLY_ACK_WINDOW_MS = 10 * 60_000;
+
+/**
+ * The gateway can deliver a receipt before our own write of the message id lands,
+ * in which case the webhook matched nothing. Every event is kept in webhook_logs,
+ * so once the id is stored, replay the receipts that arrived ahead of it.
+ */
+export async function applyEarlyAcks(recipientId: number, messageId: string): Promise<void> {
+  const logs = await db
+    .select({ payload: webhookLogs.payload })
+    .from(webhookLogs)
+    .where(
+      and(
+        eq(webhookLogs.event, 'message.ack'),
+        gt(webhookLogs.createdAt, new Date(Date.now() - EARLY_ACK_WINDOW_MS)),
+        sql`strpos(${webhookLogs.payload}, ${messageId}) > 0`,
+      ),
+    );
+
+  let best: 'delivered' | 'read' | null = null;
+  for (const { payload } of logs) {
+    try {
+      const p = JSON.parse(payload)?.payload;
+      if (!Array.isArray(p?.ids) || !p.ids.map(String).includes(messageId)) continue;
+      if (p.receipt_type === 'read') best = 'read';
+      else if (p.receipt_type === 'delivered' && best === null) best = 'delivered';
+    } catch {
+      /* not JSON: not an ack we can use */
+    }
+  }
+  if (!best) return;
+
+  const from = best === 'read' ? ['sent', 'delivered'] : ['sent'];
+  const moved = await db
+    .update(recipients)
+    .set({ waStatus: best })
+    .where(and(eq(recipients.id, recipientId), inArray(recipients.waStatus, from)))
+    .returning({ id: recipients.id });
+  if (moved.length > 0) {
+    await db.insert(recipientStatusHistory).values({ recipientId, status: best, messageId });
+  }
 }
 
 /** Gateway refused or the outcome is unknown: park it for a human, do not auto-retry. */

@@ -45,7 +45,7 @@ afterAll(async () => {
 beforeEach(async () => {
   if (!URL) return;
   await db.execute(
-    sql`TRUNCATE send_counters, warmup_numbers, recipients, rate_limits, auto_resume_runs RESTART IDENTITY`,
+    sql`TRUNCATE send_counters, warmup_numbers, recipients, rate_limits, auto_resume_runs, webhook_logs RESTART IDENTITY`,
   );
 });
 
@@ -96,6 +96,19 @@ run('recipient claiming', () => {
     await db.execute(sql`INSERT INTO recipients (label, phone, wa_status) VALUES ('F', '1', 'failed')`);
     expect(await claimRecipient(1)).toBe(false);
     expect(await claimRecipient(1, ['pending', 'failed'])).toBe(true);
+  });
+
+  it('replays a receipt that arrived before the message id was stored', async () => {
+    const { claimRecipient, markRecipientSent } = await import('@/lib/recipient-queue');
+    await db.execute(sql`INSERT INTO recipients (label, phone, wa_status) VALUES ('E', '1', 'pending')`);
+    await db.execute(sql`INSERT INTO webhook_logs (event, payload) VALUES
+      ('message.ack', ${JSON.stringify({ event: 'message.ack', payload: { ids: ['early-1'], receipt_type: 'delivered' } })}),
+      ('message.ack', ${JSON.stringify({ event: 'message.ack', payload: { ids: ['early-1'], receipt_type: 'read' } })}),
+      ('message.ack', ${JSON.stringify({ event: 'message.ack', payload: { ids: ['other'], receipt_type: 'read' } })})`);
+    await claimRecipient(1);
+    await markRecipientSent(1, 'early-1');
+    const rows = (await db.execute(sql`SELECT wa_status FROM recipients WHERE id = 1`)) as unknown as { wa_status: string }[];
+    expect(rows[0].wa_status).toBe('read');
   });
 });
 

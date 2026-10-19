@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import {
   Gauge,
@@ -102,6 +103,7 @@ interface RecipientRow {
 }
 
 export default function EmailBroadcastPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [data, setData] = React.useState<RecipientRow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -226,7 +228,7 @@ export default function EmailBroadcastPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Remove this recipient?')) return;
+    if (!(await confirm({ title: 'Remove this recipient?' }))) return;
     try {
       const res = await fetch(`/api/email/recipients?id=${id}`, { method: 'DELETE' });
       const json = await res.json();
@@ -259,8 +261,8 @@ export default function EmailBroadcastPage() {
   const handleBulkSendEmail = async () => {
     const targets = view.rows.filter((r) => r.status === 'pending');
     if (targets.length === 0) { setNotice({ tone: 'err', text: 'No pending recipients match the current filters.' }); return; }
-    const confirmMsg = `Send email broadcast to ${targets.length} recipients with status Pending?\n\nSettings:\n- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 emails)' : 'Off'}`;
-    if (!window.confirm(confirmMsg)) return;
+    const confirmMsg = `Settings:\n- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 emails)' : 'Off'}`;
+    if (!(await confirm({ title: `Send email broadcast to ${targets.length} recipients with status Pending?`, description: confirmMsg }))) return;
     setIsBulkSending(true);
     let successCount = 0;
     for (let i = 0; i < targets.length; i++) {
@@ -302,7 +304,7 @@ export default function EmailBroadcastPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Remove ${selectedIds.size} recipients?`)) return;
+    if (!(await confirm({ title: `Remove ${selectedIds.size} recipients?` }))) return;
     let deleted = 0;
     for (const id of selectedIds) {
       try { const res = await fetch(`/api/email/recipients?id=${id}`, { method: 'DELETE' }); if (res.ok) deleted++; } catch { /* */ }
@@ -580,6 +582,7 @@ export default function EmailBroadcastPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

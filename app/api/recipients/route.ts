@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { recipients, pegawai } from '@/db/schema';
-import { desc } from 'drizzle-orm';
+import { desc, lt, inArray, sql } from 'drizzle-orm';
 import { sendMessageGuarded, getGowaConfig, normalizeWaPhone } from '@/lib/whatsapp';
 import { markRecipientSent, markRecipientFailed, releaseRecipient, parseSendResult } from '@/lib/recipient-queue';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
-import { readJsonObject, str } from '@/lib/validate';
+import { readJsonObject, str, parsePageParams } from '@/lib/validate';
 
 export async function GET(req: NextRequest) {
   if (!(await getAdminUsername(req))) {
@@ -14,10 +14,25 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [recList, pegList] = await Promise.all([
-      db.select().from(recipients).orderBy(desc(recipients.createdAt)),
-      db.select({ name: pegawai.name, createdAt: pegawai.createdAt, cabang: pegawai.cabang }).from(pegawai),
-    ]);
+    const { limit, before } = parsePageParams(req.nextUrl.searchParams);
+    const fetched = await db
+      .select()
+      .from(recipients)
+      .where(before === null ? undefined : lt(recipients.id, before))
+      .orderBy(desc(recipients.id))
+      .limit(limit + 1);
+    const recList = fetched.slice(0, limit);
+    const nextBefore = fetched.length > limit ? recList[recList.length - 1].id : null;
+
+    // Only the employees matching this page's names (uses the lower(trim(name)) index).
+    const keys = [...new Set(recList.map((r) => r.label.trim().toLowerCase()))];
+    const pegList = keys.length
+      ? await db
+          .select({ name: pegawai.name, createdAt: pegawai.createdAt, cabang: pegawai.cabang })
+          .from(pegawai)
+          .where(inArray(sql`lower(trim(${pegawai.name}))`, keys))
+          .orderBy(desc(pegawai.createdAt))
+      : [];
 
     // Build map of submitted employees by lowercase name
     const submittedMap = new Map<string, { createdAt: Date; cabang: string }>();
@@ -40,16 +55,11 @@ export async function GET(req: NextRequest) {
     });
 
     const listActor = await getAdminUsername(req);
-    if (listActor) {
-      await logAuditThrottled(
-        req,
-        listActor,
-        'view_recipients',
-        `Melihat daftar penerima (${recList.length} baris)`,
-      );
+    if (listActor && before === null) {
+      await logAuditThrottled(req, listActor, 'view_recipients', 'Melihat daftar penerima');
     }
 
-    return NextResponse.json(rowsWithSubmission);
+    return NextResponse.json({ rows: rowsWithSubmission, nextBefore });
   } catch (error: any) {
     console.error('Fetch recipients error:', error);
     return NextResponse.json(

@@ -41,3 +41,13 @@ export function parseDateOnly(value: unknown): string | null {
   const d = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value ? null : value;
 }
+
+/** Keyset paging params: `?limit=` (1..max) and `?before=<id>` (rows with a smaller id). */
+export function parsePageParams(sp: URLSearchParams, max = 1000): { limit: number; before: number | null } {
+  const lim = sp.get('limit');
+  const bef = sp.get('before');
+  return {
+    limit: boundedInt(lim === null ? NaN : Number(lim), 1, max, max),
+    before: bef !== null && /^\d+$/.test(bef) ? Number(bef) : null,
+  };
+}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import { Eye, FileText, Layers, Pencil, Plus, Trash2, X } from 'lucide-react';
 
@@ -41,6 +42,7 @@ function HtmlPreview({ html, title, className }: { html: string; title: string; 
 }
 
 export default function EmailTemplatesPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [templates, setTemplates] = React.useState<EmailTemplate[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
@@ -123,7 +125,7 @@ export default function EmailTemplatesPage() {
   };
 
   const handleDelete = async (id: number, templateName: string) => {
-    if (!window.confirm(`Delete template "${templateName}"?`)) return;
+    if (!(await confirm({ title: `Delete template "${templateName}"?` }))) return;
     try {
       const res = await fetch(`/api/email/templates?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -355,6 +357,7 @@ export default function EmailTemplatesPage() {
           />
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

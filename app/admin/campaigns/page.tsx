@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import {
   CalendarClock,
@@ -59,6 +60,7 @@ interface Template {
 }
 
 export default function CampaignsPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -137,7 +139,7 @@ export default function CampaignsPage() {
   };
 
   const handleSend = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Send campaign "${campaignName}" now?`)) return;
+    if (!(await confirm({ title: `Send campaign "${campaignName}" now?` }))) return;
     setSendingId(id);
     try {
       const res = await fetch(`/api/campaigns/${id}/send`, { method: 'POST' });
@@ -163,7 +165,7 @@ export default function CampaignsPage() {
   };
 
   const handleDelete = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Delete campaign "${campaignName}"?`)) return;
+    if (!(await confirm({ title: `Delete campaign "${campaignName}"?` }))) return;
     try {
       const res = await fetch(`/api/campaigns?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -429,6 +431,7 @@ export default function CampaignsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

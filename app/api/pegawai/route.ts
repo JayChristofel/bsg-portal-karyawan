@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
-import { desc } from 'drizzle-orm';
+import { desc, lt } from 'drizzle-orm';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
-import { readJsonObject, str } from '@/lib/validate';
+import { readJsonObject, str, parsePageParams } from '@/lib/validate';
 import { APP_TZ } from '@/lib/time';
 
 export async function GET(req: NextRequest) {
@@ -14,17 +14,24 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rows = await db.select().from(pegawai).orderBy(desc(pegawai.createdAt));
+    const { limit, before } = parsePageParams(req.nextUrl.searchParams);
+    // One extra row tells whether another page exists.
+    const fetched = await db
+      .select()
+      .from(pegawai)
+      .where(before === null ? undefined : lt(pegawai.id, before))
+      .orderBy(desc(pegawai.id))
+      .limit(limit + 1);
+    const rows = fetched.slice(0, limit);
+    const nextBefore = fetched.length > limit ? rows[rows.length - 1].id : null;
 
-    await logAuditThrottled(
-      req,
-      actor,
-      'view_employees',
-      `Melihat daftar data pegawai (${rows.length} baris)`,
-    );
+    if (before === null) {
+      await logAuditThrottled(req, actor, 'view_employees', 'Melihat daftar data pegawai');
+    }
 
-    return NextResponse.json(
-      rows.map((r) => ({
+    return NextResponse.json({
+      nextBefore,
+      rows: rows.map((r) => ({
         id: r.id,
         created_at: r.createdAt
           ? new Date(r.createdAt).toLocaleString('id-ID', { timeZone: APP_TZ }) + ' WITA'
@@ -51,8 +58,8 @@ export async function GET(req: NextRequest) {
         asn_isp: r.asnIsp || '-',
         approx_location: r.approxLocation || '-',
         connection_type: r.connectionType || '-',
-      }))
-    );
+      })),
+    });
   } catch (error: any) {
     console.error('Fetch employee records error:', error);
     return NextResponse.json(

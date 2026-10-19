@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import ExcelJS from 'exceljs';
 
@@ -106,6 +107,7 @@ import { EmptyState, PageHeader, SectionCard, StatStrip, StatusBadge } from '../
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
+import { fetchAllRows } from '@/lib/fetch-all';
 import { useBatchBroadcast } from '@/lib/batch-broadcast';
 import { cn } from '@/lib/utils';
 
@@ -174,6 +176,7 @@ const DELAY_META: Record<DelayProfile, { label: string; range: string }> = {
 const TONE_OK: React.CSSProperties = { background: 'transparent', color: '#e9edef' };
 
 export default function BroadcastPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [data, setData] = React.useState<RecipientRow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -241,8 +244,9 @@ export default function BroadcastPage() {
   const fetchData = React.useCallback(async (isSilent = false) => {
     if (!isSilent) setIsLoading(true);
     try {
-      const res = await fetch('/api/recipients', { cache: 'no-store' });
-      if (res.ok) setData(await res.json());
+      setData(await fetchAllRows<RecipientRow>('/api/recipients'));
+    } catch (err) {
+      console.error('Failed to load recipients:', err); // keep showing the last good list
     } finally {
       if (!isSilent) setIsLoading(false);
     }
@@ -278,7 +282,7 @@ export default function BroadcastPage() {
   }, []);
 
   const stopAutoResume = async () => {
-    if (!window.confirm('Hentikan auto-resume yang sedang berjalan?')) return;
+    if (!(await confirm({ title: 'Hentikan auto-resume yang sedang berjalan?' }))) return;
     try {
       await fetch('/api/auto-resume?action=stop', { method: 'POST' });
     } finally {
@@ -324,9 +328,7 @@ export default function BroadcastPage() {
 
   const handlePullFromPegawai = async () => {
     if (
-      !window.confirm(
-        'Pull every employee already in the database into this WhatsApp broadcast list?',
-      )
+      !(await confirm({ title: 'Pull every employee already in the database into this WhatsApp broadcast list?' }))
     )
       return;
     setIsGenerating(true);
@@ -533,7 +535,7 @@ export default function BroadcastPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Remove this recipient from the broadcast list?')) return;
+    if (!(await confirm({ title: 'Remove this recipient from the broadcast list?' }))) return;
     try {
       const res = await fetch(`/api/recipients/${id}`, { method: 'DELETE' });
       const json = await res.json();
@@ -617,7 +619,6 @@ const remainingToday = warmUpState?.remainingToday ?? null;
 const dailyLimit = warmUpState?.dailyLimit ?? null;
 
 const confirmMsg =
-      `Send a WhatsApp broadcast to ${targets.length} recipients?\n\n` +
       (remainingToday !== null
         ? `Daily warm-up quota: ${warmUpState!.sentToday}/${dailyLimit} used, ` +
           `${remainingToday} left today\n`
@@ -629,7 +630,7 @@ const confirmMsg =
       `- Random breaks: ${enableRandomBreaks ? 'On' : 'Off'}\n` +
       `- Time window: ${batchConfig.timeWindowStart}:00–${batchConfig.timeWindowEnd}:00`;
 
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await confirm({ title: `Send a WhatsApp broadcast to ${targets.length} recipients?`, description: confirmMsg }))) return;
 
     // Stop before the first send when the quota is already spent.
     if (remainingToday !== null && remainingToday <= 0) {
@@ -802,7 +803,7 @@ const confirmMsg =
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Remove ${selectedIds.size} recipients from the broadcast list?`)) return;
+    if (!(await confirm({ title: `Remove ${selectedIds.size} recipients from the broadcast list?` }))) return;
 
     setIsBulkDeleting(true);
     let deleted = 0;
@@ -859,9 +860,9 @@ const confirmMsg =
       return;
     }
 
-    const confirmMsg = `Send WhatsApp to ${targets.length} selected recipients?\n\nAnti-Ban settings:\n- Delay profile: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 messages)' : 'Off'}`;
+    const confirmMsg = `Anti-Ban settings:\n- Delay profile: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 messages)' : 'Off'}`;
 
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await confirm({ title: `Send WhatsApp to ${targets.length} selected recipients?`, description: confirmMsg }))) return;
 
     stopRequestedRef.current = false;
     setIsBulkSending(true);
@@ -1956,6 +1957,7 @@ const confirmMsg =
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

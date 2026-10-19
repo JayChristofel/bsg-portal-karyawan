@@ -88,6 +88,27 @@ run('read routes execute their SQL', () => {
     expect((await GET(req('/api/audit?from=nope'))).status).toBe(400);
   });
 
+  it('list endpoints page by keyset cursor without gaps or repeats', async () => {
+    const { db: appDb } = await import('@/db');
+    const { pegawai } = await import('@/db/schema');
+    for (const n of ['A', 'B', 'C']) {
+      await appDb.insert(pegawai).values({ name: n, nip: n, jabatanSk: 'x', jabatanSekarang: 'y', cabang: 'Manado' });
+    }
+    const peg = await import('@/app/api/pegawai/route');
+    const seen: string[] = [];
+    let before: number | null = null;
+    let pages = 0;
+    do {
+      const res: Response = await peg.GET(req(`/api/pegawai?limit=2${before ? `&before=${before}` : ''}`));
+      const page = await res.json();
+      seen.push(...page.rows.map((r: { name: string }) => r.name));
+      before = page.nextBefore;
+      pages++;
+    } while (before !== null);
+    expect(seen).toEqual(['C', 'B', 'A']);
+    expect(pages).toBe(2);
+  });
+
   it('GET /api/export (csv + xlsx), /api/export.csv, /api/pegawai, /api/recipients, /api/tracking', async () => {
     await db.execute(sql`INSERT INTO recipients (label, phone, wa_status) VALUES ('Budi', '+62 812-3456-7890', 'pending'), ('=cmd', '081234567891', 'sent')`);
     const { db: appDb } = await import('@/db');
@@ -106,11 +127,12 @@ run('read routes execute their SQL', () => {
     expect(emp).toContain('Manado');
 
     const peg = await import('@/app/api/pegawai/route');
-    const list = await (await peg.GET(req('/api/pegawai'))).json();
+    const { rows: list, nextBefore } = await (await peg.GET(req('/api/pegawai'))).json();
+    expect(nextBefore).toBeNull();
     expect(list[0].nip).toBe('123'); // decrypted on read
 
     const rec = await import('@/app/api/recipients/route');
-    const recs = await (await rec.GET(req('/api/recipients'))).json();
+    const { rows: recs } = await (await rec.GET(req('/api/recipients'))).json();
     expect(recs.find((r: { label: string }) => r.label === 'Budi').isSubmitted).toBe(true);
 
     const trk = await import('@/app/api/tracking/route');
