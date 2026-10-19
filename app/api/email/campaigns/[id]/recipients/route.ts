@@ -3,6 +3,7 @@ import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { emailRecipients, emailCampaigns } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
+import { parseId } from '@/lib/validate';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await params;
@@ -12,7 +13,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   try {
-    const campaignId = Number(rawId);
+    const campaignId = parseId(rawId);
+    if (campaignId === null) {
+      return NextResponse.json({ error: 'Invalid campaign id.' }, { status: 400 });
+    }
 
     const [campaign] = await db.select().from(emailCampaigns).where(eq(emailCampaigns.id, campaignId));
     if (!campaign) {

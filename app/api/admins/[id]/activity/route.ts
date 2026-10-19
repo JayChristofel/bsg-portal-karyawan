@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { admins, auditLog } from '@/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
-import { logAuditForRequest } from '@/lib/audit';
+import { eq, desc } from 'drizzle-orm';
+import { logAuditThrottled } from '@/lib/audit';
+import { parseId } from '@/lib/validate';
 
 export async function GET(
   req: NextRequest,
@@ -16,8 +17,8 @@ export async function GET(
 
   try {
     const { id } = await params;
-    const adminId = Number(id);
-    if (!adminId) {
+    const adminId = parseId(id);
+    if (adminId === null) {
       return NextResponse.json({ error: 'Invalid admin ID.' }, { status: 400 });
     }
 
@@ -32,8 +33,9 @@ export async function GET(
     const requested = Number(req.nextUrl.searchParams.get('limit')) || 100;
     const limit = Math.min(Math.max(requested, 1), 200);
 
-    // Audit rows are written with the plain username, so match it case
-    // insensitively — usernames are not case unique in Postgres.
+    // Audit rows carry the exact username. Usernames are unique case-sensitively, so an
+    // exact match is correct (a case-insensitive one would merge "Admin" and "admin")
+    // and it can use the admin_username index.
     const rows = await db
       .select({
         id: auditLog.id,
@@ -43,11 +45,11 @@ export async function GET(
         createdAt: auditLog.createdAt,
       })
       .from(auditLog)
-      .where(sql`lower(${auditLog.adminUsername}) = lower(${admin.username})`)
+      .where(eq(auditLog.adminUsername, admin.username))
       .orderBy(desc(auditLog.createdAt))
       .limit(limit);
 
-    void logAuditForRequest(
+    await logAuditThrottled(
       req,
       username,
       'view_admin_activity',

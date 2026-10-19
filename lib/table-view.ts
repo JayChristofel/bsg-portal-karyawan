@@ -91,15 +91,17 @@ export type TableView<T> = {
 
 const EMPTY_RANGE: DateRange = { from: '', to: '' };
 
+// Dates in the filters are WITA calendar days (the zone the data is shown in), not the
+// browser's zone: otherwise an admin elsewhere sees every day boundary shifted.
 function startOfDay(value: string): number | null {
   if (!value) return null;
-  const t = new Date(`${value}T00:00:00`).getTime();
+  const t = new Date(`${value}T00:00:00+08:00`).getTime();
   return Number.isNaN(t) ? null : t;
 }
 
 function endOfDay(value: string): number | null {
   if (!value) return null;
-  const t = new Date(`${value}T23:59:59.999`).getTime();
+  const t = new Date(`${value}T23:59:59.999+08:00`).getTime();
   return Number.isNaN(t) ? null : t;
 }
 

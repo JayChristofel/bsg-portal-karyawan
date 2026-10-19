@@ -5,30 +5,8 @@ import { desc } from 'drizzle-orm';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
-
-const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
-
-/**
- * Neutralise spreadsheet formula injection.
- *
- * Quoting alone is NOT enough: Excel and LibreOffice still evaluate a leading
- * '=' / '+' / '-' / '@' inside quoted cells. Prefix with a single quote so the
- * value is treated as text. Several columns here come from the public
- * submission form, so the values are attacker-controlled.
- */
-function escapeCsvCell(cell: string | number | null | undefined): string {
-  if (cell == null) return '""';
-  let str = String(cell);
-
-  // Strip control characters that Excel may use to break out of the cell.
-  str = str.replace(/[\r\n]+/g, ' ');
-
-  if (FORMULA_TRIGGER.test(str)) {
-    str = `'${str}`;
-  }
-
-  return `"${str.replace(/"/g, '""')}"`;
-}
+import { csvLine } from '@/lib/csv';
+import { formatAppDateTime } from '@/lib/time';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -63,39 +41,35 @@ export async function GET(req: NextRequest) {
       'Raw User-Agent',
     ];
 
-    const lines: string[] = [headers.map(escapeCsvCell).join(',')];
+    const lines: string[] = [csvLine(headers)];
 
     for (const r of rows) {
-      const timeStr = r.createdAt
-        ? new Date(r.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) + ' WITA'
-        : '-';
+      const timeStr = r.createdAt ? formatAppDateTime(r.createdAt) + ' WITA' : '';
 
       lines.push(
-        [
+        csvLine([
           timeStr,
           r.name,
           r.nip,
           r.jabatanSk,
           r.jabatanSekarang,
           r.cabang,
-          r.ipAddress || '-',
-          r.deviceType || 'Desktop',
-          r.os || '-',
-          r.browser || '-',
-          r.screenResolution || '-',
-          r.language || 'id-ID',
-          r.referrer || 'Direct',
-          r.sessionId || '-',
+          r.ipAddress || '',
+          r.deviceType || '',
+          r.os || '',
+          r.browser || '',
+          r.screenResolution || '',
+          r.language || '',
+          r.referrer || '',
+          r.sessionId || '',
           r.event || 'submit',
           r.timeOnPage ?? 0,
           r.pagePath || '/',
-          r.asnIsp || '-',
-          r.approxLocation || '-',
-          r.connectionType || '-',
-          r.userAgent || '-',
-        ]
-          .map(escapeCsvCell)
-          .join(',')
+          r.asnIsp || '',
+          r.approxLocation || '',
+          r.connectionType || '',
+          r.userAgent || '',
+        ])
       );
     }
 
@@ -104,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     const actor = await getAdminUsername(req);
     if (actor) {
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         actor,
         'export_employee_records',
@@ -116,7 +90,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename=rekap_data_pegawai_telemetri.csv',
+        'Content-Disposition': 'attachment; filename="rekap_data_pegawai_telemetri.csv"',
         'X-Content-Type-Options': 'nosniff',
       },
     });

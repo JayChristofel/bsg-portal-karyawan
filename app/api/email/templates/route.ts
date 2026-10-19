@@ -4,7 +4,13 @@ import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { emailTemplates } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { logAudit, logAuditForRequest } from '@/lib/audit';
+import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
+import { readJsonObject, str, parseId } from '@/lib/validate';
+
+const MAX_HTML = 500_000;
+const MAX_TEXT = 100_000;
+
+const longText = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -20,10 +26,10 @@ export async function GET(req: NextRequest) {
 
     const listActor = await getAdminUsername(req);
     if (listActor) {
-      void logAuditForRequest(
+      await logAuditThrottled(
         req,
         listActor,
-        'view_templates',
+        'view_email_templates',
         `Melihat daftar template email (${templates.length} baris)`,
       );
     }
@@ -42,12 +48,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const name = (body.name || '').trim();
-    const category = (body.category || 'umum').trim();
-    const subject = (body.subject || '').trim();
-    const htmlBody = (body.htmlBody || '').trim();
-    const textBody = (body.textBody || '');
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const name = str(body.name, 200);
+    const category = str(body.category, 50) || 'umum';
+    const subject = str(body.subject, 300).replace(/[\r\n]+/g, ' ');
+    const htmlBody = longText(body.htmlBody, MAX_HTML).trim();
+    const textBody = longText(body.textBody, MAX_TEXT);
 
     if (!name || !htmlBody) {
       return NextResponse.json({ error: 'Template name and HTML body are required.' }, { status: 400 });
@@ -80,20 +89,26 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const id = Number(body.id);
-    const name = (body.name || '').trim();
-    const category = (body.category || 'umum').trim();
-    const subject = (body.subject || '').trim();
-    const htmlBody = (body.htmlBody || '').trim();
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const id = parseId(body.id);
+    const name = str(body.name, 200);
+    const category = str(body.category, 50) || 'umum';
+    const subject = str(body.subject, 300).replace(/[\r\n]+/g, ' ');
+    const htmlBody = longText(body.htmlBody, MAX_HTML).trim();
+    // Only touch the plain-text part when the caller sent one; otherwise an edit of the
+    // HTML would silently keep (or, before, never update) the text version.
+    const textBody = body.textBody === undefined ? undefined : longText(body.textBody, MAX_TEXT);
 
-    if (!id || !name || !htmlBody) {
+    if (id === null || !name || !htmlBody) {
       return NextResponse.json({ error: 'ID, name, and HTML body are required.' }, { status: 400 });
     }
 
     const [template] = await db
       .update(emailTemplates)
-      .set({ name, category, subject, htmlBody, updatedAt: new Date() })
+      .set({ name, category, subject, htmlBody, ...(textBody !== undefined && { textBody }), updatedAt: new Date() })
       .where(eq(emailTemplates.id, id))
       .returning();
 
@@ -123,9 +138,9 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const id = Number(req.nextUrl.searchParams.get('id'));
-    if (!id) {
-      return NextResponse.json({ error: 'Template ID is required.' }, { status: 400 });
+    const id = parseId(req.nextUrl.searchParams.get('id'));
+    if (id === null) {
+      return NextResponse.json({ error: 'A valid template ID is required.' }, { status: 400 });
     }
 
     const [deleted] = await db

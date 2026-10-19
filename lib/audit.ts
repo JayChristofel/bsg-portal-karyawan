@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { auditLog } from '@/db/schema';
+import { and, eq, gt } from 'drizzle-orm';
 import { getClientIp } from '@/lib/proxy';
 
 /*
@@ -43,6 +44,32 @@ export async function logAuditForRequest(
   detail?: string,
 ) {
   return logAudit(actor, action, detail, getClientIp(req));
+}
+
+/**
+ * Audit entry for read-only "viewed X" events. Pages poll and re-fetch, so logging
+ * every GET buries real events and makes the audit table grow without bound; one
+ * entry per actor+action per `minutes` is enough to show that the data was viewed.
+ */
+export async function logAuditThrottled(
+  req: NextRequest,
+  actor: string,
+  action: string,
+  detail: string,
+  minutes = 10,
+) {
+  try {
+    const since = new Date(Date.now() - minutes * 60_000);
+    const recent = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.adminUsername, actor), eq(auditLog.action, action), gt(auditLog.createdAt, since)))
+      .limit(1);
+    if (recent.length > 0) return;
+  } catch (err) {
+    console.error('Audit throttle check failed:', err);
+  }
+  await logAuditForRequest(req, actor, action, detail);
 }
 
 /**

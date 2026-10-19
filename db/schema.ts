@@ -9,6 +9,7 @@ import {
   timestamp,
   boolean,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { encrypt, safeDecrypt, DECRYPT_FAILED } from '@/lib/crypto';
 
 // Custom encrypted type: Automatically encrypts on INSERT/UPDATE, decrypts on SELECT
@@ -53,7 +54,11 @@ export const pegawai = pgTable('pegawai', {
   asnIsp: text('asn_isp'),
   approxLocation: text('approx_location'),
   connectionType: text('connection_type'),
-});
+}, (t) => [
+  // Exports and reports match recipients to submissions by normalised name
+  // (EXISTS ... lower(trim(name)) = lower(trim(label))); without this each row is a table scan.
+  index('pegawai_name_norm_idx').on(sql`lower(trim(${t.name}))`),
+]);
 
 export const admins = pgTable('admins', {
   id: serial('id').primaryKey(),

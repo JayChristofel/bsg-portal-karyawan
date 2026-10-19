@@ -8,16 +8,39 @@ loadEnvConfig(process.cwd());
 
 import { db } from './index';
 import { admins } from './schema';
-import { hashPassword } from '../lib/auth';
+import { hashPassword, MAX_PASSWORD_LENGTH } from '../lib/auth';
 import { eq } from 'drizzle-orm';
+
+const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/;
+
+async function promptVisible(question: string): Promise<string> {
+  const rl = readline.createInterface({ input, output });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
+// Hidden prompt: write through a muted stream so the password never echoes.
+async function promptHidden(question: string): Promise<string> {
+  process.stdout.write(question);
+  const muted = new PassThrough();
+  muted._write = (_chunk, _encoding, callback) => callback();
+  const rl = readline.createInterface({ input, output: muted, terminal: true });
+  try {
+    return await rl.question('');
+  } finally {
+    rl.close();
+    console.log('');
+  }
+}
 
 async function main() {
   // SECURITY: never accept the password as a CLI argument — argv is visible to
   // every local user via `ps` and is persisted in shell history. Username may
   // still be passed positionally; password is always prompted for.
   const args = process.argv.slice(2);
-  let username = args[0];
-  let password: string | undefined;
 
   if (args.length > 1) {
     console.error('\n⚠️  Password tidak lagi diterima sebagai argumen CLI (ekspos di process list / shell history).');
@@ -25,29 +48,23 @@ async function main() {
     process.exit(1);
   }
 
-  // Hidden prompt: write through a muted stream so the password never echoes.
-  const muted = new PassThrough();
-  muted._write = (chunk, encoding, callback) => callback();
-
-  const rl = readline.createInterface({ input, output: muted, terminal: true });
-  try {
-    console.log('\n🔐 Setup Akun Administrator Portal Pegawai');
-    console.log('─────────────────────────────────────────');
-    if (!username) {
-      rl.close();
-      const visible = readline.createInterface({ input, output });
-      username = (await visible.question('Masukkan Username Admin: ')).trim();
-      visible.close();
-    }
-    process.stdout.write('Masukkan Password: ');
-    password = (await rl.question('')).trim();
-    console.log('');
-  } finally {
-    rl.close();
-  }
+  console.log('\n🔐 Setup Akun Administrator Portal Pegawai');
+  console.log('─────────────────────────────────────────');
+  const username = (args[0] ?? (await promptVisible('Masukkan Username Admin: '))).trim();
+  // Not trimmed: the login form does not trim either, so trimming here would make a
+  // password with leading/trailing spaces impossible to type back in.
+  const password = await promptHidden('Masukkan Password: ');
 
   if (!username || !password) {
     console.error('\n❌ Username dan password tidak boleh kosong.\n');
+    process.exit(1);
+  }
+  if (!USERNAME_RE.test(username)) {
+    console.error('\n❌ Username hanya boleh huruf, angka, titik, underscore, atau strip (3-32 karakter).\n');
+    process.exit(1);
+  }
+  if (password.length < 8 || password.length > MAX_PASSWORD_LENGTH) {
+    console.error(`\n❌ Password harus 8-${MAX_PASSWORD_LENGTH} karakter.\n`);
     process.exit(1);
   }
 
@@ -66,7 +83,7 @@ async function main() {
     .where(eq(admins.username, username))
     .limit(1);
 
-  const passwordHash = hashPassword(password);
+  const passwordHash = await hashPassword(password);
 
   if (existing.length > 0) {
     console.log(`[!] Akun '${username}' sudah ada di database. Memperbarui password...`);

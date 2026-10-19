@@ -1,5 +1,5 @@
 import { db } from '@/db';
-import { recipients } from '@/db/schema';
+import { recipients, recipientStatusHistory } from '@/db/schema';
 import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 
 /**
@@ -47,6 +47,12 @@ export async function markRecipientSent(
       ...(message !== undefined ? { message } : {}),
     })
     .where(and(eq(recipients.id, id), eq(recipients.waStatus, 'sending')));
+
+  // The report timeline counts 'sent' from this table; the webhook only ever writes
+  // 'delivered'/'read', so without this row the "sent" series was always zero.
+  await db
+    .insert(recipientStatusHistory)
+    .values({ recipientId: id, status: 'sent', messageId });
 }
 
 /** Gateway refused or the outcome is unknown: park it for a human, do not auto-retry. */

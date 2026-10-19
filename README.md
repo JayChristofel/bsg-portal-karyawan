@@ -71,14 +71,13 @@ Variabel integrasi WhatsApp/email dan opsi lain (lihat `.env.example`):
 (`/admin/email/config`) dan disimpan terenkripsi di tabel `settings`; variabel `SMTP_*` tidak dibaca aplikasi.
 
 ### 3. Buat Akun Admin Pertama Kali (Seed CLI)
-Jalankan perintah berikut di terminal (tanpa perlu mencatat password di file `.env`):
+Jalankan perintah berikut; password diminta lewat prompt tersembunyi (tidak boleh lewat argumen
+karena terlihat di `ps` dan riwayat shell):
 ```bash
-npm run db:seed <username> <password>
+npm run db:seed -- <username>
 ```
-*Contoh:*
-```bash
-npm run db:seed admin PasswordSuperAman123!
-```
+Username 3-32 karakter (huruf, angka, `.`, `_`, `-`), password 8-256 karakter. Menjalankan perintah
+yang sama untuk username yang sudah ada akan mengganti passwordnya.
 
 ---
 

@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { admins } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { verifyPassword, equalizeVerifyTiming, createSessionToken, COOKIE_NAME, SESSION_TTL_SECONDS } from '@/lib/auth';
+import { verifyPassword, equalizeVerifyTiming, createSessionToken, COOKIE_NAME, SESSION_TTL_SECONDS, MAX_PASSWORD_LENGTH } from '@/lib/auth';
 import { getClientIp, isUnknownIp, checkIpRateLimit, resetRateLimit, recordAuthFailure } from '@/lib/proxy';
 import { logAudit } from '@/lib/audit';
 
 const LOGIN_WINDOW_SECONDS = 300;
 const LOGIN_MAX_ATTEMPTS = 5;
 const MAX_USERNAME_LENGTH = 64;
-const MAX_PASSWORD_LENGTH = 256;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -76,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     if (!admin) {
       // Spend equivalent CPU so timing does not disclose valid usernames.
-      equalizeVerifyTiming();
+      await equalizeVerifyTiming();
 
       const delay = await recordAuthFailure(accountKey);
       if (delay > 0) await sleep(delay);
@@ -94,7 +93,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!verifyPassword(password, admin.passwordHash)) {
+    if (!(await verifyPassword(password, admin.passwordHash))) {
       const delay = await recordAuthFailure(accountKey);
       if (delay > 0) await sleep(delay);
 

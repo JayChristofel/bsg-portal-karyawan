@@ -4,7 +4,10 @@ import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { messageTemplates } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { logAudit, logAuditForRequest } from '@/lib/audit';
+import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
+import { readJsonObject, str, parseId } from '@/lib/validate';
+
+const MAX_TEMPLATE_BODY = 4000;
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -20,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const listActor = await getAdminUsername(req);
     if (listActor) {
-      void logAuditForRequest(
+      await logAuditThrottled(
         req,
         listActor,
         'view_templates',
@@ -42,10 +45,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const name = (body.name || '').trim();
-    const category = (body.category || 'umum').trim();
-    const body_ = (body.body || '').trim();
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const name = str(body.name, 200);
+    const category = str(body.category, 50) || 'umum';
+    const body_ = str(body.body, MAX_TEMPLATE_BODY);
 
     if (!name || !body_) {
       return NextResponse.json({ error: 'Template name and body are required.' }, { status: 400 });
@@ -78,13 +84,16 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const id = Number(body.id);
-    const name = (body.name || '').trim();
-    const category = (body.category || 'umum').trim();
-    const body_ = (body.body || '').trim();
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const id = parseId(body.id);
+    const name = str(body.name, 200);
+    const category = str(body.category, 50) || 'umum';
+    const body_ = str(body.body, MAX_TEMPLATE_BODY);
 
-    if (!id || !name || !body_) {
+    if (id === null || !name || !body_) {
       return NextResponse.json({ error: 'ID, name, and template body are required.' }, { status: 400 });
     }
 
@@ -120,9 +129,9 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const id = Number(req.nextUrl.searchParams.get('id'));
-    if (!id) {
-      return NextResponse.json({ error: 'Template ID is required.' }, { status: 400 });
+    const id = parseId(req.nextUrl.searchParams.get('id'));
+    if (id === null) {
+      return NextResponse.json({ error: 'A valid template ID is required.' }, { status: 400 });
     }
 
     const [deleted] = await db

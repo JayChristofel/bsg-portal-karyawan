@@ -5,23 +5,14 @@ import { db } from '@/db';
 import { recipients, campaigns } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
+import { csvLine } from '@/lib/csv';
+import { parseId } from '@/lib/validate';
+import { formatAppDateTime } from '@/lib/time';
+import { normalizeWaPhone } from '@/lib/whatsapp';
 
-const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
-
-/**
- * Neutralise spreadsheet formula injection (Excel/LibreOffice evaluate a leading
- * '=' / '+' / '-' / '@' even inside quoted cells). Recipient labels come from
- * imported spreadsheets, so they are not trusted input.
- */
-function escapeCsvCell(cell: unknown): string {
-  if (cell == null) return '""';
-  let str = String(cell);
-  str = str.replace(/[\r\n]+/g, ' ');
-  if (FORMULA_TRIGGER.test(str)) {
-    str = `'${str}`;
-  }
-  return `"${str.replace(/"/g, '""')}"`;
-}
+// Phone numbers are exported as plain digits (62812...). A leading '+' would be read
+// as a formula by spreadsheets, and the escaping that prevents that corrupts the number.
+const exportPhone = (p: string | null) => (p ? (normalizeWaPhone(p) ?? p.replace(/^[=+\-@]+/, '')) : '');
 
 export async function GET(req: NextRequest) {
   const username = await getAdminUsername(req);
@@ -31,9 +22,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const format = req.nextUrl.searchParams.get('format') || 'xlsx';
-    const campaignId = req.nextUrl.searchParams.get('campaignId');
+    const rawCampaignId = req.nextUrl.searchParams.get('campaignId');
+    const campaignId = rawCampaignId ? parseId(rawCampaignId) : null;
+    if (rawCampaignId && campaignId === null) {
+      return NextResponse.json({ error: 'Invalid campaignId.' }, { status: 400 });
+    }
 
-    const campaignFilter = campaignId ? eq(recipients.campaignId, Number(campaignId)) : undefined;
+    const campaignFilter = campaignId !== null ? eq(recipients.campaignId, campaignId) : undefined;
 
     const rows = await db
       .select({
@@ -53,29 +48,28 @@ export async function GET(req: NextRequest) {
       .leftJoin(campaigns, eq(recipients.campaignId, campaigns.id))
       .where(campaignFilter);
 
+    const headers = ['ID', 'Nama', 'No. WhatsApp', 'Cabang', 'Status WA', 'Waktu Kirim (WITA)', 'ID Pesan', 'Kampanye', 'Sudah Isi Form', 'Tanggal Daftar (WITA)'];
+
     if (format === 'csv') {
-      const headers = ['ID', 'Nama', 'No. WhatsApp', 'Cabang', 'Status WA', 'Waktu Kirim', 'ID Pesan', 'Kampanye', 'Sudah Isi Form', 'Tanggal Daftar'];
       const csvRows = rows.map((r) => [
         r.id,
         r.label,
-        r.phone || '',
+        exportPhone(r.phone),
         r.cabang || '',
         r.waStatus || 'pending',
-        r.waSentAt ? new Date(r.waSentAt).toLocaleString('id-ID') : '',
+        r.waSentAt ? formatAppDateTime(r.waSentAt) : '',
         r.waMessageId || '',
         r.campaignName || '',
         r.isSubmitted ? 'Ya' : 'Tidak',
-        new Date(r.createdAt).toLocaleString('id-ID'),
+        formatAppDateTime(r.createdAt),
       ]);
 
-      const csv = [headers, ...csvRows]
-        .map((row) => row.map((cell) => escapeCsvCell(cell)).join(','))
-        .join('\r\n');
+      const csv = [headers, ...csvRows].map(csvLine).join('\r\n');
 
       // Prepend UTF-8 BOM so Excel opens it with proper UTF-8 decoding
       const csvWithBom = '\uFEFF' + csv;
 
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         username,
         'export_recipients',
@@ -91,14 +85,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const headers = ['ID', 'Nama', 'No. WhatsApp', 'Cabang', 'Status WA', 'Waktu Kirim', 'ID Pesan', 'Kampanye', 'Sudah Isi Form', 'Tanggal Daftar'];
-
     // exceljs replaces xlsx, which had an unpatched prototype-pollution + ReDoS
     // advisory with no fixed version available on the npm registry.
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Penerima');
 
-    // Force text cells so Excel never coerces a value into a formula.
+    // exceljs stores JS strings as string cells (never formulas), so no escaping is needed here.
     ws.addRow(headers);
     ws.getRow(1).font = { bold: true };
 
@@ -106,14 +98,14 @@ export async function GET(req: NextRequest) {
       ws.addRow([
         r.id,
         String(r.label ?? ''),
-        String(r.phone ?? ''),
+        exportPhone(r.phone),
         String(r.cabang ?? ''),
         String(r.waStatus ?? 'pending'),
-        r.waSentAt ? new Date(r.waSentAt).toLocaleString('id-ID') : '',
+        r.waSentAt ? formatAppDateTime(r.waSentAt) : '',
         String(r.waMessageId ?? ''),
         String(r.campaignName ?? ''),
         r.isSubmitted ? 'Ya' : 'Tidak',
-        new Date(r.createdAt).toLocaleString('id-ID'),
+        formatAppDateTime(r.createdAt),
       ]);
     }
 
@@ -124,7 +116,7 @@ export async function GET(req: NextRequest) {
 
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
 
-    void logAuditForRequest(
+    await logAuditForRequest(
       req,
       username,
       'export_recipients',

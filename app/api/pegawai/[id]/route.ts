@@ -1,43 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logAuditForRequest, describeChanges } from '@/lib/audit';
 import { DECRYPT_FAILED } from '@/lib/crypto';
+import { readJsonObject, str, parseId } from '@/lib/validate';
 
 const SENSITIVE_FIELDS = ['nip', 'jabatanSk', 'jabatanSekarang', 'cabang'];
-
-async function checkAuth(req: NextRequest) {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return false;
-  const session = await verifySessionToken(token);
-  return Boolean(session);
-}
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await checkAuth(req))) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
-  const actor = await getAdminUsername(req);
   const { id } = await params;
-  const recordId = parseInt(id, 10);
-  if (isNaN(recordId)) {
+  const recordId = parseId(id);
+  if (recordId === null) {
     return NextResponse.json({ success: false, error: 'Invalid ID.' }, { status: 400 });
   }
 
   try {
-    const body = await req.json();
-    const name = (body.name || '').trim().slice(0, 200);
-    const nip = (body.nip || body.nik || '').trim().slice(0, 50);
-    const jabatanSk = (body.jabatan_sk || body.jabatanSk || '').trim().slice(0, 200);
-    const jabatanSekarang = (body.jabatan_sekarang || body.jabatanSekarang || '').trim().slice(0, 200);
-    const cabang = (body.cabang || '').trim().slice(0, 200);
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ success: false, error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const name = str(body.name, 200);
+    const nip = str(body.nip ?? body.nik, 50);
+    const jabatanSk = str(body.jabatan_sk ?? body.jabatanSk, 200);
+    const jabatanSekarang = str(body.jabatan_sekarang ?? body.jabatanSekarang, 200);
+    const cabang = str(body.cabang, 200);
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
@@ -106,14 +102,14 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await checkAuth(req))) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
-  const actor = await getAdminUsername(req);
   const { id } = await params;
-  const recordId = parseInt(id, 10);
-  if (isNaN(recordId)) {
+  const recordId = parseId(id);
+  if (recordId === null) {
     return NextResponse.json({ success: false, error: 'Invalid ID.' }, { status: 400 });
   }
 
