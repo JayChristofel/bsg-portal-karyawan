@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { autoResumeRuns } from '@/db/schema';
 import { and, eq, gt, sql } from 'drizzle-orm';
+import { rowsOf } from '@/lib/db-util';
 
 /**
  * Control channel for the auto-resume drain, persisted in `auto_resume_runs`.
@@ -18,21 +19,31 @@ function liveSince(): Date {
   return new Date(Date.now() - HEARTBEAT_TTL_MS);
 }
 
-/** Atomically registers a run unless a live one exists. Returns the run id or null. */
+/**
+ * Registers a run unless a live one exists. Returns the run id or null.
+ *
+ * "INSERT ... WHERE NOT EXISTS" alone is not atomic: under READ COMMITTED two
+ * concurrent callers both see no live run and both insert (the integration test
+ * demonstrates 10 of 10 getting through). A transaction-scoped advisory lock makes
+ * the check-and-insert a critical section; it is released automatically on commit
+ * and is safe with transaction-mode poolers.
+ */
 export async function tryStartRun(queued: number): Promise<number | null> {
-  const result = (await db.execute(sql`
-    INSERT INTO auto_resume_runs (status, messages_sent, queued_remaining, last_heartbeat_at)
-    SELECT 'running', 0, ${queued}, NOW()
-    WHERE NOT EXISTS (
-      SELECT 1 FROM auto_resume_runs
-       WHERE status IN ('running', 'stopping')
-         AND finished_at IS NULL
-         AND last_heartbeat_at > ${liveSince()}
-    )
-    RETURNING id
-  `)) as unknown as Array<{ id: number }> | { rows?: Array<{ id: number }> };
-  const rows = Array.isArray(result) ? result : (result.rows ?? []);
-  return rows[0]?.id ?? null;
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('auto_resume_run'))`);
+    const result = await tx.execute(sql`
+      INSERT INTO auto_resume_runs (status, messages_sent, queued_remaining, last_heartbeat_at)
+      SELECT 'running', 0, ${queued}, NOW()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM auto_resume_runs
+         WHERE status IN ('running', 'stopping')
+           AND finished_at IS NULL
+           AND last_heartbeat_at > ${liveSince().toISOString()}::timestamptz
+      )
+      RETURNING id
+    `);
+    return rowsOf<{ id: number }>(result)[0]?.id ?? null;
+  });
 }
 
 export async function heartbeat(runId: number, sent: number): Promise<void> {

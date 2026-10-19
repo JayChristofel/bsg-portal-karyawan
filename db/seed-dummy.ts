@@ -4,7 +4,7 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { db } from './index';
-import { pegawai, recipients } from './schema';
+import { pegawai } from './schema';
 
 async function main() {
   // Sample rows would pollute real employee data, and the script is not idempotent

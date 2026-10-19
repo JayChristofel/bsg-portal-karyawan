@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { rowsOf } from '@/lib/db-util';
 
 const UNKNOWN_IP = '0.0.0.0';
 
@@ -170,7 +171,7 @@ export function parseUserAgent(ua: string): { os: string; browser: string; devic
 async function hit(key: string, windowSeconds: number): Promise<number> {
   const { db } = await import('@/db');
   const { sql } = await import('drizzle-orm');
-  const result = (await db.execute(sql`
+  const result = await db.execute(sql`
     INSERT INTO rate_limits AS r (key, window_start, count)
     VALUES (${key}, NOW(), 1)
     ON CONFLICT (key) DO UPDATE SET
@@ -179,8 +180,8 @@ async function hit(key: string, windowSeconds: number): Promise<number> {
       count = CASE WHEN r.window_start < NOW() - make_interval(secs => ${windowSeconds})
                    THEN 1 ELSE r.count + 1 END
     RETURNING count
-  `)) as unknown as Array<{ count: number }> | { rows?: Array<{ count: number }> };
-  const rows = Array.isArray(result) ? result : (result.rows ?? []);
+  `);
+  const rows = rowsOf<{ count: number }>(result);
 
   // Opportunistic cleanup so abandoned keys do not accumulate.
   if (Math.random() < 0.01) {

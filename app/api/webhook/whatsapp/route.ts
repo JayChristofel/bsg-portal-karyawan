@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, inArray, isNull, or } from 'drizzle-orm';
 import { verifyWebhookSignature } from '@/lib/whatsapp';
 import { logAudit } from '@/lib/audit';
 import { getClientIp, checkIpRateLimit } from '@/lib/proxy';

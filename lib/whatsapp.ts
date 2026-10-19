@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { gatewayFetch, gatewayTlsMode } from './gowa-tls';
 import { isPrivateHostname, readHostAllowlist } from './net-guard';
+import { rowsOf } from './db-util';
 
 export interface GowaConfig {
   baseUrl: string;
@@ -539,15 +540,16 @@ async function claimQuota(numberId: string, dailyLimit: number): Promise<boolean
     .values({ numberId, day, sent: 0 })
     .onConflictDoNothing();
 
-  const result = (await db.execute(sql`
+  const result = await db.execute(sql`
     UPDATE send_counters
        SET sent = sent + 1, updated_at = NOW()
      WHERE number_id = ${numberId}
        AND day = ${day}
        AND sent < ${dailyLimit}
-  `)) as { rowCount?: number; rows?: unknown[] };
+    RETURNING sent
+  `);
 
-  return (result.rowCount ?? result.rows?.length ?? 0) > 0;
+  return rowsOf(result).length > 0;
 }
 
 /** Gives back a claimed unit when the message never left (gateway threw). */

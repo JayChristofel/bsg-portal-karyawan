@@ -101,6 +101,22 @@ Buka browser di:
 
 ---
 
+## 🧪 Test & Lint
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm run lint        # Biome (ESLint tidak dipakai: typescript-eslint belum mendukung TypeScript 7)
+npm test            # unit test
+```
+Test integrasi (`__tests__/integration`) menjalankan SQL dan route sungguhan, jadi butuh Postgres
+**kosong khusus test** yang sudah dimigrasi (`drizzle/*.sql`). Tanpa `TEST_DATABASE_URL` test itu dilewati.
+Test akan `TRUNCATE` tabel, jadi **jangan arahkan ke database berisi data nyata**:
+```bash
+TEST_DATABASE_URL=postgresql://user@127.0.0.1:5432/portal_test npm test
+```
+
+---
+
 ## ☁️ Deployment ke Vercel
 
 1. Push repository ini ke GitHub / GitLab.

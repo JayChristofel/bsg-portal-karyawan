@@ -2,26 +2,21 @@
 
 import * as React from 'react';
 import {
-  Building2,
-  Eye,
   Gauge,
   Loader2,
   Mail,
   Megaphone,
   PauseCircle,
-  Plus,
   Send,
   ShieldCheck,
   Trash2,
   Upload,
-  UserCheck,
   UserPlus,
   Users,
   X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {

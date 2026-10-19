@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, Eye, EyeOff, Mail, Save, Send, Settings, XCircle } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Save, Send, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { EmptyState, PageHeader, SectionCard } from '../../components/ui';
+import { PageHeader, SectionCard } from '../../components/ui';
 
 interface EmailConfig {
   host: string;

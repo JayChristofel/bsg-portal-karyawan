@@ -3,7 +3,7 @@ import { readJsonObject, boundedInt } from '@/lib/validate';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { broadcastSessions } from '@/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;

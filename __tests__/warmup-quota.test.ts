@@ -249,7 +249,7 @@ describe('quota guard', () => {
   it('gives the claimed unit back when the gateway call throws', async () => {
     limitOverride = 5;
     storedSent = 0;
-    queryResult = { rows: [], rowCount: 1 };
+    queryResult = { rows: [{ sent: 1 }], rowCount: 1 };
     gatewayShouldThrow = true;
 
     await expect(
@@ -277,7 +277,7 @@ describe('phone validation', () => {
     expect(lib.normalizeWaPhone('081')).toBeNull();
 
     limitOverride = 5;
-    queryResult = { rows: [], rowCount: 1 };
+    queryResult = { rows: [{ sent: 1 }], rowCount: 1 };
     await expect(lib.sendMessageGuarded('not-a-number', 'hi', 'device-1')).rejects.toThrow('Invalid phone');
     expect(executed.filter((q) => q.includes('sent = sent + 1'))).toHaveLength(0);
   });

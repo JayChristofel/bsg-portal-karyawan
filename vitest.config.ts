@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Integration files share one database and TRUNCATE it between tests, so files must not overlap.
+    fileParallelism: false,
     setupFiles: ['./vitest.setup.ts'],
   },
 });

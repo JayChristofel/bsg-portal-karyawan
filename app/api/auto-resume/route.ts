@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { autoResumeRuns } from '@/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc, } from 'drizzle-orm';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
 import { requestAutoResumeCancel } from '@/lib/auto-resume-control';

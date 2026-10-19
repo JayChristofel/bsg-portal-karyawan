@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { campaigns, recipients, messageTemplates } from '@/db/schema';
-import { eq, and, or, isNull, asc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, asc, lt, sql } from 'drizzle-orm';
 import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { getGowaConfig, sendMessageGuarded, getWarmUpState } from '@/lib/whatsapp';
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           or(
             isNull(campaigns.status),
             sql`${campaigns.status} <> 'sending'`,
-            sql`${campaigns.updatedAt} < ${staleBefore}`,
+            lt(campaigns.updatedAt, staleBefore),
           ),
         ),
       )

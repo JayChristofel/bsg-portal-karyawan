@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Download, Mail, Plus, Search, Trash2, Upload, Users, X } from 'lucide-react';
+import { Mail, Plus, Search, Trash2, Upload, Users, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

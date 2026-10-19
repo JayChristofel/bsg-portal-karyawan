@@ -64,7 +64,6 @@ import {
   Megaphone,
   MessageSquareText,
   PauseCircle,
-  Plus,
   Send,
   ShieldCheck,
   Trash2,
