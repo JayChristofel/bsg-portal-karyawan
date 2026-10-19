@@ -210,7 +210,7 @@ describe('quota guard', () => {
     limitOverride = 5;
     storedSent = 5;
 
-    const result = await lib.sendMessageGuarded('081234', 'hello', 'device-1');
+    const result = await lib.sendMessageGuarded('081234567890', 'hello', 'device-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -227,7 +227,7 @@ describe('quota guard', () => {
     // A blocked send must not perform any network call; pointing the gateway at
     // an unroutable host proves it by not throwing a transport error.
     process.env.WHATSAPP_API_URL = 'https://gateway.invalid';
-    const result = await lib.sendMessageGuarded('081234', 'hello', 'device-1', {
+    const result = await lib.sendMessageGuarded('081234567890', 'hello', 'device-1', {
       baseUrl: 'https://gateway.invalid',
       deviceId: 'device-1',
     });
@@ -239,7 +239,7 @@ describe('quota guard', () => {
     limitOverride = 2;
     storedSent = 2;
 
-    const result = await lib.sendMessageGuarded('081234', 'hello', 'device-1');
+    const result = await lib.sendMessageGuarded('081234567890', 'hello', 'device-1');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.state.remainingToday).toBe(0);
@@ -253,7 +253,7 @@ describe('quota guard', () => {
     gatewayShouldThrow = true;
 
     await expect(
-      lib.sendMessageGuarded('081234', 'hello', 'device-1', {
+      lib.sendMessageGuarded('081234567890', 'hello', 'device-1', {
         baseUrl: 'https://gateway.invalid',
         deviceId: 'device-1',
       }),
@@ -264,5 +264,21 @@ describe('quota guard', () => {
     const refunds = executed.filter((q) => q.includes('sent = sent - 1'));
     expect(claims).toHaveLength(1);
     expect(refunds).toHaveLength(1);
+  });
+});
+
+describe('phone validation', () => {
+  it('normalises Indonesian numbers and rejects junk before claiming quota', async () => {
+    expect(lib.normalizeWaPhone('0812-3456-7890')).toBe('6281234567890');
+    expect(lib.normalizeWaPhone('+62 812 3456 7890')).toBe('6281234567890');
+    expect(lib.normalizeWaPhone('81234567890')).toBe('6281234567890');
+    expect(lib.normalizeWaPhone('123456@g.us')).toBeNull();
+    expect(lib.normalizeWaPhone('abc')).toBeNull();
+    expect(lib.normalizeWaPhone('081')).toBeNull();
+
+    limitOverride = 5;
+    queryResult = { rows: [], rowCount: 1 };
+    await expect(lib.sendMessageGuarded('not-a-number', 'hi', 'device-1')).rejects.toThrow('Invalid phone');
+    expect(executed.filter((q) => q.includes('sent = sent + 1'))).toHaveLength(0);
   });
 });

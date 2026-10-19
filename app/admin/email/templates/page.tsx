@@ -29,6 +29,17 @@ interface EmailTemplate {
   updatedAt: string;
 }
 
+/**
+ * Renders template HTML inside a fully sandboxed iframe. Template bodies are
+ * admin-authored, but another admin opens them, so injecting the markup into this
+ * page would let one admin's <script>/onerror run inside another admin's session.
+ * An empty `sandbox` attribute disables scripts, forms, popups and same-origin
+ * access, so the markup is displayed and nothing in it can execute.
+ */
+function HtmlPreview({ html, title, className }: { html: string; title: string; className?: string }) {
+  return <iframe title={title} sandbox="" srcDoc={html} className={className} />;
+}
+
 export default function EmailTemplatesPage() {
   const [templates, setTemplates] = React.useState<EmailTemplate[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -235,9 +246,10 @@ export default function EmailTemplatesPage() {
                 <p className="mt-0.5 truncate text-xs text-foreground">{t.subject || '(no subject)'}</p>
               </div>
 
-              <div
-                className="mb-3 max-h-28 flex-1 overflow-y-auto rounded-lg bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground"
-                dangerouslySetInnerHTML={{ __html: t.htmlBody }}
+              <HtmlPreview
+                html={t.htmlBody}
+                title={`Preview ${t.name}`}
+                className="mb-3 h-28 w-full flex-1 rounded-lg bg-white"
               />
 
               <p className="tabular text-[11px] text-muted-foreground/80">
@@ -336,9 +348,10 @@ export default function EmailTemplatesPage() {
               {previewing?.name}
             </DialogDescription>
           </DialogHeader>
-          <div
-            className="rounded-lg border border-border/60 bg-background/50 p-4 text-sm leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: previewing?.htmlBody || '' }}
+          <HtmlPreview
+            html={previewing?.htmlBody || ''}
+            title={`Preview ${previewing?.name ?? 'template'}`}
+            className="h-96 w-full rounded-lg border border-border/60 bg-white"
           />
         </DialogContent>
       </Dialog>

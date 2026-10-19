@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { gatewayFetch, gatewayTlsMode } from './gowa-tls';
+import { isPrivateHostname, readHostAllowlist } from './net-guard';
 
 export interface GowaConfig {
   baseUrl: string;
@@ -20,24 +21,6 @@ export interface GowaConfig {
  * Loopback/private ranges are only permitted when GOWA_ALLOW_PRIVATE_HOSTS=1,
  * which is needed when the gateway runs on the same machine during development.
  */
-function isPrivateHostname(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) {
-    return true;
-  }
-  if (h === '::1' || h === '0:0:0:0:0:0:0:1') return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(h) || /^fe[89ab][0-9a-f]:/i.test(h)) return true; // unique-local
-  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!v4) return false;
-  const [a, b] = [Number(v4[1]), Number(v4[2])];
-  if (a === 10 || a === 127 || a === 0) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 169 && b === 254) return true; // link-local / cloud metadata
-  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-  return false;
-}
-
 export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | { ok: false; error: string } {
   let parsed: URL;
   try {
@@ -63,10 +46,7 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
     };
   }
 
-  const allowlist = (process.env.GOWA_ALLOWED_HOSTS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const allowlist = readHostAllowlist(process.env.GOWA_ALLOWED_HOSTS);
 
   if (allowlist.length > 0 && !allowlist.includes(parsed.hostname.toLowerCase())) {
     return { ok: false, error: `Gateway hostname is not allowed. Allow: ${allowlist.join(', ')}` };
@@ -188,7 +168,38 @@ function buildHeaders(config: GowaConfig, extra?: Record<string, string>): Recor
   return headers;
 }
 
+const GATEWAY_TIMEOUT_MS = 15_000;
+const MAX_GATEWAY_RESPONSE_BYTES = 1_000_000;
+let warnedOpenAllowlist = false;
+
+/**
+ * Checked on every call, not only when the URL is saved: the credentials are
+ * attached to whatever host is stored, so a hijacked session that swapped the URL
+ * must not get the gateway password sent to its server.
+ */
+function assertGatewayHostAllowed(baseUrl: string): void {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    throw new Error('Gateway URL is invalid.');
+  }
+  const allowlist = readHostAllowlist(process.env.GOWA_ALLOWED_HOSTS);
+  if (allowlist.length > 0) {
+    if (!allowlist.includes(host)) {
+      throw new Error('Gateway hostname is not in GOWA_ALLOWED_HOSTS; request blocked.');
+    }
+  } else if (process.env.NODE_ENV === 'production' && !warnedOpenAllowlist) {
+    warnedOpenAllowlist = true;
+    console.warn(
+      '[gowa] GOWA_ALLOWED_HOSTS is not set: gateway credentials are sent to whichever ' +
+        'host is saved in the settings. Set it to the gateway hostname.',
+    );
+  }
+}
+
 async function gowaFetch(config: GowaConfig, path: string, options: RequestInit = {}) {
+  assertGatewayHostAllowed(config.baseUrl);
   const url = `${config.baseUrl}${path}`;
   let res: Response;
   try {
@@ -198,10 +209,17 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
       ...options,
       headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
       cache: 'no-store',
+      // Never follow a redirect with the Basic Auth header attached, and never hang.
+      redirect: 'manual',
+      signal: options.signal ?? AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });
   } catch (err: any) {
     console.error('GOWA FETCH ERROR:', err?.message, '| cause:', err?.cause?.code, err?.cause?.message);
     throw err;
+  }
+
+  if (Number(res.headers.get('content-length') ?? 0) > MAX_GATEWAY_RESPONSE_BYTES) {
+    throw new Error('Gateway response is too large.');
   }
   const text = await res.text();
   try {
@@ -209,7 +227,10 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
     // rejection (e.g. ALREADY_LOGGED_IN) from a transport failure.
     return { ...JSON.parse(text), status: res.status };
   } catch {
-    return { code: res.status === 200 ? 'OK' : 'ERROR', message: text, status: res.status };
+    // The gateway always answers JSON. Anything else -- an nginx error page, a
+    // login form -- is a failure even when the HTTP status is 200, otherwise every
+    // send would be reported as delivered.
+    return { code: 'ERROR', message: text.slice(0, 300), status: res.status };
   }
 }
 
@@ -312,15 +333,25 @@ export interface SendMessagePayload {
   message: string;
 }
 
-export async function sendMessage(phone: string, message: string, config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  // Normalize phone: remove +, spaces, dashes; convert leading 0 to 62
+/**
+ * Normalises an Indonesian number to digits only (leading 0 -> 62). Returns null
+ * for anything that is not a plausible phone number, so letters, JIDs such as
+ * "123@g.us" and other junk never reach the gateway.
+ */
+export function normalizeWaPhone(phone: string): string | null {
   let normalized = phone.replace(/[\s\-\+\(\)]/g, '');
   if (normalized.startsWith('0')) {
     normalized = '62' + normalized.slice(1);
   } else if (normalized.startsWith('8') && normalized.length >= 9) {
     normalized = '62' + normalized;
   }
+  return /^\d{8,15}$/.test(normalized) ? normalized : null;
+}
+
+export async function sendMessage(phone: string, message: string, config?: GowaConfig) {
+  const normalized = normalizeWaPhone(phone);
+  if (!normalized) throw new Error('Invalid phone number.');
+  const cfg = config || (await getGowaConfig());
 
   return gowaFetch(cfg, '/send/message', {
     method: 'POST',
@@ -343,6 +374,9 @@ export async function sendMessageGuarded(
   numberId: string,
   config?: GowaConfig,
 ): Promise<{ ok: true; result: unknown } | { ok: false; reason: 'quota'; state: WarmUpState }> {
+  // Reject a bad number before it costs a unit of today's quota.
+  if (!normalizeWaPhone(phone)) throw new Error('Invalid phone number.');
+
   const state = await getWarmUpState(numberId);
 
   if (state.remainingToday <= 0) {

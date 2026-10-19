@@ -256,3 +256,11 @@ export const sendCounters = pgTable(
   },
   (t) => [primaryKey({ columns: [t.numberId, t.day] })],
 );
+
+// Fixed-window counters for rate limiting. Lives in the database because on
+// Vercel each request may hit a different instance, so memory is not shared.
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  windowStart: timestamp('window_start', { withTimezone: true }).defaultNow().notNull(),
+  count: integer('count').notNull().default(0),
+});

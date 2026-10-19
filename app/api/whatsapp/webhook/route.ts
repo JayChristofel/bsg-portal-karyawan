@@ -6,6 +6,7 @@ import { webhookLogs } from '@/db/schema';
 import { desc } from 'drizzle-orm';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
+import { isPrivateHostname } from '@/lib/net-guard';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -34,8 +35,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // The gateway may echo the signing secret back; it must not reach the browser.
+    const rawConfig = webhookConfig?.results;
+    const safeConfig =
+      rawConfig && typeof rawConfig === 'object'
+        ? Object.fromEntries(
+            Object.entries(rawConfig as Record<string, unknown>).map(([k, v]) =>
+              /secret/i.test(k) ? [k, v ? '********' : ''] : [k, v],
+            ),
+          )
+        : null;
+
     return NextResponse.json({
-      config: webhookConfig?.results || null,
+      config: safeConfig,
       logs: recentLogs.map((l) => ({
         id: l.id,
         deviceId: l.deviceId,
@@ -73,19 +85,29 @@ export async function POST(req: NextRequest) {
     if (webhookUrl) {
       try {
         const parsed = new URL(webhookUrl);
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-          return NextResponse.json({ error: 'Webhook URL must use http or https.' }, { status: 400 });
+        if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && process.env.GOWA_ALLOW_INSECURE_HTTP === '1')) {
+          return NextResponse.json({ error: 'Webhook URL must use https.' }, { status: 400 });
+        }
+        if (parsed.username || parsed.password) {
+          return NextResponse.json({ error: 'Webhook URL must not contain credentials.' }, { status: 400 });
+        }
+        // The gateway posts events to this URL, so it should be this app's public
+        // address; an internal/loopback target would just be an SSRF hop.
+        if (process.env.GOWA_ALLOW_PRIVATE_HOSTS !== '1' && isPrivateHostname(parsed.hostname)) {
+          return NextResponse.json({ error: 'Webhook URL points to an internal network.' }, { status: 400 });
         }
       } catch {
         return NextResponse.json({ error: 'Invalid webhook URL.' }, { status: 400 });
       }
     }
 
-    const result = await setDeviceWebhook(webhookUrl, webhookSecret, webhookEvents);
+    // An empty secret/events field means "leave as is": sending '' would erase the secret
+    // on the gateway and every later event would then fail signature verification.
+    const result = await setDeviceWebhook(webhookUrl, webhookSecret || undefined, webhookEvents || undefined);
 
     const writeActor = await getAdminUsername(req);
     if (writeActor) {
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         writeActor,
         'update_webhook_config',

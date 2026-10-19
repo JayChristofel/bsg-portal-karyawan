@@ -22,6 +22,8 @@ interface EmailConfig {
   username: string;
   password: string;
   apiKey: string;
+  hasPassword?: boolean;
+  hasApiKey?: boolean;
   fromEmail: string;
   fromName: string;
 }
@@ -75,6 +77,7 @@ export default function EmailConfigPage() {
       const data = await res.json();
       if (res.ok) {
         setNotice({ tone: 'ok', text: 'Konfigurasi SMTP berhasil disimpan.' });
+        void fetchConfig();
       } else {
         setNotice({ tone: 'err', text: data.error || 'Could not save configuration.' });
       }
@@ -214,7 +217,7 @@ export default function EmailConfigPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={config.password}
                   onChange={(e) => setConfig({ ...config, password: e.target.value })}
-                  placeholder="••••••••"
+                  placeholder={config.hasPassword ? 'Tersimpan — kosongkan jika tidak diubah' : '••••••••'}
                   className="pr-10"
                 />
                 <button

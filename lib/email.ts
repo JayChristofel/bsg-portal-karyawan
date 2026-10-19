@@ -1,58 +1,7 @@
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
-
-const MIN_KEY_LENGTH = 32;
-
-function getKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY;
-  if (!secret || secret.length < MIN_KEY_LENGTH) {
-    throw new Error(
-      `ENCRYPTION_KEY is missing or shorter than ${MIN_KEY_LENGTH} chars. ` +
-        'Generate one with: openssl rand -base64 32'
-    );
-  }
-  return crypto.createHash('sha256').update(secret).digest();
-}
-
-const ENCRYPTED_PREFIX = 'gcm1';
-
-export function isEncrypted(value: string): boolean {
-  const parts = value.split(':');
-  return (
-    parts.length === 4 &&
-    parts[0] === ENCRYPTED_PREFIX &&
-    parts.slice(1).every((p) => /^[0-9a-f]*$/i.test(p))
-  );
-}
-
-export function encrypt(plaintext: string): string {
-  if (!plaintext) return '';
-  const key = getKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return [ENCRYPTED_PREFIX, iv.toString('hex'), authTag.toString('hex'), encrypted.toString('hex')].join(':');
-}
-
-export function decrypt(ciphertext: string): string {
-  if (!ciphertext) return '';
-  let parts: string[];
-  if (isEncrypted(ciphertext)) {
-    parts = ciphertext.split(':').slice(1);
-  } else {
-    return ciphertext;
-  }
-  const [ivHex, tagHex, dataHex] = parts;
-  const key = getKey();
-  const iv = Buffer.from(ivHex, 'hex');
-  const authTag = Buffer.from(tagHex, 'hex');
-  const encryptedText = Buffer.from(dataHex, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
-  return decrypted.toString('utf8');
-}
+import { encrypt, safeDecrypt, DECRYPT_FAILED } from './crypto';
+import { isPrivateHostname, readHostAllowlist } from './net-guard';
 
 export interface EmailConfig {
   host?: string;
@@ -63,22 +12,6 @@ export interface EmailConfig {
   apiKey?: string; // for SendGrid/Resend, encrypted
   fromEmail: string;
   fromName: string;
-}
-
-function isPrivateHostname(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
-  if (h === '::1' || h === '0:0:0:0:0:0:0:1') return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(h) || /^fe[89ab][0-9a-f]:/i.test(h)) return true;
-  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!v4) return false;
-  const [a, b] = [Number(v4[1]), Number(v4[2])];
-  if (a === 10 || a === 127 || a === 0) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true;
-  return false;
 }
 
 export function validateSmtpUrl(rawUrl: string): { ok: true; url: string } | { ok: false; error: string } {
@@ -97,14 +30,22 @@ export function validateSmtpUrl(rawUrl: string): { ok: true; url: string } | { o
   if (process.env.SMTP_ALLOW_PRIVATE_HOSTS !== '1' && isPrivateHostname(parsed.hostname)) {
     return { ok: false, error: 'SMTP hostname points to an internal/loopback network and was rejected.' };
   }
-  const allowlist = (process.env.SMTP_ALLOWED_HOSTS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const allowlist = readHostAllowlist(process.env.SMTP_ALLOWED_HOSTS);
   if (allowlist.length > 0 && !allowlist.includes(parsed.hostname.toLowerCase())) {
     return { ok: false, error: `SMTP hostname is not allowed. Allow: ${allowlist.join(', ')}` };
   }
   return { ok: true, url: rawUrl.trim() };
+}
+
+/** Same rules as validateSmtpUrl, for the bare host the admin form submits. */
+export function validateSmtpHost(host: string): { ok: true } | { ok: false; error: string } {
+  const h = host.trim();
+  if (!h) return { ok: true }; // clearing the host is allowed
+  if (!/^[a-z0-9.-]+$/i.test(h) || h.length > 253) {
+    return { ok: false, error: 'SMTP host tidak valid.' };
+  }
+  const check = validateSmtpUrl(`smtp://${h}`);
+  return check.ok ? { ok: true } : { ok: false, error: check.error };
 }
 
 export async function getEmailConfig(): Promise<EmailConfig> {
@@ -116,9 +57,20 @@ export async function getEmailConfig(): Promise<EmailConfig> {
     const map = new Map(rows.map((r) => [r.key, r.value] as [string, string]));
 
     const storedPassword = map.get('smtp_password') || '';
-    const password = storedPassword ? decrypt(storedPassword) : undefined;
+    // An unreadable secret (wrong key / corruption) is reported and treated as
+    // unset rather than silently replacing the whole config with defaults.
+    const readSecret = (stored: string, name: string) => {
+      if (!stored) return undefined;
+      const value = safeDecrypt(stored);
+      if (value === DECRYPT_FAILED) {
+        console.error(`SMTP ${name} could not be decrypted; re-enter it in the email settings.`);
+        return undefined;
+      }
+      return value;
+    };
+    const password = readSecret(storedPassword, 'password');
     const storedApiKey = map.get('smtp_api_key') || '';
-    const apiKey = storedApiKey ? decrypt(storedApiKey) : undefined;
+    const apiKey = readSecret(storedApiKey, 'API key');
 
     return {
       host: map.get('smtp_host') || undefined,
@@ -162,8 +114,10 @@ export async function saveEmailConfig(config: Partial<EmailConfig>) {
   if (config.port !== undefined) entries['smtp_port'] = String(config.port);
   if (config.secure !== undefined) entries['smtp_secure'] = String(config.secure).toLowerCase();
   if (config.username !== undefined) entries['smtp_username'] = config.username;
-  if (config.password !== undefined) entries['smtp_password'] = config.password ? encrypt(String(config.password)) : '';
-  if (config.apiKey !== undefined) entries['smtp_api_key'] = config.apiKey ? encrypt(String(config.apiKey)) : '';
+  // An empty secret means "unchanged": the settings form never receives the stored
+  // value back, so it submits '' unless the admin typed a new one.
+  if (config.password) entries['smtp_password'] = encrypt(String(config.password));
+  if (config.apiKey) entries['smtp_api_key'] = encrypt(String(config.apiKey));
   if (config.fromEmail !== undefined) entries['smtp_from_email'] = config.fromEmail;
   if (config.fromName !== undefined) entries['smtp_from_name'] = config.fromName;
 
@@ -309,11 +263,14 @@ export async function sendBulkEmails({
   return results;
 }
 
+/**
+ * Verifies an HMAC-SHA256 signature over the *raw* request body (re-serialising
+ * parsed JSON would not reproduce the signed bytes). Fails closed without a secret.
+ */
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
-  const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) return false;
-  if (!signatureHeader) return false;
-  const provided = signatureHeader.trim().replace(/^sha256=/i, '');
+  const secret = process.env.EMAIL_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+  if (!secret || !signatureHeader) return false;
+  const provided = signatureHeader.trim().replace(/^sha256=/i, '').toLowerCase();
   const expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
   const a = Buffer.from(provided, 'utf8');
   const b = Buffer.from(expected, 'utf8');

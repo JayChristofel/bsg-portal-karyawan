@@ -15,6 +15,13 @@
       "when": 1792376611314,
       "tag": "0001_broadcast_warmup_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792376982416,
+      "tag": "0002_rate_limits",
+      "breakpoints": true
     }
   ]
 }

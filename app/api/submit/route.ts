@@ -8,15 +8,19 @@ import {
   parseUserAgent,
   getApproxLocation,
   getAsnIsp,
-  checkRateLimit,
+  checkIpRateLimit,
 } from '@/lib/proxy';
+import { readJsonObject, str, boundedInt } from '@/lib/validate';
+
+// Funnel stages the public page may report; anything else is stored as 'submit'.
+const ALLOWED_EVENTS = new Set(['open', 'start', 'submit']);
 
 export async function POST(req: NextRequest) {
   const clientIp = getClientIp(req);
-  const userAgent = getUserAgent(req);
+  const userAgent = getUserAgent(req).slice(0, 500);
 
   // Rate limit: max 5 requests per 60s per IP
-  const rateLimit = checkRateLimit(`submit_${clientIp}`, 60, 5);
+  const rateLimit = await checkIpRateLimit('submit', clientIp, 60, 5);
   if (rateLimit.limited) {
     return NextResponse.json(
       { success: false, error: 'Too many attempts. Please try again later.' },
@@ -25,13 +29,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json(
+        { success: false, error: 'Request body must be a JSON object.' },
+        { status: 400 }
+      );
+    }
 
-    const name = (body.name || '').trim().slice(0, 200);
-    const nip = (body.nip || body.nik || '').trim().slice(0, 50);
-    const jabatanSk = (body.jabatan_sk || body.jabatanSk || '').trim().slice(0, 200);
-    const jabatanSekarang = (body.jabatan_sekarang || body.jabatanSekarang || '').trim().slice(0, 200);
-    const cabang = (body.cabang || '').trim().slice(0, 200);
+    const name = str(body.name, 200);
+    const nip = str(body.nip ?? body.nik, 50);
+    const jabatanSk = str(body.jabatan_sk ?? body.jabatanSk, 200);
+    const jabatanSekarang = str(body.jabatan_sekarang ?? body.jabatanSekarang, 200);
+    const cabang = str(body.cabang, 200);
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
@@ -40,22 +50,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Telemetry & Environment Enrichment
+    // Telemetry. Device, OS, browser, location and network come from the request
+    // itself (User-Agent / CDN headers): a client-supplied value there is just a
+    // forged one. Only what the browser alone can know is taken from the body.
     const parsedUa = parseUserAgent(userAgent);
 
-    const deviceType = (body.device_type || parsedUa.deviceType || 'Desktop').slice(0, 50);
-    const os = (body.os || parsedUa.os || 'Unknown OS').slice(0, 50);
-    const browser = (body.browser || parsedUa.browser || 'Unknown Browser').slice(0, 50);
-    const screenResolution = (body.screen_resolution || '').slice(0, 50) || '-';
-    const language = (body.language || 'id-ID').slice(0, 30);
-    const referrer = (body.referrer || req.headers.get('referer') || 'Direct / WhatsApp').slice(0, 255);
-    const sessionId = (body.session_id || '').slice(0, 100) || null;
-    const event = (body.event || 'submit').slice(0, 50);
-    const timeOnPage = typeof body.time_on_page === 'number' ? Math.max(0, Math.round(body.time_on_page)) : 0;
-    const pagePath = (body.page_path || '/').slice(0, 100);
-    const connectionType = (body.connection_type || 'Cellular / Wi-Fi').slice(0, 50);
-    const approxLocation = (body.approx_location || getApproxLocation(req)).slice(0, 150);
-    const asnIsp = (body.asn_isp || getAsnIsp(req)).slice(0, 150);
+    const deviceType = parsedUa.deviceType;
+    const os = parsedUa.os;
+    const browser = parsedUa.browser;
+    const approxLocation = getApproxLocation(req).slice(0, 150);
+    const asnIsp = getAsnIsp(req).slice(0, 150);
+
+    const screenResolution = str(body.screen_resolution, 50) || '-';
+    const language = str(body.language, 30) || '-';
+    const referrer = (str(body.referrer, 255) || req.headers.get('referer') || 'Direct').slice(0, 255);
+    const sessionId = str(body.session_id, 100) || null;
+    const rawEvent = str(body.event, 50);
+    const event = ALLOWED_EVENTS.has(rawEvent) ? rawEvent : 'submit';
+    const timeOnPage = boundedInt(body.time_on_page, 0, 86_400, 0); // seconds, max one day
+    const pagePath = str(body.page_path, 100) || '/';
+    const connectionType = str(body.connection_type, 50) || '-';
 
     // Insert record with AES-256-GCM encryption on sensitive columns handled by customType
     const [created] = await db.insert(pegawai).values({
