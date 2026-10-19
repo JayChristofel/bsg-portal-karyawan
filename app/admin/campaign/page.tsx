@@ -4,58 +4,7 @@ import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import ExcelJS from 'exceljs';
 
-/**
- * Minimal RFC-4180 CSV parser. Hand-rolled so we no longer need the
- * `xlsx` dependency (which had an unpatched prototype-pollution advisory).
- */
-function parseCsv(text: string): unknown[][] {
-  const rows: unknown[][] = [];
-  let row: unknown[] = [];
-  let field = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-      continue;
-    }
-
-    if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      row.push(field);
-      field = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += ch;
-    }
-  }
-
-  if (field !== '' || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-
-  return rows;
-}
 import {
-  AlertTriangle,
   Building2,
   Clock,
   Eye,
@@ -80,14 +29,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -110,70 +51,10 @@ import { useTableView } from '@/lib/table-view';
 import { fetchAllRows } from '@/lib/fetch-all';
 import { useBatchBroadcast } from '@/lib/batch-broadcast';
 import { cn } from '@/lib/utils';
-
-export interface RecipientRow {
-  id: number;
-  label: string;
-  phone: string | null;
-  cabang: string | null;
-  message: string | null;
-  waMessageId: string | null;
-  waStatus: 'pending' | 'sent' | 'delivered' | 'read' | string;
-  waSentAt: string | null;
-  createdAt: string;
-  isSubmitted?: boolean;
-  formSubmittedAt?: string | null;
-}
-
-const DEFAULT_TEMPLATES = [
-  '{Yth.|Dear Sir/Madam} {nama},\n\nRegarding the *update of Bank SulutGo employee position data*, we kindly ask you to confirm your position and work unit through the official portal below:\n\n{link}\n\nPlease complete the confirmation by *today, 4:00 PM WITA* so your position and work unit data are verified.\n\nThank you for your cooperation.\n\n*Human Resources Division*\n*Bank SulutGo*',
-  '{Yth.|Dear} {nama},\n\nKami mengingatkan untuk *memperbarui data pegawai Bank SulutGo* melalui portal berikut:\n\n{link}\n\nMohon selesai *hari ini jam 4:00 PM WITA* agar data posisi dan unit kerja Anda terverifikasi.\n\nTerima kasih atas kerja samanya.\n\n*Divisi SDM*\n*Bank SulutGo*',
-  '{Yth.|Bapak/Ibu} {nama},\n\nMohon konfirmasi posisi dan unit kerja Anda melalui portal resmi Bank SulutGo:\n\n{link}\n\nBatas waktu: *hari ini jam 4:00 PM WITA*.\n\nTerima kasih atas perhatian dan kerja samanya.\n\n*SDM*\n*Bank SulutGo*',
-  '{Yth.|Bapak/Ibu} {nama},\n\nJangan lupa *memperbarui data* posisi dan unit kerja Anda melalui portal berikut:\n\n{link}\n\nMohon diselesaikan sebelum *hari ini jam 4:00 PM WITA*.\n\nTerima kasih atas kerja samanya.\n\n*Divisi Sumber Daya Manusia*\n*Bank SulutGo*',
-  '{Yth.|Bapak/Ibu} {nama},\n\nIni adalah pengingat untuk *memperbarui data pegawai* melalui portal Bank SulutGo:\n\n{link}\n\nMohon selesai *hari ini jam 4:00 PM WITA* agar data Anda terverifikasi.\n\nTerima kasih atas perhatian dan kerja samanya.\n\n*SDM*\n*Bank SulutGo*',
-];
-
-/** Spintax: replaces {a|b|c} with one random pick; leaves {nama}/{link} intact. */
-function processSpintax(text: string): string {
-  const spintaxRegex = /\{([^{}]+)\}/g;
-  let result = text;
-  let matches = spintaxRegex.exec(result);
-  let iterations = 0;
-
-  while (matches && iterations < 20) {
-    iterations++;
-    const fullMatch = matches[0];
-    const choices = matches[1].split('|');
-    const isVariable =
-      choices.length === 1 &&
-      (choices[0].toLowerCase() === 'nama' || choices[0].toLowerCase() === 'link');
-    if (!isVariable) {
-      const chosen = choices[Math.floor(Math.random() * choices.length)];
-      result = result.replace(fullMatch, chosen);
-    }
-    matches = spintaxRegex.exec(result);
-  }
-  return result;
-}
-
-type DelayProfile = 'safe' | 'balanced' | 'fast';
-
-const WA_STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  sending: 'Sending',
-  failed: 'Failed',
-  sent: 'Sent',
-  delivered: 'Delivered',
-  read: 'Read',
-};
-
-const DELAY_META: Record<DelayProfile, { label: string; range: string }> = {
-  safe: { label: 'Safe', range: '60–120s random' },
-  balanced: { label: 'Balanced', range: '30–60s random' },
-  fast: { label: 'Fast', range: '15–30s' },
-};
-
-const TONE_OK: React.CSSProperties = { background: 'transparent', color: '#e9edef' };
+import { parseCsv, processSpintax, DEFAULT_TEMPLATES, WA_STATUS_LABEL, DELAY_META, type DelayProfile, type RecipientRow } from './helpers';
+import { TemplateDialog } from './TemplateDialog';
+import { ImportDialog } from './ImportDialog';
+import { BulkEditCabangDialog } from './BulkEditCabangDialog';
 
 export default function BroadcastPage() {
   const [confirm, confirmDialog] = useConfirm();
@@ -1724,239 +1605,37 @@ const confirmMsg =
         )}
       </SectionCard>
 
-      {/* ── Template modal with phone mockup ─────────────────── */}
-      <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
-        <DialogContent className="glass-strong max-h-[92vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle className="base">Message Templates &amp; Preview</DialogTitle>
-            <DialogDescription>
-              {msgTemplates.length} template variations — rotated automatically per message. Tags: <code className="tabular">{'{nama}'}</code>, <code className="tabular">{'{link}'}</code>, spintax <code className="tabular">{'{opsi1|opsi2}'}</code>
-            </DialogDescription>
-          </DialogHeader>
+      <TemplateDialog
+        open={showTemplateModal}
+        onOpenChange={setShowTemplateModal}
+        templates={msgTemplates}
+        onTemplatesChange={setMsgTemplates}
+        selectedIdx={selectedTemplateIdx}
+        onSelectIdx={setSelectedTemplateIdx}
+        previewText={mockupPreviewText}
+        onPreviewText={setMockupPreviewText}
+        sampleName={mockupSampleName}
+        onSampleName={setMockupSampleName}
+      />
 
-          <div className="space-y-3">
-            <div className="flex gap-1.5 flex-wrap">
-              {msgTemplates.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setSelectedTemplateIdx(idx)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                    selectedTemplateIdx === idx
-                      ? 'bg-accent text-accent-foreground'
-                      : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  Template {idx + 1}
-                </button>
-              ))}
-            </div>
+      <ImportDialog
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        fileName={importFileName}
+        preview={importPreview}
+        isImporting={isImporting}
+        onConfirm={() => void handleSaveImport()}
+      />
 
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="tpl-broadcast">Message Body (Template {selectedTemplateIdx + 1})</Label>
-                <textarea
-                  id="tpl-broadcast"
-                  rows={14}
-                  value={msgTemplates[selectedTemplateIdx] || ''}
-                  onChange={(e) => {
-                    const next = [...msgTemplates];
-                    next[selectedTemplateIdx] = e.target.value;
-                    setMsgTemplates(next);
-                  }}
-                  className="tabular w-full resize-vertical rounded-md border border-input bg-transparent px-3 py-2 text-xs leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                />
-              </div>
-
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-accent">
-                    Preview Tampilan di Layar HP Target
-                  </p>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => {
-                      const origin =
-                        typeof window !== 'undefined'
-                          ? window.location.origin
-                          : 'https://portal-pegawai.internal';
-                      const template = msgTemplates[selectedTemplateIdx] || msgTemplates[0];
-                      setMockupPreviewText(
-                        processSpintax(template)
-                          .replace(/\{nama\}/gi, mockupSampleName)
-                          .replace(/\{link\}/gi, `${origin}/`),
-                      );
-                    }}
-                  >
-                    <AlertTriangle className="size-3" aria-hidden="true" />
-                    Acak Spintax Baru
-                  </Button>
-                </div>
-
-                {/* Phone frame */}
-                <div
-                  style={TONE_OK}
-                  className="overflow-hidden rounded-[28px] border-[8px] border-[#1f2c34] shadow-[0_15px_35px_rgba(0,0,0,0.6)]"
-                >
-                  <div
-                    className="flex items-center gap-2.5 border-b border-white/6 px-3.5 py-2.5"
-                    style={{ background: '#202c33' }}
-                  >
-                    <div
-                      className="flex size-8 items-center justify-center rounded-full text-[13px] font-bold text-white"
-                      style={{ background: '#00a884' }}
-                    >
-                      BSG
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-semibold text-[#e9edef]">Bank SulutGo SDM</div>
-                      <div className="text-[10px] text-[#8696a0]">Akun Resmi / Online</div>
-                    </div>
-                  </div>
-
-                  <div
-                    className="min-h-64 px-3 py-4"
-                    style={{
-                      background: '#0b141a',
-                      backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 0)',
-                      backgroundSize: '16px 16px',
-                    }}
-                  >
-                    <div className="mb-3 text-center">
-                      <span
-                        className="rounded-md px-2.5 py-0.5 text-[10px] text-[#8696a0]"
-                        style={{ background: '#182229' }}
-                      >
-                        HARI INI
-                      </span>
-                    </div>
-                    <div
-                      className="max-w-[92%] rounded-lg px-3 py-2.5 text-xs leading-relaxed break-words whitespace-pre-wrap text-[#e9edef]"
-                      style={{ background: '#005c4b', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
-                    >
-                      {mockupPreviewText}
-                      <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-[#8696a0]">
-                        <span>09:15</span>
-                        <span style={{ color: '#53bdeb' }}>✓✓</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span>Sample Target Name:</span>
-                  <Input
-                    value={mockupSampleName}
-                    onChange={(e) => setMockupSampleName(e.target.value)}
-                    className="h-7 max-w-48 text-xs"
-                    aria-label="Sample target name for the preview"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowTemplateModal(false)}>
-              Tutup
-            </Button>
-            <Button onClick={() => setShowTemplateModal(false)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Import preview modal ─────────────────────────────── */}
-      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-        <DialogContent className="glass-strong max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-base">Confirm File Import</DialogTitle>
-            <DialogDescription>
-              File: {importFileName} · Detected: {importPreview.length} employees
-            </DialogDescription>
-          </DialogHeader>
-
-          <p className="text-xs text-muted-foreground">
-            Preview of the first 5 records that will be added to the broadcast list.
-          </p>
-
-          <div className="overflow-hidden rounded-lg border border-border/60">
-            <Table>
-              <TableHeader className="bg-background/40">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Employee Name</TableHead>
-                  <TableHead>No. WhatsApp</TableHead>
-                  <TableHead>Branch / Unit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {importPreview.slice(0, 5).map((row, idx) => (
-                  <TableRow key={`${row.label}-${idx}`}>
-                    <TableCell className="font-medium text-foreground">{row.label}</TableCell>
-                    <TableCell className="tabular text-chart-2">{row.phone || '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">{row.cabang || '-'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {importPreview.length > 5 ? (
-              <p className="border-t border-border/60 bg-background/60 py-2 text-center text-[11px] text-muted-foreground">
-                …and {importPreview.length - 5} more employees
-              </p>
-            ) : null}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void handleSaveImport()} disabled={isImporting}>
-              {isImporting ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <FileSpreadsheet aria-hidden="true" />
-              )}
-              {isImporting ? 'Importing…' : `Import ${importPreview.length} Employees`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Bulk edit cabang modal ─────────────────────────────── */}
-      <Dialog open={showBulkEditCabang} onOpenChange={setShowBulkEditCabang}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Bulk Edit Branch</DialogTitle>
-            <DialogDescription>
-              Change the branch for {selectedIds.size} selected recipients.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              value={bulkEditCabangValue}
-              onChange={(e) => setBulkEditCabangValue(e.target.value)}
-              placeholder="New branch name (e.g. KCP Manado)"
-              aria-label="New branch name"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowBulkEditCabang(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void handleBulkEditCabang()} disabled={isBulkEditing || !bulkEditCabangValue.trim()}>
-              {isBulkEditing ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Building2 aria-hidden="true" />
-              )}
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BulkEditCabangDialog
+        open={showBulkEditCabang}
+        onOpenChange={setShowBulkEditCabang}
+        count={selectedIds.size}
+        value={bulkEditCabangValue}
+        onValueChange={setBulkEditCabangValue}
+        isSaving={isBulkEditing}
+        onConfirm={() => void handleBulkEditCabang()}
+      />
       {confirmDialog}
     </div>
   );

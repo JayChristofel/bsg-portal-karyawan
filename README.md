@@ -66,7 +66,7 @@ JWT_SECRET=""
 ```
 Variabel integrasi WhatsApp/email dan opsi lain (lihat `.env.example`):
 `WHATSAPP_API_URL`, `WHATSAPP_DEVICE_ID`, `WHATSAPP_API_USERNAME`, `WHATSAPP_API_PASSWORD`,
-`WHATSAPP_WEBHOOK_SECRET`, `GOWA_ALLOWED_HOSTS`, `TRUST_PROXY_HEADERS`, `APP_URL`
+`WHATSAPP_WEBHOOK_SECRET`, `GOWA_ALLOWED_HOSTS` (sebaiknya diisi di produksi), `TRUST_PROXY_HEADERS`, `APP_URL`, `CRON_SECRET`
 (dipakai untuk `{link}` di pesan otomatis). Konfigurasi SMTP hanya diisi dari halaman admin
 (`/admin/email/config`) dan disimpan terenkripsi di tabel `settings`; variabel `SMTP_*` tidak dibaca aplikasi.
 
@@ -123,4 +123,13 @@ TEST_DATABASE_URL=postgresql://user@127.0.0.1:5432/portal_test npm test
 2. Impor project di **Vercel Dashboard**.
 3. Di tab **Environment Variables** Vercel, tambahkan minimal `DATABASE_URL`, `ENCRYPTION_KEY`, `JWT_SECRET`
    (plus variabel WhatsApp bila broadcast dipakai).
-4. Klik **Deploy**. Aplikasi langsung live secara serverless dengan performa maksimal!
+4. (Opsional, untuk antrean auto-resume) set `CRON_SECRET`, lalu jadwalkan `GET /api/cron/auto-resume`
+   di `vercel.json`:
+   ```json
+   { "crons": [{ "path": "/api/cron/auto-resume", "schedule": "*/5 * * * *" }] }
+   ```
+   Jadwal per 5 menit butuh plan **Pro** (plan Hobby hanya mengizinkan cron harian dan menolak deploy
+   dengan jadwal lebih sering). Tiap pemanggilan hanya mengirim yang muat dalam satu invokasi
+   (jeda 60-120 detik per pesan, maksimum 300 detik), lalu berhenti sendiri; jadwal yang mengulang.
+   Pemicu hanya berjalan bila perangkat WhatsApp terhubung dan masih dalam jam kirim (WITA).
+5. Klik **Deploy**. Aplikasi langsung live secara serverless dengan performa maksimal!
