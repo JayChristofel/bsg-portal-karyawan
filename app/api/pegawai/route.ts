@@ -1,37 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
-import { desc } from 'drizzle-orm';
-import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { logAuditForRequest } from '@/lib/audit';
-
-async function checkAuth(req: NextRequest) {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  return await verifySessionToken(token);
-}
+import { desc, lt } from 'drizzle-orm';
+import { getAdminUsername } from '@/lib/auth-helper';
+import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
+import { readJsonObject, str, parsePageParams } from '@/lib/validate';
+import { APP_TZ } from '@/lib/time';
 
 export async function GET(req: NextRequest) {
-  const session = await checkAuth(req);
-  if (!session) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
-    const rows = await db.select().from(pegawai).orderBy(desc(pegawai.createdAt));
+    const { limit, before } = parsePageParams(req.nextUrl.searchParams);
+    // One extra row tells whether another page exists.
+    const fetched = await db
+      .select()
+      .from(pegawai)
+      .where(before === null ? undefined : lt(pegawai.id, before))
+      .orderBy(desc(pegawai.id))
+      .limit(limit + 1);
+    const rows = fetched.slice(0, limit);
+    const nextBefore = fetched.length > limit ? rows[rows.length - 1].id : null;
 
-    void logAuditForRequest(
-      req,
-      session.username,
-      'view_employees',
-      `Melihat daftar data pegawai (${rows.length} baris)`,
-    );
+    if (before === null) {
+      await logAuditThrottled(req, actor, 'view_employees', 'Melihat daftar data pegawai');
+    }
 
-    return NextResponse.json(
-      rows.map((r) => ({
+    return NextResponse.json({
+      nextBefore,
+      rows: rows.map((r) => ({
         id: r.id,
         created_at: r.createdAt
-          ? new Date(r.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) + ' WITA'
+          ? new Date(r.createdAt).toLocaleString('id-ID', { timeZone: APP_TZ }) + ' WITA'
           : '-',
         created_at_raw: r.createdAt ? new Date(r.createdAt).toISOString() : null,
         name: r.name,
@@ -41,22 +44,23 @@ export async function GET(req: NextRequest) {
         cabang: r.cabang,
         ip_address: r.ipAddress,
         user_agent: r.userAgent,
-        device_type: r.deviceType || 'Desktop',
-        os: r.os || 'Windows/Android',
-        browser: r.browser || 'Browser',
+        // Missing telemetry is shown as missing, never invented.
+        device_type: r.deviceType || '-',
+        os: r.os || '-',
+        browser: r.browser || '-',
         screen_resolution: r.screenResolution || '-',
-        language: r.language || 'id-ID',
-        referrer: r.referrer || 'Direct / WhatsApp',
+        language: r.language || '-',
+        referrer: r.referrer || '-',
         session_id: r.sessionId || '-',
         event: r.event || 'submit',
         time_on_page: r.timeOnPage ?? 0,
         page_path: r.pagePath || '/',
-        asn_isp: r.asnIsp || 'Mobile Network / Local ISP',
-        approx_location: r.approxLocation || 'Sulawesi Utara, ID',
-        connection_type: r.connectionType || 'Wi-Fi / Mobile',
-      }))
-    );
-  } catch (error: any) {
+        asn_isp: r.asnIsp || '-',
+        approx_location: r.approxLocation || '-',
+        connection_type: r.connectionType || '-',
+      })),
+    });
+  } catch (error: unknown) {
     console.error('Fetch employee records error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not read data from the database.' },
@@ -66,18 +70,21 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await checkAuth(req);
-  if (!session) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
-    const body = await req.json();
-    const name = (body.name || '').trim().slice(0, 200);
-    const nip = (body.nip || body.nik || '').trim().slice(0, 50);
-    const jabatanSk = (body.jabatan_sk || body.jabatanSk || '').trim().slice(0, 200);
-    const jabatanSekarang = (body.jabatan_sekarang || body.jabatanSekarang || '').trim().slice(0, 200);
-    const cabang = (body.cabang || '').trim().slice(0, 200);
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ success: false, error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const name = str(body.name, 200);
+    const nip = str(body.nip ?? body.nik, 50);
+    const jabatanSk = str(body.jabatan_sk ?? body.jabatanSk, 200);
+    const jabatanSekarang = str(body.jabatan_sekarang ?? body.jabatanSekarang, 200);
+    const cabang = str(body.cabang, 200);
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
@@ -95,7 +102,7 @@ export async function POST(req: NextRequest) {
         jabatanSekarang,
         cabang,
         ipAddress: '-',
-        userAgent: `Admin manual (${session.username})`,
+        userAgent: `Admin manual (${actor})`,
         deviceType: 'Desktop (Admin)',
         os: 'Admin Console',
         browser: 'Admin Console',
@@ -111,15 +118,15 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
-    void logAuditForRequest(
+    await logAuditForRequest(
       req,
-      session.username,
+      actor,
       'create_employee',
-      `Data pegawai "${name}" (ID: ${created?.id ?? '-'}, NIP: ${nip}) ditambahkan manual`,
+      `Data pegawai "${name}" (ID: ${created?.id ?? '-'}) ditambahkan manual`,
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Manual insert error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not add the record to the database.' },

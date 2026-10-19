@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
+import { asNetError } from '@/lib/utils';
 import { gatewayFetch, gatewayTlsMode } from './gowa-tls';
+import { isPrivateHostname, readHostAllowlist } from './net-guard';
+import { rowsOf } from './db-util';
 
 export interface GowaConfig {
   baseUrl: string;
@@ -20,24 +23,6 @@ export interface GowaConfig {
  * Loopback/private ranges are only permitted when GOWA_ALLOW_PRIVATE_HOSTS=1,
  * which is needed when the gateway runs on the same machine during development.
  */
-function isPrivateHostname(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) {
-    return true;
-  }
-  if (h === '::1' || h === '0:0:0:0:0:0:0:1') return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(h) || /^fe[89ab][0-9a-f]:/i.test(h)) return true; // unique-local
-  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!v4) return false;
-  const [a, b] = [Number(v4[1]), Number(v4[2])];
-  if (a === 10 || a === 127 || a === 0) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 169 && b === 254) return true; // link-local / cloud metadata
-  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-  return false;
-}
-
 export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | { ok: false; error: string } {
   let parsed: URL;
   try {
@@ -63,10 +48,7 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
     };
   }
 
-  const allowlist = (process.env.GOWA_ALLOWED_HOSTS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const allowlist = readHostAllowlist(process.env.GOWA_ALLOWED_HOSTS);
 
   if (allowlist.length > 0 && !allowlist.includes(parsed.hostname.toLowerCase())) {
     return { ok: false, error: `Gateway hostname is not allowed. Allow: ${allowlist.join(', ')}` };
@@ -188,7 +170,38 @@ function buildHeaders(config: GowaConfig, extra?: Record<string, string>): Recor
   return headers;
 }
 
+const GATEWAY_TIMEOUT_MS = 15_000;
+const MAX_GATEWAY_RESPONSE_BYTES = 1_000_000;
+let warnedOpenAllowlist = false;
+
+/**
+ * Checked on every call, not only when the URL is saved: the credentials are
+ * attached to whatever host is stored, so a hijacked session that swapped the URL
+ * must not get the gateway password sent to its server.
+ */
+function assertGatewayHostAllowed(baseUrl: string): void {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    throw new Error('Gateway URL is invalid.');
+  }
+  const allowlist = readHostAllowlist(process.env.GOWA_ALLOWED_HOSTS);
+  if (allowlist.length > 0) {
+    if (!allowlist.includes(host)) {
+      throw new Error('Gateway hostname is not in GOWA_ALLOWED_HOSTS; request blocked.');
+    }
+  } else if (process.env.NODE_ENV === 'production' && !warnedOpenAllowlist) {
+    warnedOpenAllowlist = true;
+    console.warn(
+      '[gowa] GOWA_ALLOWED_HOSTS is not set: gateway credentials are sent to whichever ' +
+        'host is saved in the settings. Set it to the gateway hostname.',
+    );
+  }
+}
+
 async function gowaFetch(config: GowaConfig, path: string, options: RequestInit = {}) {
+  assertGatewayHostAllowed(config.baseUrl);
   const url = `${config.baseUrl}${path}`;
   let res: Response;
   try {
@@ -198,10 +211,17 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
       ...options,
       headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
       cache: 'no-store',
+      // Never follow a redirect with the Basic Auth header attached, and never hang.
+      redirect: 'manual',
+      signal: options.signal ?? AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });
-  } catch (err: any) {
-    console.error('GOWA FETCH ERROR:', err?.message, '| cause:', err?.cause?.code, err?.cause?.message);
+  } catch (err: unknown) {
+    console.error('GOWA FETCH ERROR:', asNetError(err).message, '| cause:', asNetError(err).cause?.code, asNetError(err).cause?.message);
     throw err;
+  }
+
+  if (Number(res.headers.get('content-length') ?? 0) > MAX_GATEWAY_RESPONSE_BYTES) {
+    throw new Error('Gateway response is too large.');
   }
   const text = await res.text();
   try {
@@ -209,7 +229,10 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
     // rejection (e.g. ALREADY_LOGGED_IN) from a transport failure.
     return { ...JSON.parse(text), status: res.status };
   } catch {
-    return { code: res.status === 200 ? 'OK' : 'ERROR', message: text, status: res.status };
+    // The gateway always answers JSON. Anything else -- an nginx error page, a
+    // login form -- is a failure even when the HTTP status is 200, otherwise every
+    // send would be reported as delivered.
+    return { code: 'ERROR', message: text.slice(0, 300), status: res.status };
   }
 }
 
@@ -251,8 +274,8 @@ export async function requestQr(config?: GowaConfig): Promise<QrResult> {
   let raw: { code?: string; message?: string; status?: number; results?: { qr_link?: string; qr_url?: string; qr_duration?: number } };
   try {
     raw = await getQRCode(cfg);
-  } catch (err: any) {
-    const cause = err?.cause?.code || '';
+  } catch (err: unknown) {
+    const cause = asNetError(err).cause?.code || '';
     const tls = cause.includes('CERT') || cause.includes('SELF_SIGNED') || cause.includes('UNABLE_TO_VERIFY');
     const mode = gatewayTlsMode();
     return {
@@ -265,7 +288,7 @@ export async function requestQr(config?: GowaConfig): Promise<QrResult> {
           (mode === 'system'
             ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
             : 'The configured CA did not match the certificate the gateway presented — it may have been rotated.')
-        : `Could not reach the gateway: ${err?.message ?? 'unknown network error'} (trust mode: ${mode})`,
+        : `Could not reach the gateway: ${asNetError(err).message ?? 'unknown network error'} (trust mode: ${mode})`,
     };
   }
 
@@ -312,15 +335,25 @@ export interface SendMessagePayload {
   message: string;
 }
 
-export async function sendMessage(phone: string, message: string, config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  // Normalize phone: remove +, spaces, dashes; convert leading 0 to 62
-  let normalized = phone.replace(/[\s\-\+\(\)]/g, '');
+/**
+ * Normalises an Indonesian number to digits only (leading 0 -> 62). Returns null
+ * for anything that is not a plausible phone number, so letters, JIDs such as
+ * "123@g.us" and other junk never reach the gateway.
+ */
+export function normalizeWaPhone(phone: string): string | null {
+  let normalized = phone.replace(/[\s\-+()]/g, '');
   if (normalized.startsWith('0')) {
     normalized = '62' + normalized.slice(1);
   } else if (normalized.startsWith('8') && normalized.length >= 9) {
     normalized = '62' + normalized;
   }
+  return /^\d{8,15}$/.test(normalized) ? normalized : null;
+}
+
+export async function sendMessage(phone: string, message: string, config?: GowaConfig) {
+  const normalized = normalizeWaPhone(phone);
+  if (!normalized) throw new Error('Invalid phone number.');
+  const cfg = config || (await getGowaConfig());
 
   return gowaFetch(cfg, '/send/message', {
     method: 'POST',
@@ -343,19 +376,29 @@ export async function sendMessageGuarded(
   numberId: string,
   config?: GowaConfig,
 ): Promise<{ ok: true; result: unknown } | { ok: false; reason: 'quota'; state: WarmUpState }> {
+  // Reject a bad number before it costs a unit of today's quota.
+  if (!normalizeWaPhone(phone)) throw new Error('Invalid phone number.');
+
   const state = await getWarmUpState(numberId);
 
   if (state.remainingToday <= 0) {
     return { ok: false, reason: 'quota', state };
   }
 
+  const day = utcDay();
   const claimed = await claimQuota(numberId, state.dailyLimit);
   if (!claimed) {
     return { ok: false, reason: 'quota', state: await getWarmUpState(numberId) };
   }
 
-  const result = await sendMessage(phone, message, config);
-  return { ok: true, result };
+  try {
+    const result = await sendMessage(phone, message, config);
+    return { ok: true, result };
+  } catch (err) {
+    // Nothing left the device, so the claimed unit must not count against today.
+    await releaseQuota(numberId, day);
+    throw err;
+  }
 }
 
 /**
@@ -468,9 +511,10 @@ export async function getWarmUpState(numberId: string): Promise<WarmUpState> {
       label: null,
       pairedAt: new Date(),
       ageDays: 0,
+      // Fail closed: if the counters can't be read, don't pretend there is headroom.
       dailyLimit: 15,
-      sentToday: 0,
-      remainingToday: 15,
+      sentToday: 15,
+      remainingToday: 0,
       nextLimitIn: null,
     };
   }
@@ -487,20 +531,41 @@ async function claimQuota(numberId: string, dailyLimit: number): Promise<boolean
   const { sendCounters } = await import('@/db/schema');
   const { sql } = await import('drizzle-orm');
 
+  // Computed once: a call straddling 00:00 UTC must insert and update the same row.
+  const day = utcDay();
+
+  // send_counters has a (number_id, day) primary key, so concurrent first
+  // claims of the day collapse into one row instead of inserting duplicates.
   await db
     .insert(sendCounters)
-    .values({ numberId, day: utcDay(), sent: 0 })
+    .values({ numberId, day, sent: 0 })
     .onConflictDoNothing();
 
-  const result = (await db.execute(sql`
+  const result = await db.execute(sql`
     UPDATE send_counters
        SET sent = sent + 1, updated_at = NOW()
      WHERE number_id = ${numberId}
-       AND day = ${utcDay()}
+       AND day = ${day}
        AND sent < ${dailyLimit}
-  `)) as { rowCount?: number; rows?: unknown[] };
+    RETURNING sent
+  `);
 
-  return (result.rowCount ?? result.rows?.length ?? 0) > 0;
+  return rowsOf(result).length > 0;
+}
+
+/** Gives back a claimed unit when the message never left (gateway threw). */
+async function releaseQuota(numberId: string, day: string): Promise<void> {
+  try {
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+    await db.execute(sql`
+      UPDATE send_counters
+         SET sent = sent - 1, updated_at = NOW()
+       WHERE number_id = ${numberId} AND day = ${day} AND sent > 0
+    `);
+  } catch (err) {
+    console.error('releaseQuota failed:', (err as Error).message);
+  }
 }
 
 export class DailyQuotaExceededError extends Error {
@@ -512,26 +577,6 @@ export class DailyQuotaExceededError extends Error {
     );
     this.name = 'DailyQuotaExceededError';
   }
-}
-
-/**
- * Records accepted sends against the number's daily quota.
- *
- * Call this *after* the gateway has accepted a message, so the counter tracks
- * what actually left the device rather than what was merely attempted.
- */
-export async function recordSend(numberId: string, count = 1): Promise<void> {
-  const { db } = await import('@/db');
-  const { sendCounters } = await import('@/db/schema');
-  const { sql } = await import('drizzle-orm');
-
-  await db
-    .insert(sendCounters)
-    .values({ numberId, day: utcDay(), sent: count })
-    .onConflictDoUpdate({
-      target: [sendCounters.numberId, sendCounters.day],
-      set: { sent: sql`${sendCounters.sent} + ${count}`, updatedAt: new Date() },
-    });
 }
 
 export async function checkDailyLimit(

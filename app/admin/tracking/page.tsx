@@ -114,19 +114,26 @@ export default function TrackingPage() {
     }
   }, []);
 
+  // A slow response for a previous campaign filter must not overwrite a newer one.
+  const fetchSeqRef = React.useRef(0);
+
   const fetchRecipients = React.useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     try {
       const params = selectedCampaign !== 'all' ? `?campaignId=${selectedCampaign}` : '';
       const res = await fetch(`/api/tracking${params}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
+        if (seq !== fetchSeqRef.current) return;
         setRecipients(data.recipients ?? []);
       }
     } catch (err) {
       console.error('Fetch recipients error:', err);
     } finally {
-      setIsLoading(false);
-      setLastUpdated(new Date());
+      if (seq === fetchSeqRef.current) {
+        setIsLoading(false);
+        setLastUpdated(new Date());
+      }
     }
   }, [selectedCampaign]);
 
@@ -155,23 +162,23 @@ export default function TrackingPage() {
     void fetchRecipients();
   }, [fetchRecipients]);
 
-  // Auto-refresh loop — pausable for keyboard/accessibility control
+  // Auto-refresh while live and visible. One effect owns both the timer and the
+  // refresh-on-return, so coming back to the tab does one fetch, not two, and a paused
+  // (not live) view never refreshes behind the user's back.
   React.useEffect(() => {
     if (!isLive) return;
     const id = window.setInterval(() => {
       if (document.visibilityState === 'visible') void fetchRecipients();
     }, REFRESH_MS);
-    return () => window.clearInterval(id);
-  }, [isLive, fetchRecipients]);
-
-  // Stop work while tab is hidden
-  React.useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') void fetchRecipients();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [fetchRecipients]);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isLive, fetchRecipients]);
 
   const filteredRecipients = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

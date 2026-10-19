@@ -1,45 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { db } from '@/db';
 import { pegawai } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logAuditForRequest, describeChanges } from '@/lib/audit';
+import { DECRYPT_FAILED } from '@/lib/crypto';
+import { readJsonObject, str, parseId } from '@/lib/validate';
 
-async function checkAuth(req: NextRequest) {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return false;
-  const session = await verifySessionToken(token);
-  return Boolean(session);
-}
+const SENSITIVE_FIELDS = ['nip', 'jabatanSk', 'jabatanSekarang', 'cabang'];
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await checkAuth(req))) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
-  const actor = await getAdminUsername(req);
   const { id } = await params;
-  const recordId = parseInt(id, 10);
-  if (isNaN(recordId)) {
+  const recordId = parseId(id);
+  if (recordId === null) {
     return NextResponse.json({ success: false, error: 'Invalid ID.' }, { status: 400 });
   }
 
   try {
-    const body = await req.json();
-    const name = (body.name || '').trim().slice(0, 200);
-    const nip = (body.nip || body.nik || '').trim().slice(0, 50);
-    const jabatanSk = (body.jabatan_sk || body.jabatanSk || '').trim().slice(0, 200);
-    const jabatanSekarang = (body.jabatan_sekarang || body.jabatanSekarang || '').trim().slice(0, 200);
-    const cabang = (body.cabang || '').trim().slice(0, 200);
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ success: false, error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const name = str(body.name, 200);
+    const nip = str(body.nip ?? body.nik, 50);
+    const jabatanSk = str(body.jabatan_sk ?? body.jabatanSk, 200);
+    const jabatanSekarang = str(body.jabatan_sekarang ?? body.jabatanSekarang, 200);
+    const cabang = str(body.cabang, 200);
 
     if (!name || !nip || !jabatanSk || !jabatanSekarang || !cabang) {
       return NextResponse.json(
         { success: false, error: 'All fields are required.' },
         { status: 400 }
+      );
+    }
+
+    if ([nip, jabatanSk, jabatanSekarang, cabang].includes(DECRYPT_FAILED)) {
+      return NextResponse.json(
+        { success: false, error: 'Nilai asli tidak dapat dibaca; isi ulang field yang bertanda [GAGAL DEKRIPSI].' },
+        { status: 400 },
       );
     }
 
@@ -70,10 +76,11 @@ export async function PUT(
       before as unknown as Record<string, unknown>,
       { name, nip, jabatanSk, jabatanSekarang, cabang },
       ['name', 'nip', 'jabatanSk', 'jabatanSekarang', 'cabang'],
+      SENSITIVE_FIELDS,
     );
 
     if (actor) {
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         actor,
         'update_employee',
@@ -82,7 +89,7 @@ export async function PUT(
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not update the record.' },
@@ -95,14 +102,14 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await checkAuth(req))) {
+  const actor = await getAdminUsername(req);
+  if (!actor) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
-  const actor = await getAdminUsername(req);
   const { id } = await params;
-  const recordId = parseInt(id, 10);
-  if (isNaN(recordId)) {
+  const recordId = parseId(id);
+  if (recordId === null) {
     return NextResponse.json({ success: false, error: 'Invalid ID.' }, { status: 400 });
   }
 
@@ -117,16 +124,16 @@ export async function DELETE(
     }
 
     if (actor) {
-      void logAuditForRequest(
+      await logAuditForRequest(
         req,
         actor,
         'delete_employee',
-        `Data pegawai "${deleted.name}" (ID: ${recordId}, NIP: ${deleted.nip}) dihapus`,
+        `Data pegawai "${deleted.name}" (ID: ${recordId}) dihapus`,
       );
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Delete error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not delete the record.' },

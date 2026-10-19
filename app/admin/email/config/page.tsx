@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, Eye, EyeOff, Mail, Save, Send, Settings, XCircle } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Save, Send, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { EmptyState, PageHeader, SectionCard } from '../../components/ui';
+import { PageHeader, SectionCard } from '../../components/ui';
 
 interface EmailConfig {
   host: string;
@@ -22,6 +22,8 @@ interface EmailConfig {
   username: string;
   password: string;
   apiKey: string;
+  hasPassword?: boolean;
+  hasApiKey?: boolean;
   fromEmail: string;
   fromName: string;
 }
@@ -75,6 +77,7 @@ export default function EmailConfigPage() {
       const data = await res.json();
       if (res.ok) {
         setNotice({ tone: 'ok', text: 'Konfigurasi SMTP berhasil disimpan.' });
+        void fetchConfig();
       } else {
         setNotice({ tone: 'err', text: data.error || 'Could not save configuration.' });
       }
@@ -214,7 +217,7 @@ export default function EmailConfigPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={config.password}
                   onChange={(e) => setConfig({ ...config, password: e.target.value })}
-                  placeholder="••••••••"
+                  placeholder={config.hasPassword ? 'Tersimpan — kosongkan jika tidak diubah' : '••••••••'}
                   className="pr-10"
                 />
                 <button

@@ -4,20 +4,13 @@ import { db } from '@/db';
 import { campaigns, recipients, recipientStatusHistory } from '@/db/schema';
 import { and, eq, gte, lte, sql } from 'drizzle-orm';
 import { getAdminUsername } from '@/lib/auth-helper';
-import { logAuditForRequest } from '@/lib/audit';
+import { logAuditThrottled } from '@/lib/audit';
+import { parseDateOnly, parseId } from '@/lib/validate';
+import { startOfDayAppTz, endOfDayAppTz, APP_TZ } from '@/lib/time';
 
-const DAY_MS = 86_400_000;
-
-function startOfDay(value: string): Date | null {
-  const d = new Date(`${value}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function endOfDay(value: string): Date | null {
-  const d = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return null;
-  return new Date(d.getTime() + DAY_MS - 1);
-}
+// A literal, not a bound parameter: Postgres treats `$1` in SELECT and `$2` in GROUP BY
+// as different expressions and rejects the query. APP_TZ is a constant, so this is safe.
+const TZ_LITERAL = sql.raw(`'${APP_TZ}'`);
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -30,9 +23,15 @@ export async function GET(req: NextRequest) {
   const toParam = searchParams.get('to');
   const campaignParam = searchParams.get('campaignId');
 
-  const from = fromParam ? startOfDay(fromParam) : null;
-  const to = toParam ? endOfDay(toParam) : null;
-  const campaignId = campaignParam ? Number(campaignParam) : null;
+  const fromDay = fromParam ? parseDateOnly(fromParam) : null;
+  const toDay = toParam ? parseDateOnly(toParam) : null;
+  const campaignId = campaignParam ? parseId(campaignParam) : null;
+  if ((fromParam && !fromDay) || (toParam && !toDay) || (campaignParam && campaignId === null)) {
+    return NextResponse.json({ error: 'Invalid from/to (YYYY-MM-DD) or campaignId.' }, { status: 400 });
+  }
+  // Day boundaries are WITA days, matching how the dates are shown to the admin.
+  const from = fromDay ? startOfDayAppTz(fromDay) : null;
+  const to = toDay ? endOfDayAppTz(toDay) : null;
 
   try {
     const campaignConds = [];
@@ -51,7 +50,7 @@ export async function GET(req: NextRequest) {
         scheduledAt: campaigns.scheduledAt,
         sentAt: campaigns.sentAt,
         totalRecipients: sql<number>`COUNT(${recipients.id})`,
-        pending: sql<number>`COUNT(${recipients.id}) FILTER (WHERE ${recipients.waStatus} = 'pending')`,
+        pending: sql<number>`COUNT(${recipients.id}) FILTER (WHERE ${recipients.waStatus} IS NULL OR ${recipients.waStatus} = 'pending')`,
         sent: sql<number>`COUNT(${recipients.id}) FILTER (WHERE ${recipients.waStatus} = 'sent')`,
         delivered: sql<number>`COUNT(${recipients.id}) FILTER (WHERE ${recipients.waStatus} = 'delivered')`,
         read: sql<number>`COUNT(${recipients.id}) FILTER (WHERE ${recipients.waStatus} = 'read')`,
@@ -71,18 +70,18 @@ export async function GET(req: NextRequest) {
 
     const historyRows = await db
       .select({
-        day: sql<string>`to_char(${recipientStatusHistory.createdAt}, 'YYYY-MM-DD')`,
+        day: sql<string>`to_char(${recipientStatusHistory.createdAt} AT TIME ZONE ${TZ_LITERAL}, 'YYYY-MM-DD')`,
         status: recipientStatusHistory.status,
         count: sql<number>`COUNT(*)`,
       })
       .from(recipientStatusHistory)
       .innerJoin(recipients, eq(recipients.id, recipientStatusHistory.recipientId))
       .where(timelineWhere)
-      .groupBy(sql`to_char(${recipientStatusHistory.createdAt}, 'YYYY-MM-DD')`, recipientStatusHistory.status);
+      .groupBy(sql`to_char(${recipientStatusHistory.createdAt} AT TIME ZONE ${TZ_LITERAL}, 'YYYY-MM-DD')`, recipientStatusHistory.status);
 
     const createdRows = await db
       .select({
-        day: sql<string>`to_char(${recipients.createdAt}, 'YYYY-MM-DD')`,
+        day: sql<string>`to_char(${recipients.createdAt} AT TIME ZONE ${TZ_LITERAL}, 'YYYY-MM-DD')`,
         count: sql<number>`COUNT(*)`,
       })
       .from(recipients)
@@ -91,7 +90,7 @@ export async function GET(req: NextRequest) {
         ...(to ? [lte(recipients.createdAt, to)] : []),
         ...(campaignId ? [eq(recipients.campaignId, campaignId)] : []),
       ))
-      .groupBy(sql`to_char(${recipients.createdAt}, 'YYYY-MM-DD')`);
+      .groupBy(sql`to_char(${recipients.createdAt} AT TIME ZONE ${TZ_LITERAL}, 'YYYY-MM-DD')`);
 
     const days = new Map<string, { date: string; created: number; sent: number; delivered: number; read: number }>();
     const ensure = (day: string) => {
@@ -114,7 +113,7 @@ export async function GET(req: NextRequest) {
 
     const actor = await getAdminUsername(req);
     if (actor) {
-      void logAuditForRequest(
+      await logAuditThrottled(
         req,
         actor,
         'view_report',
@@ -143,7 +142,7 @@ export async function GET(req: NextRequest) {
       })),
       timeline,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Report broadcast error:', error);
     return NextResponse.json({ error: 'Could not load the broadcast report' }, { status: 500 });
   }

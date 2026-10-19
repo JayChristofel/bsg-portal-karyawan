@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import { FileText, Layers, Pencil, Plus, Ruler, Trash2, X } from 'lucide-react';
 
@@ -28,6 +29,7 @@ interface Template {
 }
 
 export default function TemplatesPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
@@ -101,7 +103,7 @@ export default function TemplatesPage() {
   };
 
   const handleDelete = async (id: number, templateName: string) => {
-    if (!window.confirm(`Delete template "${templateName}"?`)) return;
+    if (!(await confirm({ title: `Delete template "${templateName}"?` }))) return;
     try {
       const res = await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -280,6 +282,7 @@ export default function TemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

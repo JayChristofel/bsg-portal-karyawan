@@ -36,6 +36,7 @@ import {
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
+import { fetchAllRows } from '@/lib/fetch-all';
 
 interface CampaignStats {
   id: number;
@@ -80,7 +81,7 @@ export default function DashboardPage() {
       const [campaignsRes, emailCampaignsRes, pegawaiRes] = await Promise.all([
         fetch('/api/campaigns', { cache: 'no-store' }),
         fetch('/api/email/campaigns', { cache: 'no-store' }),
-        fetch('/api/recipients', { cache: 'no-store' }),
+        fetchAllRows<{ isSubmitted?: boolean }>('/api/recipients').catch(() => null),
       ]);
 
       if (campaignsRes.ok) {
@@ -93,9 +94,8 @@ export default function DashboardPage() {
         setEmailCampaigns(data.campaigns ?? []);
       }
 
-      if (pegawaiRes.ok) {
-        const data = await pegawaiRes.json();
-        const recipients = data.recipients ?? [];
+      if (pegawaiRes) {
+        const recipients = pegawaiRes;
         const submitted = recipients.filter((r: { isSubmitted?: boolean }) => r.isSubmitted).length;
         setPegawaiStats({
           total: recipients.length,
@@ -124,7 +124,6 @@ export default function DashboardPage() {
 
   const emailTotalRecipients = emailCampaigns.reduce((sum, c) => sum + c.totalRecipients, 0);
   const emailTotalSent = emailCampaigns.reduce((sum, c) => sum + c.sentCount, 0);
-  const emailTotalFailed = emailCampaigns.reduce((sum, c) => sum + c.failCount, 0);
   const emailSuccessRate = emailTotalRecipients > 0 ? Math.round((emailTotalSent / emailTotalRecipients) * 100) : 0;
 
   const maxRecipients = Math.max(...campaigns.map((c) => c.totalRecipients), 1);

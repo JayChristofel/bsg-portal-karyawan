@@ -30,6 +30,7 @@ const THEME_BOOTSTRAP = `
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: THEME_BOOTSTRAP is a static string constant with no user input; it must run before paint to avoid a theme flash. */}
       <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       <AdminShell>{children}</AdminShell>
     </>

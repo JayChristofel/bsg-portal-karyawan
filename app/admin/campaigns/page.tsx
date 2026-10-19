@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import {
   CalendarClock,
@@ -59,6 +60,7 @@ interface Template {
 }
 
 export default function CampaignsPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -137,15 +139,19 @@ export default function CampaignsPage() {
   };
 
   const handleSend = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Send campaign "${campaignName}" now?`)) return;
+    if (!(await confirm({ title: `Send campaign "${campaignName}" now?` }))) return;
     setSendingId(id);
     try {
       const res = await fetch(`/api/campaigns/${id}/send`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
+        const left = Number(data.remaining ?? 0);
         setNotice({
-          tone: 'ok',
-          text: `Kampanye "${campaignName}" selesai: ${data.successCount} berhasil, ${data.failCount} gagal.`,
+          tone: data.quotaBlocked ? 'err' : 'ok',
+          text:
+            `Kampanye "${campaignName}": ${data.successCount} berhasil, ${data.failCount} gagal` +
+            (data.quotaBlocked ? '. Kuota harian habis, lanjutkan besok' : '') +
+            (left > 0 ? `. ${left} penerima masih menunggu, tekan Kirim lagi untuk melanjutkan.` : '.'),
         });
         void fetchCampaigns();
       } else {
@@ -159,7 +165,7 @@ export default function CampaignsPage() {
   };
 
   const handleDelete = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Delete campaign "${campaignName}"?`)) return;
+    if (!(await confirm({ title: `Delete campaign "${campaignName}"?` }))) return;
     try {
       const res = await fetch(`/api/campaigns?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -425,6 +431,7 @@ export default function CampaignsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

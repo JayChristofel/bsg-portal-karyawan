@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { getGowaConfig, saveGowaConfig, listDevices, validateGatewayUrl, GOWA_CONFIG_KEYS, DEFAULT_GOWA_CONFIG } from '@/lib/whatsapp';
 import { db } from '@/db';
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
       },
       tlsMode: gatewayTlsMode(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('WA config GET error:', error);
     return NextResponse.json({ error: 'Could not load the gateway configuration' }, { status: 500 });
   }
@@ -63,9 +64,9 @@ export async function POST(req: NextRequest) {
         const result = await listDevices(config);
         const authOk = result?.code === 'SUCCESS' || result?.code === 'OK';
         return NextResponse.json({ ...result, authOk, tlsMode: gatewayTlsMode() });
-      } catch (testErr: any) {
-        console.error('WA config TEST error:', testErr?.message, '| cause:', testErr?.cause?.code, testErr?.cause?.message);
-        const cause = testErr?.cause?.code || testErr?.cause?.message || '';
+      } catch (testErr: unknown) {
+        console.error('WA config TEST error:', asNetError(testErr).message, '| cause:', asNetError(testErr).cause?.code, asNetError(testErr).cause?.message);
+        const cause = asNetError(testErr).cause?.code || asNetError(testErr).cause?.message || '';
         const isTls = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY/.test(String(cause));
         return NextResponse.json(
           {
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
                   ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
                   : 'The configured CA does not match the certificate being served — it may have been rotated.')
               : 'Could not reach the gateway.',
-            detail: testErr?.message,
+            detail: asNetError(testErr).message,
             cause: cause || null,
             tlsMode: gatewayTlsMode(),
           },
@@ -133,8 +134,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ version: '2.1', code: 'SUCCESS', message: 'Gateway configuration saved.' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('WA config POST error:', error);
-    return NextResponse.json({ error: 'Could not save the gateway configuration', detail: error?.message || String(error) }, { status: 500 });
+    return NextResponse.json({ error: 'Could not save the gateway configuration', detail: asNetError(error).message || String(error) }, { status: 500 });
   }
 }

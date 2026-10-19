@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "pegawai_name_norm_idx" ON "pegawai" USING btree (lower(trim("name")));

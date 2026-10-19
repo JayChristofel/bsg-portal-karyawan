@@ -1,218 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import {
   sendMessageGuarded,
   getGowaConfig,
-  getWarmUpState,
   reconnectDevice,
   logoutDevice,
 } from '@/lib/whatsapp';
-import { db } from '@/db';
-import { recipients, autoResumeRuns } from '@/db/schema';
-import { eq, and, isNull, desc } from 'drizzle-orm';
 import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
 import {
-  isCancelRequested,
-  markAutoResumeStarted,
-  markAutoResumeFinished,
-  isAutoResumeRunning,
-} from '@/lib/auto-resume-control';
+  claimRecipient,
+  markRecipientSent,
+  markRecipientFailed,
+  releaseRecipient,
+  parseSendResult,
+} from '@/lib/recipient-queue';
+import { drainPendingQueue } from '@/lib/auto-resume-drain';
 
-function getBatchConfig() {
-  const batchSize = Number(process.env.BROADCAST_BATCH_SIZE) || 100;
-  const timeWindowStart = Number(process.env.BROADCAST_TIME_START) || 8;
-  const timeWindowEnd = Number(process.env.BROADCAST_TIME_END) || 20;
-  return { batchSize, timeWindowStart, timeWindowEnd };
-}
-
-function isWithinTimeWindow(): boolean {
-  const { timeWindowStart, timeWindowEnd } = getBatchConfig();
-  const hour = new Date().getHours();
-  return hour >= timeWindowStart && hour < timeWindowEnd;
-}
-
-/**
- * Single-flight guard for the background drain.
- *
- * Auto-resume runs server-side with no browser attached, while a manual
- * broadcast is a client-side loop. Without this guard both can interleave and
- * produce a burst of near-simultaneous sends from one number, which is exactly
- * the pattern that trips rate limiting.
- */
-
-async function beginRun(queued: number): Promise<number> {
-  const [row] = await db
-    .insert(autoResumeRuns)
-    .values({ status: 'running', messagesSent: 0, queuedRemaining: queued })
-    .returning({ id: autoResumeRuns.id });
-  return row?.id ?? 0;
-}
-
-async function endRun(
-  runId: number,
-  status: 'completed' | 'stopped' | 'error',
-  sent: number,
-  stopReason: string | null,
-  detail?: string,
-) {
-  await db
-    .update(autoResumeRuns)
-    .set({
-      status,
-      finishedAt: new Date(),
-      messagesSent: sent,
-      stopReason,
-      detail,
-    })
-    .where(eq(autoResumeRuns.id, runId));
-}
-
-async function resumePendingBroadcasts() {
-  if (isAutoResumeRunning()) {
-    console.log('Auto-resume already running; skipping duplicate drain.');
-    return;
-  }
-  markAutoResumeStarted();
-  try {
-    await drainPendingQueue();
-  } finally {
-    markAutoResumeFinished();
-  }
-}
-
-/**
- * Drains the pending queue in the background after the device reconnects.
- *
- * Respects the same warm-up quota and batch ceiling as the manual broadcast:
- * auto-resume is just another entry point into the same send path, and letting
- * it bypass the guard would make the guard meaningless.
- */
-async function drainPendingQueue() {
-  try {
-    if (!isWithinTimeWindow()) {
-      const { timeWindowStart, timeWindowEnd } = getBatchConfig();
-      console.log(`Auto-resume skipped: outside time window (${timeWindowStart}:00-${timeWindowEnd}:00)`);
-      return;
-    }
-
-    const config = await getGowaConfig();
-    const numberId = config.deviceId;
-    const { batchSize } = getBatchConfig();
-
-    const pendingRecipients = (await db
-      .select({
-        id: recipients.id,
-        phone: recipients.phone,
-        message: recipients.message,
-        campaignId: recipients.campaignId,
-      })
-      .from(recipients)
-      .where(eq(recipients.waStatus, 'pending')))
-      .filter((r) => r.phone !== null && r.phone !== '');
-
-    if (pendingRecipients.length === 0) {
-      console.log('Auto-resume: nothing pending.');
-      return;
-    }
-
-    // Headroom may be smaller than the batch ceiling; take the lesser of the two.
-    const warmUp = await getWarmUpState(numberId);
-    const batch = pendingRecipients.slice(0, Math.min(batchSize, warmUp.remainingToday));
-    const remaining = pendingRecipients.length - batch.length;
-
-    const runId = await beginRun(pendingRecipients.length);
-
-    console.log(
-      `Auto-resume: ${batch.length} in this batch, ${remaining} queued, ` +
-        `daily quota ${warmUp.sentToday}/${warmUp.dailyLimit} (run #${runId})`,
-    );
-
-    let sent = 0;
-    let stopReason: string | null = null;
-    let outcome: 'completed' | 'stopped' | 'error' = 'completed';
-    let detail: string | undefined;
-
-    for (const target of batch) {
-      if (isCancelRequested()) {
-        stopReason = 'cancelled';
-        outcome = 'stopped';
-        break;
-      }
-
-      try {
-        const guarded = await sendMessageGuarded(
-          target.phone!,
-          target.message || '',
-          numberId,
-          config,
-        );
-
-        if (!guarded.ok) {
-          stopReason = 'quota';
-          outcome = 'stopped';
-          detail =
-            `Daily quota ${guarded.state.sentToday}/${guarded.state.dailyLimit} reached.`;
-          console.log(`Auto-resume stopped: ${detail}`);
-          break;
-        }
-
-        const result: any = guarded.result;
-        const messageId =
-          result?.results?.message_id ||
-          result?.results?.id ||
-          result?.message_id ||
-          null;
-        const isSuccess =
-          result?.code === 'SUCCESS' ||
-          result?.code === 'OK' ||
-          Boolean(messageId);
-
-        if (isSuccess) {
-          sent++;
-          await db
-            .update(recipients)
-            .set({
-              waMessageId: messageId,
-              waStatus: 'sent',
-              waSentAt: new Date(),
-            })
-            .where(eq(recipients.id, target.id));
-        }
-
-        await db
-          .update(autoResumeRuns)
-          .set({ messagesSent: sent })
-          .where(eq(autoResumeRuns.id, runId));
-
-        await new Promise((r) => setTimeout(r, 60000 + Math.random() * 60000));
-      } catch (err) {
-        outcome = 'error';
-        stopReason = 'device_error';
-        detail = (err as Error).message;
-        console.error(`Auto-resume failed for recipient ${target.id}:`, err);
-        break;
-      }
-    }
-
-    if (stopReason === null && remaining > 0) stopReason = 'batch_complete';
-
-    const queuedLeft = Math.max(0, pendingRecipients.length - sent);
-    await endRun(runId, outcome, sent, stopReason, detail);
-
-    await db
-      .update(autoResumeRuns)
-      .set({ queuedRemaining: queuedLeft })
-      .where(eq(autoResumeRuns.id, runId));
-
-    console.log(
-      `Auto-resume run #${runId} ${outcome}: sent ${sent}, ${queuedLeft} still queued` +
-        (stopReason ? ` (${stopReason})` : ''),
-    );
-  } catch (err) {
-    console.error('Auto-resume error:', err);
-  }
-}
+// The drain runs after the response via after(); give it the longest budget the plan allows.
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -227,7 +34,8 @@ export async function POST(req: NextRequest) {
     if (action === 'reconnect') {
       const result = await reconnectDevice();
       if (result?.code === 'SUCCESS' || result?.results?.success) {
-        void resumePendingBroadcasts();
+        // after() keeps the serverless invocation alive until the drain finishes.
+        after(() => drainPendingQueue());
       }
       return NextResponse.json(result);
     }
@@ -240,23 +48,45 @@ export async function POST(req: NextRequest) {
     // Default: send message
     const phone = (body.phone || '').trim();
     const message = (body.message || '').trim();
-    const recipientId = body.recipientId || body.id;
+    const rawRecipientId = body.recipientId ?? body.id;
+    const recipientId =
+      rawRecipientId === undefined || rawRecipientId === null || rawRecipientId === ''
+        ? null
+        : Number(rawRecipientId);
 
+    if (recipientId !== null && !Number.isInteger(recipientId)) {
+      return NextResponse.json({ success: false, error: 'recipientId is invalid.' }, { status: 400 });
+    }
     if (!phone || !message) {
       return NextResponse.json({ success: false, error: 'phone and message are required.' }, { status: 400 });
     }
 
+    // An explicit admin action may retry a 'failed' row; anything already sent or in flight is refused.
+    if (recipientId !== null && !(await claimRecipient(recipientId, ['pending', 'failed']))) {
+      return NextResponse.json(
+        { code: 'RECIPIENT_NOT_PENDING', isSuccess: false, message: 'Recipient is not pending (already sent or in progress).' },
+        { status: 409 },
+      );
+    }
+
     const config = await getGowaConfig();
-    const guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
+    let guarded: Awaited<ReturnType<typeof sendMessageGuarded>>;
+    try {
+      guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
+    } catch (err) {
+      if (recipientId !== null) await markRecipientFailed(recipientId);
+      throw err;
+    }
 
     if (!guarded.ok) {
+      if (recipientId !== null) await releaseRecipient(recipientId);
       const { state } = guarded;
       const blockedBy = await getAdminUsername(req);
       await logAuditForRequest(
         req,
         blockedBy ?? 'unknown',
         'send_blocked_quota',
-        `Kirim WA ke ${phone} diblokir: kuota harian ${state.sentToday}/${state.dailyLimit} habis`,
+        `Kirim WA${recipientId ? ` (recipient #${recipientId})` : ''} diblokir: kuota harian ${state.sentToday}/${state.dailyLimit} habis`,
       );
       return NextResponse.json(
         {
@@ -272,31 +102,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result: any = guarded.result;
+    const result = guarded.result as Record<string, unknown>;
+    const { messageId, isSuccess } = parseSendResult(result);
 
-    const messageId =
-      result?.results?.message_id ||
-      result?.results?.id ||
-      result?.message_id ||
-      null;
-
-    const isSuccess =
-      result?.code === 'SUCCESS' ||
-      result?.code === 'OK' ||
-      Boolean(messageId) ||
-      result?.message?.toLowerCase().includes('success');
-
-    // If recipient ID was provided and send succeeded, update the recipient record
-    if (recipientId && isSuccess) {
-      await db
-        .update(recipients)
-        .set({
-          waMessageId: messageId,
-          waStatus: 'sent',
-          waSentAt: new Date(),
-          message,
-        })
-        .where(eq(recipients.id, Number(recipientId)));
+    if (recipientId !== null) {
+      if (isSuccess) await markRecipientSent(recipientId, messageId, message);
+      else await markRecipientFailed(recipientId);
     }
 
     const username = await getAdminUsername(req);
@@ -304,7 +115,7 @@ export async function POST(req: NextRequest) {
       req,
       username ?? 'unknown',
       'send_message',
-      `Kirim WA ke ${phone}${recipientId ? ` (recipient #${recipientId})` : ''}`,
+      recipientId ? `Kirim WA ke recipient #${recipientId}` : 'Kirim WA (tanpa recipient)',
     );
 
     return NextResponse.json({
@@ -312,8 +123,8 @@ export async function POST(req: NextRequest) {
       message_id: messageId,
       isSuccess,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('WA action error:', err);
-    return NextResponse.json({ code: 'ERROR', message: err?.message || 'Could not send via the WhatsApp Gateway.' }, { status: 500 });
+    return NextResponse.json({ code: 'ERROR', message: asNetError(err).message || 'Could not send via the WhatsApp Gateway.' }, { status: 500 });
   }
 }

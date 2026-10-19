@@ -2,12 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { auditLog } from '@/db/schema';
-import { and, asc, count, desc, eq, gte, lte, like, or, type SQL } from 'drizzle-orm';
-import { logAuditForRequest } from '@/lib/audit';
+import { and, asc, count, desc, eq, gte, lte, like, ilike, or, type SQL } from 'drizzle-orm';
+import { logAuditThrottled } from '@/lib/audit';
+import { parseDateOnly } from '@/lib/validate';
+import { startOfDayAppTz, endOfDayAppTz } from '@/lib/time';
 import { getAdminUsername } from '@/lib/auth-helper';
 
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE = 100_000;
+
+// DISTINCT over the whole table on every request is the dominant cost of this
+// endpoint; the dropdown options change rarely, so keep them for a short while.
+const FACET_TTL_MS = 60_000;
+let facetCache: { at: number; admins: string[]; actions: string[] } | null = null;
+
+/** Escapes LIKE wildcards so a search for "100%" or "a_b" matches literally. */
+const escapeLike = (v: string) => v.replace(/[\\%_]/g, '\\$&');
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -20,17 +31,22 @@ export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams;
 
-    const page = Math.max(1, Number(params.get('page')) || 1);
+    const page = Math.min(MAX_PAGE, Math.max(1, Math.trunc(Number(params.get('page'))) || 1));
     const pageSize = Math.min(
-      Math.max(1, Number(params.get('pageSize')) || DEFAULT_PAGE_SIZE),
+      Math.max(1, Math.trunc(Number(params.get('pageSize'))) || DEFAULT_PAGE_SIZE),
       MAX_PAGE_SIZE,
     );
 
     const adminFilter = params.get('admin');
     const actionFilter = params.get('action');
     const search = params.get('search')?.trim();
-    const from = params.get('from');
-    const to = params.get('to');
+    const rawFrom = params.get('from');
+    const rawTo = params.get('to');
+    const from = rawFrom ? parseDateOnly(rawFrom) : null;
+    const to = rawTo ? parseDateOnly(rawTo) : null;
+    if ((rawFrom && !from) || (rawTo && !to)) {
+      return NextResponse.json({ error: 'from/to must be a valid date (YYYY-MM-DD).' }, { status: 400 });
+    }
 
     const filters: SQL[] = [];
 
@@ -41,19 +57,19 @@ export async function GET(req: NextRequest) {
       filters.push(eq(auditLog.action, actionFilter));
     }
     if (from) {
-      filters.push(gte(auditLog.createdAt, new Date(`${from}T00:00:00`)));
+      filters.push(gte(auditLog.createdAt, startOfDayAppTz(from)));
     }
     if (to) {
-      filters.push(lte(auditLog.createdAt, new Date(`${to}T23:59:59.999`)));
+      filters.push(lte(auditLog.createdAt, endOfDayAppTz(to)));
     }
     if (search) {
-      const q = `%${search}%`;
+      const q = `%${escapeLike(search.slice(0, 100))}%`;
       filters.push(
         or(
-          like(auditLog.detail, q),
-          like(auditLog.adminUsername, q),
-          like(auditLog.action, q),
-          like(auditLog.ipAddress, q),
+          ilike(auditLog.detail, q),
+          ilike(auditLog.adminUsername, q),
+          ilike(auditLog.action, q),
+          ilike(auditLog.ipAddress, q),
         ) as SQL,
       );
     }
@@ -76,6 +92,8 @@ export async function GET(req: NextRequest) {
 
     const where = filters.length ? and(...filters) : undefined;
 
+    const facetsFresh = facetCache !== null && Date.now() - facetCache.at < FACET_TTL_MS;
+
     const [logs, [{ total }], adminRows, actionRows, [{ destructive }]] = await Promise.all([
       db
         .select()
@@ -87,24 +105,30 @@ export async function GET(req: NextRequest) {
       db.select({ total: count() }).from(auditLog).where(where),
       // Facets are computed over the whole table, not just the current page,
       // so the filter dropdowns keep offering options that are not on screen.
-      db
-        .selectDistinct({ value: auditLog.adminUsername })
-        .from(auditLog)
-        .orderBy(auditLog.adminUsername),
-      db.selectDistinct({ value: auditLog.action }).from(auditLog).orderBy(auditLog.action),
+      facetsFresh
+        ? Promise.resolve([] as Array<{ value: string }>)
+        : db.selectDistinct({ value: auditLog.adminUsername }).from(auditLog).orderBy(auditLog.adminUsername),
+      facetsFresh
+        ? Promise.resolve([] as Array<{ value: string }>)
+        : db.selectDistinct({ value: auditLog.action }).from(auditLog).orderBy(auditLog.action),
       db
         .select({ destructive: count() })
         .from(auditLog)
         .where(where ? and(where, like(auditLog.action, 'delete%')) : like(auditLog.action, 'delete%')),
     ]);
 
+    if (!facetsFresh) {
+      facetCache = {
+        at: Date.now(),
+        admins: adminRows.map((r) => r.value),
+        actions: actionRows.map((r) => r.value),
+      };
+    }
+    const facets = facetCache as NonNullable<typeof facetCache>;
+
+    // Viewing the audit log must not itself flood the audit log.
     if (actor) {
-      void logAuditForRequest(
-        req,
-        actor,
-        'view_audit_log',
-        `Halaman ${page}, filter: admin=${adminFilter ?? 'all'}, action=${actionFilter ?? 'all'}`,
-      );
+      await logAuditThrottled(req, actor, 'view_audit_log', 'Membuka log audit');
     }
 
     return NextResponse.json({
@@ -114,12 +138,9 @@ export async function GET(req: NextRequest) {
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
       destructive,
-      facets: {
-        admins: adminRows.map((r) => r.value),
-        actions: actionRows.map((r) => r.value),
-      },
+      facets: { admins: facets.admins, actions: facets.actions },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Audit GET error:', error);
     return NextResponse.json({ error: 'Could not load the audit log' }, { status: 500 });
   }

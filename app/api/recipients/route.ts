@@ -1,29 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { recipients, pegawai } from '@/db/schema';
-import { desc } from 'drizzle-orm';
-import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { sendMessage } from '@/lib/whatsapp';
+import { desc, lt, inArray, sql } from 'drizzle-orm';
+import { sendMessageGuarded, getGowaConfig, normalizeWaPhone } from '@/lib/whatsapp';
+import { markRecipientSent, markRecipientFailed, releaseRecipient, parseSendResult } from '@/lib/recipient-queue';
 import { getAdminUsername } from '@/lib/auth-helper';
-import { logAuditForRequest } from '@/lib/audit';
-
-async function checkAuth(req: NextRequest) {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return false;
-  const session = await verifySessionToken(token);
-  return Boolean(session);
-}
+import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
+import { readJsonObject, str, parsePageParams } from '@/lib/validate';
 
 export async function GET(req: NextRequest) {
-  if (!(await checkAuth(req))) {
+  if (!(await getAdminUsername(req))) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
-    const [recList, pegList] = await Promise.all([
-      db.select().from(recipients).orderBy(desc(recipients.createdAt)),
-      db.select({ name: pegawai.name, createdAt: pegawai.createdAt, cabang: pegawai.cabang }).from(pegawai),
-    ]);
+    const { limit, before } = parsePageParams(req.nextUrl.searchParams);
+    const fetched = await db
+      .select()
+      .from(recipients)
+      .where(before === null ? undefined : lt(recipients.id, before))
+      .orderBy(desc(recipients.id))
+      .limit(limit + 1);
+    const recList = fetched.slice(0, limit);
+    const nextBefore = fetched.length > limit ? recList[recList.length - 1].id : null;
+
+    // Only the employees matching this page's names (uses the lower(trim(name)) index).
+    const keys = [...new Set(recList.map((r) => r.label.trim().toLowerCase()))];
+    const pegList = keys.length
+      ? await db
+          .select({ name: pegawai.name, createdAt: pegawai.createdAt, cabang: pegawai.cabang })
+          .from(pegawai)
+          .where(inArray(sql`lower(trim(${pegawai.name}))`, keys))
+          .orderBy(desc(pegawai.createdAt))
+      : [];
 
     // Build map of submitted employees by lowercase name
     const submittedMap = new Map<string, { createdAt: Date; cabang: string }>();
@@ -46,17 +55,12 @@ export async function GET(req: NextRequest) {
     });
 
     const listActor = await getAdminUsername(req);
-    if (listActor) {
-      void logAuditForRequest(
-        req,
-        listActor,
-        'view_recipients',
-        `Melihat daftar penerima (${recList.length} baris)`,
-      );
-    };
+    if (listActor && before === null) {
+      await logAuditThrottled(req, listActor, 'view_recipients', 'Melihat daftar penerima');
+    }
 
-    return NextResponse.json(rowsWithSubmission);
-  } catch (error: any) {
+    return NextResponse.json({ rows: rowsWithSubmission, nextBefore });
+  } catch (error: unknown) {
     console.error('Fetch recipients error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not read data from the database.' },
@@ -66,12 +70,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await checkAuth(req))) {
+  if (!(await getAdminUsername(req))) {
     return NextResponse.json({ success: false, error: 'Not signed in.' }, { status: 401 });
   }
 
   try {
-    const body = await req.json();
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ success: false, error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
 
     // Action 1: Pull from existing data pegawai
     if (body.action === 'pull_from_pegawai') {
@@ -103,7 +110,7 @@ export async function POST(req: NextRequest) {
       const created = await db.insert(recipients).values(toInsert).returning();
 
       if (actor) {
-        void logAuditForRequest(
+        await logAuditForRequest(
           req,
           actor,
           'import_recipients',
@@ -120,14 +127,23 @@ export async function POST(req: NextRequest) {
 
     // Action 2: Batch import (from Excel/CSV or multi-line text)
     if (Array.isArray(body.items)) {
-      const items = body.items
-        .map((it: { label?: string; phone?: string; cabang?: string }) => ({
-          label: (it.label || '').trim().slice(0, 200),
-          phone: (it.phone || '').trim().slice(0, 30) || null,
-          cabang: (it.cabang || '').trim().slice(0, 100) || null,
-          waStatus: 'pending',
-        }))
-        .filter((it: { label: string }) => Boolean(it.label));
+      let invalidPhones = 0;
+      const items = (body.items as unknown[])
+        .map((raw) => {
+          const it = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+          const rawPhone = str(it.phone, 30);
+          // A number that cannot be a WhatsApp number is dropped (the row stays, the
+          // admin is prompted for a phone when sending) instead of failing later.
+          const phone = rawPhone && normalizeWaPhone(rawPhone) ? rawPhone : null;
+          if (rawPhone && !phone) invalidPhones++;
+          return {
+            label: str(it.label, 200),
+            phone,
+            cabang: str(it.cabang, 100) || null,
+            waStatus: 'pending',
+          };
+        })
+        .filter((it) => Boolean(it.label));
 
       if (items.length === 0 || items.length > 2000) {
         return NextResponse.json(
@@ -136,7 +152,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const normalizePhone = (p: string | null) => p?.replace(/\D/g, '').replace(/^0/, '62') || null;
+      // Same normalisation as the sender, so "0812", "812" and "+62812" are one number.
+      const normalizePhone = (p: string | null) => (p ? normalizeWaPhone(p) : null);
 
       const existingPhones = new Set(
         (await db.select({ phone: recipients.phone }).from(recipients))
@@ -175,7 +192,7 @@ export async function POST(req: NextRequest) {
         const dupNote = duplicates.length
           ? `, ${duplicates.length} nomor duplikat dilewati`
           : '';
-        void logAuditForRequest(
+        await logAuditForRequest(
           req,
           actor,
           'import_recipients',
@@ -187,15 +204,16 @@ export async function POST(req: NextRequest) {
         success: true,
         count: created.length,
         duplicates,
+        invalidPhones,
         recipients: created,
       });
     }
 
     // Action 3: Single create + send
-    const label = (body.label || '').trim();
-    const phone = (body.phone || '').trim();
-    const message = (body.message || '').trim();
-    const cabang = (body.cabang || '').trim() || null;
+    const label = str(body.label, 200);
+    const phone = str(body.phone, 30);
+    const message = str(body.message, 4000);
+    const cabang = str(body.cabang, 100) || null;
 
     if (!label || !phone || !message) {
       return NextResponse.json(
@@ -203,41 +221,61 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (!normalizeWaPhone(phone)) {
+      return NextResponse.json({ success: false, error: 'Nomor WhatsApp tidak valid.' }, { status: 400 });
+    }
 
-    // Insert as pending first
+    // Insert already claimed ('sending'): this request owns the send, so the
+    // auto-resume drain can never pick the row up and send it a second time.
     const [newRecipient] = await db
       .insert(recipients)
-      .values({ label, phone, message, cabang, waStatus: 'pending' })
+      .values({ label, phone, message, cabang, waStatus: 'sending', waSentAt: new Date() })
       .returning();
 
-    // Send via GOWA
-    const waResult = await sendMessage(phone, message);
-    const messageId =
-      waResult?.results?.message_id ||
-      waResult?.results?.id ||
-      waResult?.message_id ||
-      null;
-
-    const sent = waResult?.code === 'SUCCESS' || waResult?.code === 'OK' || Boolean(messageId);
-
-    if (sent) {
-      const { eq } = await import('drizzle-orm');
-      await db
-        .update(recipients)
-        .set({
-          waMessageId: messageId,
-          waStatus: 'sent',
-          waSentAt: new Date(),
-        })
-        .where(eq(recipients.id, newRecipient.id));
+    // Same guarded path as every other sender, so the warm-up quota applies.
+    const config = await getGowaConfig();
+    let guarded: Awaited<ReturnType<typeof sendMessageGuarded>>;
+    try {
+      guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
+    } catch (err) {
+      await markRecipientFailed(newRecipient.id);
+      throw err;
     }
+
+    if (!guarded.ok) {
+      await releaseRecipient(newRecipient.id);
+      const { state } = guarded;
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'DAILY_QUOTA_EXCEEDED',
+          error: `Daily warm-up limit reached (${state.sentToday}/${state.dailyLimit}). Try again tomorrow.`,
+          recipient: { ...newRecipient, waStatus: 'pending' },
+        },
+        { status: 429 },
+      );
+    }
+
+    const waResult = guarded.result;
+    const { messageId, isSuccess: sent } = parseSendResult(waResult);
+
+    if (sent) await markRecipientSent(newRecipient.id, messageId);
+    else await markRecipientFailed(newRecipient.id);
+
+    const actor = await getAdminUsername(req);
+    await logAuditForRequest(
+      req,
+      actor ?? 'unknown',
+      'send_message',
+      `Tambah + kirim WA ke recipient #${newRecipient.id}`,
+    );
 
     return NextResponse.json({
       success: sent,
-      recipient: { ...newRecipient, waStatus: sent ? 'sent' : 'pending' },
+      recipient: { ...newRecipient, waStatus: sent ? 'sent' : 'failed' },
       waResult,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create recipient/send error:', error);
     return NextResponse.json(
       { success: false, error: 'Could not process the request.' },

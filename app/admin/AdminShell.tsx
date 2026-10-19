@@ -308,20 +308,22 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   }, []);
 
   /* Active item helpers: exact match or strict subpath match (e.g. /admin/campaign/123, NOT /admin/campaigns) */
-  const isActive = (item: NavItem) => {
-    if (item.exact) return pathname === item.href;
-    return pathname === item.href || pathname.startsWith(`${item.href}/`);
-  };
+  const isActive = React.useCallback(
+    (item: NavItem) => {
+      if (item.exact) return pathname === item.href;
+      return pathname === item.href || pathname.startsWith(`${item.href}/`);
+    },
+    [pathname],
+  );
 
   const activeItem = React.useMemo(
     () => NAV_SECTIONS.flatMap((s) => s.items).find(isActive) ?? null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pathname],
+    [isActive],
   );
 
   const activeSection = React.useMemo(
     () => NAV_SECTIONS.find((s) => s.items.some(isActive))?.title,
-    [pathname],
+    [isActive],
   );
 
   const toggleGroup = (title: string) => {
@@ -409,7 +411,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </button>
 
               {!isCollapsed && (
-                <ul className="space-y-0.5" role="list">
+                <ul className="space-y-0.5">
                   {section.items.map((item) => {
                     const active = isActive(item);
                     const Icon = item.icon;
@@ -467,7 +469,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           >
             Quick Access
           </p>
-          <ul className="space-y-0.5" role="list">
+          <ul className="space-y-0.5">
             <li>
               <a
                 href="/"
@@ -638,6 +640,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       >
         {/* Scrim */}
         <div
+          role="presentation"
           onClick={() => setMobileOpen(false)}
           className={cn(
             'absolute inset-0 bg-black/65 backdrop-blur-sm transition-opacity duration-200',

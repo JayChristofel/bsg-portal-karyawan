@@ -1,7 +1,8 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
-import { Download, Mail, Plus, Search, Trash2, Upload, Users, X } from 'lucide-react';
+import { Mail, Plus, Search, Trash2, Upload, Users, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ interface EmailRecipient {
 }
 
 export default function EmailRecipientsPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [recipients, setRecipients] = React.useState<EmailRecipient[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [search, setSearch] = React.useState('');
@@ -100,7 +102,7 @@ export default function EmailRecipientsPage() {
   };
 
   const handleDelete = async (id: number, recipientName: string) => {
-    if (!window.confirm(`Delete recipient "${recipientName}"?`)) return;
+    if (!(await confirm({ title: `Delete recipient "${recipientName}"?` }))) return;
     try {
       const res = await fetch(`/api/email/recipients?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -350,6 +352,7 @@ export default function EmailRecipientsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

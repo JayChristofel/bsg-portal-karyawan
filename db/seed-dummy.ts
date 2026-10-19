@@ -4,9 +4,20 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { db } from './index';
-import { pegawai, recipients } from './schema';
+import { pegawai } from './schema';
 
 async function main() {
+  // Sample rows would pollute real employee data, and the script is not idempotent
+  // (every run adds the same people again), so it never runs against production.
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+    console.error('\n❌ seed-dummy tidak boleh dijalankan di production.\n');
+    process.exit(1);
+  }
+  if (!process.argv.includes('--yes')) {
+    console.error('\n⚠️  Ini menambahkan data contoh ke database di DATABASE_URL.');
+    console.error('    Jalankan ulang dengan --yes untuk melanjutkan:  npm run db:seed:dummy -- --yes\n');
+    process.exit(1);
+  }
   if (!process.env.DATABASE_URL) {
     console.error('\n❌ DATABASE_URL tidak ditemukan di .env.local!');
     process.exit(1);
@@ -23,7 +34,6 @@ async function main() {
       cabang: 'Kantor Pusat BSG',
       ipAddress: '127.0.0.1',
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      token: null,
     },
     {
       name: 'Siti Rahmawati',
@@ -33,7 +43,6 @@ async function main() {
       cabang: 'Cabang Utama',
       ipAddress: '127.0.0.1',
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      token: null,
     },
     {
       name: 'Christian Pangemanan',
@@ -43,7 +52,6 @@ async function main() {
       cabang: 'Cabang Tomohon',
       ipAddress: '127.0.0.1',
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
-      token: null,
     },
   ];
 

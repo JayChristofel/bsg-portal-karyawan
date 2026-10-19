@@ -35,7 +35,6 @@ export type TlsTrustMode = 'pinned-env' | 'pinned-file' | 'pinned-bundled' | 'in
 
 let cachedDispatcher: Dispatcher | null | undefined;
 let cachedDispatcherKey = '';
-let cachedMode: TlsTrustMode = 'system';
 
 function normalisePem(raw: string): string {
   // Env vars frequently carry escaped newlines from copy/paste and shell export.
@@ -49,7 +48,7 @@ function isUsablePem(pem: string): boolean {
 
 function readCaPem(): { pem: string; mode: TlsTrustMode } | null {
   const fromEnv = process.env[CA_ENV_VAR];
-  if (fromEnv && fromEnv.trim()) {
+  if (fromEnv?.trim()) {
     const pem = normalisePem(fromEnv);
     if (isUsablePem(pem)) return { pem, mode: 'pinned-env' };
     console.error(
@@ -59,7 +58,7 @@ function readCaPem(): { pem: string; mode: TlsTrustMode } | null {
   }
 
   const filePath = process.env[CA_FILE_ENV_VAR];
-  if (filePath && filePath.trim()) {
+  if (filePath?.trim()) {
     try {
       const pem = readFileSync(filePath.trim(), 'utf8');
       if (isUsablePem(pem)) return { pem, mode: 'pinned-file' };
@@ -126,7 +125,6 @@ export function gatewayDispatcher(): Dispatcher | null {
 
   const ca = readCaPem();
   if (ca) {
-    cachedMode = ca.mode;
     cachedDispatcher = new Agent({
       connect: { ca: ca.pem },
       // Fail fast instead of hanging when the gateway is unreachable.
@@ -139,10 +137,8 @@ export function gatewayDispatcher(): Dispatcher | null {
       `[gowa-tls] No usable gateway CA found; falling back to unverified TLS for ` +
         `gateway calls only. Set ${CA_ENV_VAR} to restore verification.`,
     );
-    cachedMode = 'insecure';
     cachedDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
   } else {
-    cachedMode = 'system';
     cachedDispatcher = null;
   }
 

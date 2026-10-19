@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { db } from '@/db';
 import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { and, inArray, isNull, or } from 'drizzle-orm';
 import { verifyWebhookSignature } from '@/lib/whatsapp';
 import { logAudit } from '@/lib/audit';
-import { getClientIp } from '@/lib/proxy';
+import { getClientIp, checkIpRateLimit } from '@/lib/proxy';
 
 // Cap inbound webhook body so a spoofed sender cannot bloat the database.
 const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
@@ -19,9 +20,16 @@ export async function GET() {
 // Receive webhook events from GOWA
 export async function POST(req: NextRequest) {
   try {
+    // Throttle before doing any work: unauthenticated callers must not be able to
+    // flood the audit log or burn CPU on signature checks.
+    const ip = getClientIp(req);
+    if ((await checkIpRateLimit('wa-webhook', ip, 60, 600)).limited) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     const rawBody = await req.text();
 
-    if (rawBody.length > MAX_WEBHOOK_BODY_BYTES) {
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_WEBHOOK_BODY_BYTES) {
       return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
     }
 
@@ -40,12 +48,12 @@ export async function POST(req: NextRequest) {
         'webhook',
         'webhook_invalid_signature',
         `Signature tidak valid (body ${rawBody.length} byte)`,
-        getClientIp(req),
+        ip,
       );
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    let body: any = {};
+    let body: Record<string, any> = {};
     try {
       body = JSON.parse(rawBody);
     } catch {
@@ -78,37 +86,41 @@ export async function POST(req: NextRequest) {
       if (receiptType === 'read') newStatus = 'read';
 
       if (newStatus && messageIds.length > 0) {
-        // Only upgrade status, never downgrade (read > delivered > sent)
-        const statusPriority: Record<string, number> = { pending: 0, sent: 1, delivered: 2, read: 3 };
-        const newPriority = statusPriority[newStatus] ?? 0;
+        // Status only moves forward (sent < delivered < read). The guard lives in the
+        // UPDATE itself so two acks arriving together cannot move it backwards, and a
+        // late ack still upgrades a row we parked as 'failed' after a timeout (the
+        // message evidently did go out).
+        const upgradeFrom =
+          newStatus === 'read'
+            ? ['pending', 'sending', 'failed', 'sent', 'delivered']
+            : ['pending', 'sending', 'failed', 'sent'];
 
-        const affected = await db
-          .select()
-          .from(recipients)
-          .where(inArray(recipients.waMessageId, messageIds));
+        const upgraded = await db
+          .update(recipients)
+          .set({ waStatus: newStatus })
+          .where(
+            and(
+              inArray(recipients.waMessageId, messageIds),
+              or(isNull(recipients.waStatus), inArray(recipients.waStatus, upgradeFrom)),
+            ),
+          )
+          .returning({ id: recipients.id, messageId: recipients.waMessageId });
 
-        for (const rec of affected) {
-          const currentPriority = statusPriority[rec.waStatus ?? 'pending'] ?? 0;
-          if (newPriority > currentPriority) {
-            await db
-              .update(recipients)
-              .set({ waStatus: newStatus })
-              .where(eq(recipients.id, rec.id));
-            await db.insert(recipientStatusHistory).values({
-              recipientId: rec.id,
-              status: newStatus,
-              messageId: rec.waMessageId,
-            });
-          }
+        for (const rec of upgraded) {
+          await db.insert(recipientStatusHistory).values({
+            recipientId: rec.id,
+            status: newStatus,
+            messageId: rec.messageId,
+          });
         }
       }
     }
 
     return NextResponse.json({ status: 'OK', message: 'Webhook received' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Do not leak internal error messages to an unauthenticated caller.
-    console.error('Error processing WhatsApp webhook:', error?.message);
-    // Still return 200 to prevent GOWA from retrying
-    return NextResponse.json({ status: 'ERROR' }, { status: 200 });
+    console.error('Error processing WhatsApp webhook:', asNetError(error).message);
+    // 5xx so GOWA retries; replying 200 here would silently drop the event.
+    return NextResponse.json({ status: 'ERROR' }, { status: 500 });
   }
 }

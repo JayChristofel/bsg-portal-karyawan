@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: portal_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d portal_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Applying the migrations in order is itself a test: they must build the schema
+      # the code expects, from scratch.
+      - name: Apply migrations
+        run: |
+          for f in drizzle/*.sql; do
+            echo "applying $f"
+            psql "postgresql://ci:ci@localhost:5432/portal_test" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+      - name: Test (unit + integration against Postgres)
+        run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://ci:ci@localhost:5432/portal_test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholders only: the build needs the variables to exist, not to work.
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          ENCRYPTION_KEY: ci-only-encryption-key-0123456789abcdef
+          JWT_SECRET: ci-only-jwt-secret-0123456789abcdef0123

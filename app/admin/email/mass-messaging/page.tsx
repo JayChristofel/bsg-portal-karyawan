@@ -1,27 +1,23 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import {
-  Building2,
-  Eye,
   Gauge,
   Loader2,
   Mail,
   Megaphone,
   PauseCircle,
-  Plus,
   Send,
   ShieldCheck,
   Trash2,
   Upload,
-  UserCheck,
   UserPlus,
   Users,
   X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -107,6 +103,7 @@ interface RecipientRow {
 }
 
 export default function EmailBroadcastPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [data, setData] = React.useState<RecipientRow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -231,9 +228,9 @@ export default function EmailBroadcastPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Remove this recipient?')) return;
+    if (!(await confirm({ title: 'Remove this recipient?' }))) return;
     try {
-      const res = await fetch(`/api/email/recipients/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/email/recipients?id=${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) void fetchData();
       else setNotice({ tone: 'err', text: json.error || 'Could not delete.' });
@@ -248,7 +245,8 @@ export default function EmailBroadcastPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: row.email,
-          subject: msgTemplate ? 'Email dari Portal Pegawai' : 'Email dari Portal Pegawai',
+          recipientId: row.id,
+          subject: 'Email dari Portal Pegawai',
           html: msgTemplate || `<p>Halo ${row.name},</p><p>Ini adalah email broadcast dari Portal Pegawai.</p>`,
           text: msgTemplate ? 'Halo ' + row.name + ', ini adalah email broadcast.' : '',
         }),
@@ -263,8 +261,8 @@ export default function EmailBroadcastPage() {
   const handleBulkSendEmail = async () => {
     const targets = view.rows.filter((r) => r.status === 'pending');
     if (targets.length === 0) { setNotice({ tone: 'err', text: 'No pending recipients match the current filters.' }); return; }
-    const confirmMsg = `Send email broadcast to ${targets.length} recipients with status Pending?\n\nSettings:\n- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 emails)' : 'Off'}`;
-    if (!window.confirm(confirmMsg)) return;
+    const confirmMsg = `Settings:\n- Delay: ${DELAY_META[delayProfile].label} (${DELAY_META[delayProfile].range})\n- Cooldown: ${enableCooldown ? 'On (20s rest every 20 emails)' : 'Off'}`;
+    if (!(await confirm({ title: `Send email broadcast to ${targets.length} recipients with status Pending?`, description: confirmMsg }))) return;
     setIsBulkSending(true);
     let successCount = 0;
     for (let i = 0; i < targets.length; i++) {
@@ -275,6 +273,7 @@ export default function EmailBroadcastPage() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             to: row.email,
+            recipientId: row.id,
             subject: 'Email dari Portal Pegawai',
             html: msgTemplate || `<p>Halo ${row.name},</p><p>Ini adalah email broadcast dari Portal Pegawai.</p>`,
           }),
@@ -305,10 +304,10 @@ export default function EmailBroadcastPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Remove ${selectedIds.size} recipients?`)) return;
+    if (!(await confirm({ title: `Remove ${selectedIds.size} recipients?` }))) return;
     let deleted = 0;
     for (const id of selectedIds) {
-      try { const res = await fetch(`/api/email/recipients/${id}`, { method: 'DELETE' }); if (res.ok) deleted++; } catch { /* */ }
+      try { const res = await fetch(`/api/email/recipients?id=${id}`, { method: 'DELETE' }); if (res.ok) deleted++; } catch { /* */ }
     }
     setSelectedIds(new Set());
     setNotice({ tone: 'ok', text: `Deleted ${deleted} of ${selectedIds.size} recipients.` });
@@ -583,6 +582,7 @@ export default function EmailBroadcastPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["**", "!**/.next", "!**/node_modules", "!drizzle", "!certs", "!public", "!.opencode", "!.agents", "!.claude", "!.freebuff", "!next-env.d.ts", "!package-lock.json"]
+  },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "useExhaustiveDependencies": "warn"
+      },
+      "a11y": {
+        "useValidAnchor": "warn",
+        "noSvgWithoutTitle": "warn",
+        "useKeyWithClickEvents": "warn",
+        "noStaticElementInteractions": "warn",
+        "noRedundantRoles": "warn",
+        "noAutofocus": "warn",
+        "noLabelWithoutControl": "warn",
+        "useSemanticElements": "warn"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "warn",
+        "noImplicitAnyLet": "warn"
+      },
+      "style": {
+        "useImportType": "off",
+        "useTemplate": "off",
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "useLiteralKeys": "off"
+      }
+    },
+    "domains": { "next": "recommended", "react": "recommended" }
+  }
+}

@@ -26,6 +26,7 @@ export default function PortalPage() {
   // Submit status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successTime, setSuccessTime] = useState('');
+  const [submitError, setSubmitError] = useState('');
 
   // Telemetry references
   const startTimeRef = useRef<number>(Date.now());
@@ -103,6 +104,7 @@ export default function PortalPage() {
       return;
     }
 
+    setSubmitError('');
     setIsSubmitting(true);
     const now = new Date();
     const timeFormatted = now.toLocaleDateString('id-ID', {
@@ -122,13 +124,15 @@ export default function PortalPage() {
     const ref = typeof document !== 'undefined' ? (document.referrer || 'Direct / WhatsApp') : 'Direct';
     
     let connType = 'Wi-Fi / Cellular';
-    if (typeof navigator !== 'undefined' && (navigator as any).connection) {
-      const conn = (navigator as any).connection;
+    const conn = typeof navigator !== 'undefined'
+      ? (navigator as Navigator & { connection?: { effectiveType?: string; type?: string } }).connection
+      : undefined;
+    if (conn) {
       connType = conn.effectiveType ? `${conn.effectiveType.toUpperCase()} (${conn.type || 'network'})` : conn.type || connType;
     }
 
     try {
-      await fetch('/api/submit', {
+      const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -147,13 +151,26 @@ export default function PortalPage() {
           event: 'submit',
         }),
       });
-    } catch (err) {
-      console.warn('Submit notice:', err);
-    } finally {
-      setIsSubmitting(false);
+
+      // Only a stored record counts as success. Showing "berhasil" for a 429 or a
+      // network failure would leave the employee believing their data was recorded.
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setSubmitError(
+          res.status === 429
+            ? 'Terlalu banyak percobaan. Mohon tunggu sebentar lalu coba lagi.'
+            : data?.error || 'Data belum tersimpan. Silakan coba lagi.',
+        );
+        return;
+      }
+
       setSuccessTime(`Tercatat pada: ${timeFormatted}`);
       setCurrentView('success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setSubmitError('Tidak dapat terhubung ke server. Periksa koneksi Anda lalu coba lagi.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -181,7 +198,7 @@ export default function PortalPage() {
               <div className="absolute inset-0 bg-[url('/assets/BSGO.jpg')] bg-cover bg-center brightness-[0.65] saturate-[1.2]" />
               <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,78,140,0.4)_0%,rgba(15,23,42,0.75)_100%)]" />
               <div className="absolute top-3 right-3 z-3 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-[4px] transition-colors duration-200" title="More options">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <circle cx="5" cy="12" r="2" />
                   <circle cx="12" cy="12" r="2" />
                   <circle cx="19" cy="12" r="2" />
@@ -193,7 +210,7 @@ export default function PortalPage() {
               <h1 className="mb-3 text-[22px] leading-[1.3] font-bold tracking-[-0.2px] text-portal-text sm:text-[26px] lg:mb-3.5 lg:text-[28px]">JABATAN & UNIT KERJA</h1>
               <p className="mb-[18px] text-[13px] font-semibold tracking-[0.8px] text-portal-text-sub uppercase lg:mb-[22px] lg:text-[14px]">DIVISI HUMAN CAPITAL · BANK SULUTGO</p>
               <div className="mb-[18px] inline-flex items-center gap-[7px] rounded-[6px] border border-portal-warning-border bg-portal-warning px-3.5 py-1.5 text-[12px] font-semibold text-portal-warning-text">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 Harap diisi paling lambat hari ini, pukul 16.00 WITA
               </div>
               <button type="button" className="cursor-pointer rounded-[6px] border-none bg-portal-primary px-12 py-3 text-[15px] font-semibold text-white shadow-[0_3px_10px_rgba(0,120,212,0.35)] transition-[background,transform,box-shadow] duration-200 hover:bg-portal-primary-hover hover:shadow-[0_4px_14px_rgba(0,120,212,0.45)] active:scale-[0.98] lg:px-14 lg:py-[13px] lg:text-[16px]" onClick={handleStart}>
@@ -207,7 +224,7 @@ export default function PortalPage() {
         {currentView === 'form' && (
           <div id="view-form" className="relative block px-[18px] pt-[22px] pb-7">
             <div className="absolute top-4 right-4 z-3 flex size-[30px] cursor-pointer items-center justify-center rounded-full text-portal-text-sub transition-colors duration-200 hover:bg-black/5" title="More options">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="5" cy="12" r="2" />
                 <circle cx="12" cy="12" r="2" />
                 <circle cx="19" cy="12" r="2" />
@@ -299,27 +316,36 @@ export default function PortalPage() {
 
               {/* Field 5: Kantor Cabang / KCP */}
               <div className="mb-6">
-                <label className="mb-2.5 block text-[15px] leading-[1.35] font-semibold text-portal-text sm:text-[16px]">
+                <div id="label-cabang" className="mb-2.5 block text-[15px] leading-[1.35] font-semibold text-portal-text sm:text-[16px]">
                   5. Unit Kerja<span className="ml-0.5 text-portal-error">*</span>
-                </label>
+                </div>
 
                 <div className="relative w-full" ref={dropdownRef}>
                   <div
                     className={`flex h-11 w-full cursor-pointer select-none items-center justify-between rounded-[4px] border border-portal-border-input bg-white px-3.5 text-[14px] text-portal-text transition-[border-color,box-shadow] duration-200 focus:border-portal-border-focus focus:shadow-[0_0_0_1px_var(--color-portal-border-focus)] ${!cabang ? 'text-[#707070]' : ''} ${errors.cabang ? 'border-portal-error bg-portal-bg-error' : ''}`}
                     tabIndex={0}
                     role="combobox"
+                    aria-labelledby="label-cabang"
                     aria-expanded={isDropdownOpen}
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsDropdownOpen(!isDropdownOpen);
+                      } else if (e.key === 'Escape') {
+                        setIsDropdownOpen(false);
+                      }
+                    }}
                   >
                     <span>{cabang || 'Pilih Kantor Cabang / KCP'}</span>
-                    <svg className={`size-4 shrink-0 text-portal-text-sub transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg aria-hidden="true" className={`size-4 shrink-0 text-portal-text-sub transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
                   </div>
 
                   {isDropdownOpen && (
                     <div className="absolute top-[calc(100%+4px)] right-0 left-0 z-200 max-h-[290px] overflow-y-auto rounded-[6px] border border-[#d1d1d1] bg-white py-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.22)] list-none animate-fade-in-menu">
-                      <div className="sticky top-0 z-2 border-b border-[#edebe9] bg-white px-2.5 pt-1 pb-2" onClick={(e) => e.stopPropagation()}>
+                      <div role="presentation" className="sticky top-0 z-2 border-b border-[#edebe9] bg-white px-2.5 pt-1 pb-2" onClick={(e) => e.stopPropagation()}>
                         <input
                           ref={searchInputRef}
                           type="text"
@@ -361,6 +387,12 @@ export default function PortalPage() {
                 {errors.cabang && <div className="mt-1.5 block text-[12px] text-portal-error">Kantor Cabang wajib dipilih.</div>}
               </div>
 
+              {submitError && (
+                <div role="alert" className="mb-3 rounded-[4px] border border-portal-error bg-portal-bg-error px-3 py-2 text-[13px] text-portal-error">
+                  {submitError}
+                </div>
+              )}
+
               <button type="submit" className="w-full cursor-pointer rounded-[6px] border-none bg-portal-primary py-[13px] text-[15px] font-semibold text-white shadow-[0_2px_6px_rgba(0,120,212,0.3)] transition-[background,box-shadow,transform] duration-200 hover:bg-portal-primary-hover hover:shadow-[0_4px_12px_rgba(0,120,212,0.4)] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-[#c8c6c4] lg:py-3.5 lg:text-[16px]" disabled={isSubmitting}>
                 {isSubmitting ? 'Menyimpan Data...' : 'Kirim'}
               </button>
@@ -372,7 +404,7 @@ export default function PortalPage() {
         {currentView === 'success' && (
           <div id="view-success" className="relative block px-[18px] pt-7 pb-6">
             <div className="absolute top-4 right-4 z-3 flex size-[30px] cursor-pointer items-center justify-center rounded-full text-portal-text-sub transition-colors duration-200 hover:bg-black/5" title="More options">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="5" cy="12" r="2" />
                 <circle cx="12" cy="12" r="2" />
                 <circle cx="19" cy="12" r="2" />
@@ -393,9 +425,9 @@ export default function PortalPage() {
             <button type="button" className="mb-4 w-full cursor-pointer rounded-[6px] border border-[#616161] bg-white py-2.5 text-[14px] font-semibold text-portal-text transition-[background,border-color] duration-150 hover:border-[#323130] hover:bg-[#f3f2f1]" onClick={() => window.print()}>
               Simpan / Cetak Bukti Data Jabatan
             </button>
-            <a className="mb-[26px] block cursor-pointer text-center text-[13px] font-medium text-portal-primary underline hover:text-portal-dark" onClick={handleResetForm}>
+            <button type="button" className="mb-[26px] block w-full cursor-pointer border-none bg-transparent text-center text-[13px] font-medium text-portal-primary underline hover:text-portal-dark" onClick={handleResetForm}>
               Kirim respons data lainnya
-            </a>
+            </button>
 
             <div className="px-5 pt-6 pb-[22px]">
               <div className="mb-1 text-[14px] font-semibold text-portal-text">Microsoft Forms Enterprise</div>
@@ -407,7 +439,7 @@ export default function PortalPage() {
 
               <a href="#" className="inline-flex cursor-pointer items-center gap-1.5 rounded-[20px] border border-white bg-white px-[26px] py-[9px] text-[13px] font-semibold text-[#005a9e] no-underline shadow-[0_2px_6px_rgba(0,0,0,0.06)] transition-colors duration-150 hover:bg-[#f3f2f1]">
                 Pelajari Selengkapnya
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12 5 19 12 12 19" />
                 </svg>

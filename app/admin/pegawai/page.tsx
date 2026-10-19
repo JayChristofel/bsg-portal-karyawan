@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import { CABANG_GROUPS } from '@/lib/cabang';
 import {
@@ -51,6 +52,7 @@ import { EmptyState, PageHeader, SectionCard, StatStrip } from '../components/ui
 import { Pagination } from '@/components/ui/pagination';
 import { TableViewControls } from '@/components/ui/table-view-controls';
 import { useTableView } from '@/lib/table-view';
+import { fetchAllRows } from '@/lib/fetch-all';
 
 interface PegawaiRow {
   id: number;
@@ -249,6 +251,7 @@ function AuditDetailDialog({ row, onClose }: { row: PegawaiRow | null; onClose: 
    ──────────────────────────────────────────────────────────── */
 
 export default function PegawaiPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [data, setData] = React.useState<PegawaiRow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [detailRow, setDetailRow] = React.useState<PegawaiRow | null>(null);
@@ -263,10 +266,9 @@ export default function PegawaiPage() {
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/pegawai', { cache: 'no-store' });
-      if (res.ok) {
-        setData(await res.json());
-      }
+      setData(await fetchAllRows<PegawaiRow>('/api/pegawai'));
+    } catch (err) {
+      console.error('Failed to load employees:', err);
     } finally {
       setIsLoading(false);
     }
@@ -346,7 +348,7 @@ export default function PegawaiPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this employee record?')) return;
+    if (!(await confirm({ title: 'Are you sure you want to delete this employee record?' }))) return;
     setError(null);
     try {
       const res = await fetch(`/api/pegawai/${id}`, { method: 'DELETE' });
@@ -842,6 +844,7 @@ export default function PegawaiPage() {
       </Dialog>
 
       <AuditDetailDialog row={detailRow} onClose={() => setDetailRow(null)} />
+      {confirmDialog}
     </div>
   );
 }

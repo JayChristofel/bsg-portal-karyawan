@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { auditLog } from '@/db/schema';
+import { and, eq, gt } from 'drizzle-orm';
 import { getClientIp } from '@/lib/proxy';
 
 /*
@@ -46,24 +47,55 @@ export async function logAuditForRequest(
 }
 
 /**
+ * Audit entry for read-only "viewed X" events. Pages poll and re-fetch, so logging
+ * every GET buries real events and makes the audit table grow without bound; one
+ * entry per actor+action per `minutes` is enough to show that the data was viewed.
+ */
+export async function logAuditThrottled(
+  req: NextRequest,
+  actor: string,
+  action: string,
+  detail: string,
+  minutes = 10,
+) {
+  try {
+    const since = new Date(Date.now() - minutes * 60_000);
+    const recent = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.adminUsername, actor), eq(auditLog.action, action), gt(auditLog.createdAt, since)))
+      .limit(1);
+    if (recent.length > 0) return;
+  } catch (err) {
+    console.error('Audit throttle check failed:', err);
+  }
+  await logAuditForRequest(req, actor, action, detail);
+}
+
+/**
  * Build a before/after description for an update, listing only the fields that
  * actually changed.
  *
- * Values are passed through unchanged: these tables already hold encrypted or
- * redacted content where that is the case, and logging is not the place to
- * introduce a second, weaker copy of a secret.
+ * Fields listed in `sensitive` (decrypted PII such as NIP or phone numbers) are
+ * reported by name only: the audit log is plaintext, so writing their values
+ * would be a second, weaker copy of data the database encrypts.
  */
 export function describeChanges(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
   fields: string[],
+  sensitive: string[] = [],
 ): string {
   const parts: string[] = [];
   for (const field of fields) {
     const a = before[field];
     const b = after[field];
     if (a === b) continue;
-    parts.push(`${field}: "${a ?? ''}" → "${b ?? ''}"`);
+    parts.push(
+      sensitive.includes(field)
+        ? `${field}: (diubah)`
+        : `${field}: "${a ?? ''}" → "${b ?? ''}"`,
+    );
   }
   return parts.length ? parts.join('; ') : 'no field changes';
 }

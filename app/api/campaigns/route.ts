@@ -3,7 +3,21 @@ import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { db } from '@/db';
 import { campaigns, recipients, messageTemplates } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
-import { logAudit, logAuditForRequest } from '@/lib/audit';
+import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
+import { readJsonObject, str, parseId } from '@/lib/validate';
+
+// 'sending' and 'sent' are owned by the send route; an admin may only move a campaign
+// between these states, otherwise a PUT could mark an unsent campaign as finished.
+const EDITABLE_STATUSES = new Set(['draft', 'scheduled', 'cancelled']);
+
+/** undefined = not provided, null = explicitly cleared, Date = valid, 'invalid' = reject. */
+function parseOptionalDate(value: unknown): Date | null | undefined | 'invalid' {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string') return 'invalid';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'invalid' : d;
+}
 import { getAdminUsername } from '@/lib/auth-helper';
 
 export async function GET(req: NextRequest) {
@@ -35,7 +49,7 @@ export async function GET(req: NextRequest) {
 
     const listActor = await getAdminUsername(req);
     if (listActor) {
-      void logAuditForRequest(
+      await logAuditThrottled(
         req,
         listActor,
         'view_campaigns',
@@ -44,7 +58,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ campaigns: rows });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Campaigns GET error:', error);
     return NextResponse.json({ error: 'Could not load campaigns' }, { status: 500 });
   }
@@ -57,13 +71,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const name = (body.name || '').trim();
-    const templateId = body.templateId ? Number(body.templateId) : null;
-    const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const name = str(body.name, 200);
+    const templateId = body.templateId ? parseId(body.templateId) : null;
+    const scheduledAt = parseOptionalDate(body.scheduledAt) ?? null;
 
     if (!name) {
       return NextResponse.json({ error: 'Campaign name is required.' }, { status: 400 });
+    }
+    if (body.templateId && templateId === null) {
+      return NextResponse.json({ error: 'Invalid templateId.' }, { status: 400 });
+    }
+    if (scheduledAt === 'invalid') {
+      return NextResponse.json({ error: 'Invalid scheduledAt.' }, { status: 400 });
     }
 
     const status = scheduledAt ? 'scheduled' : 'draft';
@@ -82,7 +105,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ campaign });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Campaigns POST error:', error);
     return NextResponse.json({ error: 'Could not create the campaign' }, { status: 500 });
   }
@@ -95,15 +118,34 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const id = Number(body.id);
-    const name = body.name !== undefined ? (body.name || '').trim() : undefined;
-    const templateId = body.templateId !== undefined ? (body.templateId ? Number(body.templateId) : null) : undefined;
-    const scheduledAt = body.scheduledAt !== undefined ? (body.scheduledAt ? new Date(body.scheduledAt) : null) : undefined;
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 });
+    }
+    const id = parseId(body.id);
+    if (id === null) {
+      return NextResponse.json({ error: 'A valid campaign ID is required.' }, { status: 400 });
+    }
+    const name = body.name !== undefined ? str(body.name, 200) : undefined;
+    const templateId =
+      body.templateId !== undefined ? (body.templateId ? parseId(body.templateId) : null) : undefined;
+    const scheduledAt = parseOptionalDate(body.scheduledAt);
     const status = body.status !== undefined ? body.status : undefined;
 
-    if (!id) {
-      return NextResponse.json({ error: 'Campaign ID is required.' }, { status: 400 });
+    if (name !== undefined && !name) {
+      return NextResponse.json({ error: 'Campaign name cannot be empty.' }, { status: 400 });
+    }
+    if (body.templateId && templateId === null) {
+      return NextResponse.json({ error: 'Invalid templateId.' }, { status: 400 });
+    }
+    if (scheduledAt === 'invalid') {
+      return NextResponse.json({ error: 'Invalid scheduledAt.' }, { status: 400 });
+    }
+    if (status !== undefined && (typeof status !== 'string' || !EDITABLE_STATUSES.has(status))) {
+      return NextResponse.json(
+        { error: `Status must be one of: ${[...EDITABLE_STATUSES].join(', ')}.` },
+        { status: 400 },
+      );
     }
 
     const [campaign] = await db
@@ -131,7 +173,7 @@ export async function PUT(req: NextRequest) {
     );
 
     return NextResponse.json({ campaign });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Campaigns PUT error:', error);
     return NextResponse.json({ error: 'Could not update the campaign' }, { status: 500 });
   }
@@ -144,9 +186,14 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const id = Number(req.nextUrl.searchParams.get('id'));
-    if (!id) {
-      return NextResponse.json({ error: 'Campaign ID is required.' }, { status: 400 });
+    const id = parseId(req.nextUrl.searchParams.get('id'));
+    if (id === null) {
+      return NextResponse.json({ error: 'A valid campaign ID is required.' }, { status: 400 });
+    }
+
+    const [current] = await db.select({ status: campaigns.status }).from(campaigns).where(eq(campaigns.id, id));
+    if (current?.status === 'sending') {
+      return NextResponse.json({ error: 'Campaign is sending; wait for it to finish.' }, { status: 409 });
     }
 
     const [deleted] = await db
@@ -167,7 +214,7 @@ export async function DELETE(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Campaigns DELETE error:', error);
     return NextResponse.json({ error: 'Could not delete the campaign' }, { status: 500 });
   }

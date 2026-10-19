@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import {
   CalendarClock,
@@ -53,6 +54,7 @@ interface EmailTemplate {
 }
 
 export default function EmailCampaignsPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [campaigns, setCampaigns] = React.useState<EmailCampaign[]>([]);
   const [templates, setTemplates] = React.useState<EmailTemplate[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -146,15 +148,18 @@ export default function EmailCampaignsPage() {
   };
 
   const handleSend = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Send campaign "${campaignName}" now?`)) return;
+    if (!(await confirm({ title: `Send campaign "${campaignName}" now?` }))) return;
     setSendingId(id);
     try {
       const res = await fetch(`/api/email/campaigns/${id}/send`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
+        const left = Number(data.remaining ?? 0);
         setNotice({
-          tone: 'ok',
-          text: `Kampanye "${campaignName}" selesai: ${data.successCount} berhasil, ${data.failCount} gagal.`,
+          tone: data.failCount > 0 ? 'err' : 'ok',
+          text:
+            `Kampanye "${campaignName}": ${data.successCount} berhasil, ${data.failCount} gagal` +
+            (left > 0 ? `. ${left} penerima masih menunggu, tekan Kirim lagi untuk melanjutkan.` : '.'),
         });
         void fetchCampaigns();
       } else {
@@ -168,7 +173,7 @@ export default function EmailCampaignsPage() {
   };
 
   const handleDelete = async (id: number, campaignName: string) => {
-    if (!window.confirm(`Delete campaign "${campaignName}"?`)) return;
+    if (!(await confirm({ title: `Delete campaign "${campaignName}"?` }))) return;
     try {
       const res = await fetch(`/api/email/campaigns?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -439,6 +444,7 @@ export default function EmailCampaignsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

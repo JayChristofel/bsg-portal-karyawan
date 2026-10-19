@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { getGowaConfig, validateGatewayUrl } from '@/lib/whatsapp';
 import { gatewayFetch } from '@/lib/gowa-tls';
@@ -102,8 +103,8 @@ export async function GET(req: NextRequest) {
         'X-Content-Type-Options': 'nosniff',
       },
     });
-  } catch (err: any) {
-    console.error('WA QR image proxy error:', err?.message, '| cause:', err?.cause?.code);
+  } catch (err: unknown) {
+    console.error('WA QR image proxy error:', asNetError(err).message, '| cause:', asNetError(err).cause?.code);
     return NextResponse.json(
       { error: 'Could not load the QR image from the gateway.' },
       { status: 502 },

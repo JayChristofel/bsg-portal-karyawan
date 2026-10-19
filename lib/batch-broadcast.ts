@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { hourInAppTz } from '@/lib/time';
 
 export interface BatchConfig {
   batchSize: number;
@@ -40,8 +41,10 @@ function loadConfigFromLocalStorage(): BatchConfig {
   }
 }
 
+// WITA hour, not the browser's: the server enforces the same window in WITA, so a
+// browser in another zone would otherwise disagree with it about "open hours".
 function isWithinTimeWindow(config: BatchConfig): boolean {
-  const hour = new Date().getHours();
+  const hour = hourInAppTz();
   return hour >= config.timeWindowStart && hour < config.timeWindowEnd;
 }
 
@@ -85,49 +88,57 @@ async function resetSession(channel: string): Promise<void> {
 
 export function useBatchBroadcast(channel: string = 'whatsapp') {
   const [config, setConfig] = React.useState<BatchConfig>(DEFAULT_CONFIG);
-  const [state, setState] = React.useState<BatchState | null>(null);
+  const [state, setStateRaw] = React.useState<BatchState | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
+  // The send loop is one long async function that outlives many renders, so it
+  // cannot read `state` from a render closure: it would see the value from the
+  // moment the loop started, and the batch counter would never advance. The refs
+  // always hold the latest value; `state` is kept only to drive the UI.
+  const stateRef = React.useRef<BatchState | null>(null);
+  const configRef = React.useRef<BatchConfig>(DEFAULT_CONFIG);
+
+  const setState = React.useCallback((next: BatchState | null) => {
+    stateRef.current = next;
+    setStateRaw(next);
+  }, []);
+
   React.useEffect(() => {
-    void loadConfig();
-    void loadSession();
-  }, [channel]);
+    configRef.current = config;
+  }, [config]);
 
-  const loadConfig = () => {
-    const savedConfig = loadConfigFromLocalStorage();
-    setConfig(savedConfig);
-  };
+  React.useEffect(() => {
+    const saved = loadConfigFromLocalStorage();
+    configRef.current = saved;
+    setConfig(saved);
 
-  const loadSession = async () => {
-    setIsLoading(true);
-    const session = await fetchSession(channel);
-    if (session) {
-      if (session.isOnBreak && session.breakEndTime && Date.now() > session.breakEndTime) {
-        const updated = await saveSession(channel, {
-          isOnBreak: false,
-          breakEndTime: null,
-          batchSent: 0,
-          currentBatch: session.currentBatch + 1,
-        });
-        if (updated) {
-          setState(updated);
-        } else {
-          setState(session);
-        }
-      } else {
-        setState(session);
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      // The server GET already advances a batch whose break has elapsed.
+      const session = await fetchSession(channel);
+      if (!cancelled) {
+        if (session) setState(session);
+        setIsLoading(false);
       }
-    }
-    setIsLoading(false);
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [channel, setState]);
 
   const saveConfig = React.useCallback((next: BatchConfig) => {
+    configRef.current = next;
     setConfig(next);
-    window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(next));
+    try {
+      window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable (private mode): the setting just won't persist */
+    }
   }, []);
 
   const startBroadcast = React.useCallback(async (totalTargets: number) => {
-    const totalBatches = Math.ceil(totalTargets / config.batchSize);
+    const cfg = configRef.current;
     const newState: BatchState = {
       id: 0,
       channel,
@@ -135,70 +146,68 @@ export function useBatchBroadcast(channel: string = 'whatsapp') {
       totalSent: 0,
       batchSent: 0,
       currentBatch: 1,
-      totalBatches,
+      totalBatches: Math.max(1, Math.ceil(totalTargets / cfg.batchSize)),
       isOnBreak: false,
       breakEndTime: null,
-      isOutsideTimeWindow: !isWithinTimeWindow(config),
+      isOutsideTimeWindow: !isWithinTimeWindow(cfg),
     };
 
     const saved = await saveSession(channel, newState);
-    if (saved) {
-      setState(saved);
-      return saved;
-    }
-    return newState;
-  }, [channel, config]);
+    const result = saved ?? newState;
+    setState(result);
+    return result;
+  }, [channel, setState]);
 
   const recordSend = React.useCallback(async (): Promise<BatchState | null> => {
-    if (!state) return null;
+    const current = stateRef.current;
+    if (!current) return null;
+    const cfg = configRef.current;
 
     const next: BatchState = {
-      ...state,
-      totalSent: state.totalSent + 1,
-      batchSent: state.batchSent + 1,
-      isOutsideTimeWindow: !isWithinTimeWindow(config),
+      ...current,
+      totalSent: current.totalSent + 1,
+      batchSent: current.batchSent + 1,
+      isOutsideTimeWindow: !isWithinTimeWindow(cfg),
     };
 
-    const hasMoreBatches = state.currentBatch < state.totalBatches;
-    if (next.batchSent >= config.batchSize && hasMoreBatches) {
+    const hasMoreBatches = current.currentBatch < current.totalBatches;
+    if (next.batchSent >= cfg.batchSize && hasMoreBatches) {
       next.isOnBreak = true;
-      next.breakEndTime = Date.now() + config.batchBreakMinutes * 60 * 1000;
+      next.breakEndTime = Date.now() + cfg.batchBreakMinutes * 60 * 1000;
     }
 
+    // Update the ref first so the very next call sees this count even while the save is in flight.
+    setState(next);
     const saved = await saveSession(channel, next);
-    if (saved) {
-      setState(saved);
-      return saved;
-    }
-    return next;
-  }, [state, config, channel]);
+    if (saved) setState(saved);
+    return saved ?? next;
+  }, [channel, setState]);
 
   const advanceAfterBreak = React.useCallback(async () => {
-    if (!state) return null;
+    const current = stateRef.current;
+    if (!current) return null;
     const next: BatchState = {
-      ...state,
+      ...current,
       batchSent: 0,
-      currentBatch: state.currentBatch + 1,
+      currentBatch: current.currentBatch + 1,
       isOnBreak: false,
       breakEndTime: null,
-      isOutsideTimeWindow: !isWithinTimeWindow(config),
+      isOutsideTimeWindow: !isWithinTimeWindow(configRef.current),
     };
+    setState(next);
     const saved = await saveSession(channel, next);
-    if (saved) {
-      setState(saved);
-      return saved;
-    }
-    return next;
-  }, [state, config, channel]);
+    if (saved) setState(saved);
+    return saved ?? next;
+  }, [channel, setState]);
 
   const resetBroadcast = React.useCallback(async () => {
-    await resetSession(channel);
     setState(null);
-  }, [channel]);
+    await resetSession(channel);
+  }, [channel, setState]);
 
-  const checkTimeWindow = React.useCallback(() => {
-    return isWithinTimeWindow(config);
-  }, [config]);
+  const checkTimeWindow = React.useCallback(() => isWithinTimeWindow(configRef.current), []);
+
+  const getState = React.useCallback(() => stateRef.current, []);
 
   return {
     config,
@@ -210,6 +219,7 @@ export function useBatchBroadcast(channel: string = 'whatsapp') {
     advanceAfterBreak,
     resetBroadcast,
     checkTimeWindow,
+    getState,
     isWithinTimeWindow,
   };
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '@/components/confirm-dialog';
 import * as React from 'react';
 import {
   CheckCircle2,
@@ -89,6 +90,7 @@ function CodeBlock({ content, maxHeight = '12rem' }: { content: string; maxHeigh
 }
 
 export default function WhatsAppGatewayPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const [status, setStatus] = React.useState<DeviceStatusResult | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = React.useState(true);
   const [qrUrl, setQrUrl] = React.useState<string | null>(null);
@@ -247,7 +249,7 @@ export default function WhatsAppGatewayPage() {
   };
 
   const handleLogoutDevice = async () => {
-    if (!window.confirm('Unlink WhatsApp from the portal-pegawai device?')) return;
+    if (!(await confirm({ title: 'Unlink WhatsApp from the portal-pegawai device?' }))) return;
     setNotice({ tone: 'info', text: 'Logging the device out…' });
     try {
       const res = await fetch('/api/whatsapp/send', {
@@ -826,6 +828,7 @@ export default function WhatsAppGatewayPage() {
           </div>
         </div>
       </SectionCard>
+      {confirmDialog}
     </div>
   );
 }
