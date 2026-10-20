@@ -15,7 +15,8 @@
     "db:seed": "tsx db/seed.ts",
     "db:reencrypt": "tsx db/reencrypt.ts",
     "db:seed:dummy": "tsx db/seed-dummy.ts",
-    "tunnel": "./cloudflared tunnel --url http://localhost:3000"
+    "tunnel": "./cloudflared tunnel --url http://localhost:3000",
+    "bench": "vitest run __tests__/stress --reporter=verbose"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

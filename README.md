@@ -115,6 +115,15 @@ Test akan `TRUNCATE` tabel, jadi **jangan arahkan ke database berisi data nyata*
 TEST_DATABASE_URL=postgresql://user@127.0.0.1:5432/portal_test npm test
 ```
 
+**Stress test + benchmark** (`__tests__/stress`, database test yang sama, `STRESS_SCALE=5` untuk 5x volume):
+```bash
+TEST_DATABASE_URL=postgresql://user@127.0.0.1:5432/portal_test npm run bench
+```
+Empat skenario, tiap skenario punya kriteria lulus: kirim massal 25 worker (tanpa kirim ganda, kuota pas, tidak ada
+yang menggantung di `sending`), badai webhook ack (status tidak mundur, tanpa 5xx), banjir form publik (batas 5/menit
+per IP tepat), dan baca data besar (semua baris terbaca sekali, p95 < 1,5 dtk). Angka berasal dari DB lokal dan gateway
+palsu, jadi bandingkan antar-run, bukan dengan produksi.
+
 ---
 
 ## ☁️ Deployment ke Vercel
