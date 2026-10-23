@@ -15,7 +15,7 @@ Internal document — Indonesian prose, English technical terms.
 | `/admin/campaigns` | Campaigns | Kelola kampanye terjadwal |
 | `/admin/templates` | Message Templates | Pustaka template pesan |
 | `/admin/tracking` | Delivery Tracking | Status pengiriman real-time |
-| `/admin/whatsapp` | WhatsApp Gateway | Konfigurasi koneksi GOWA |
+| `/admin/whatsapp` | WhatsApp Gateway | Konfigurasi koneksi OpenWA |
 | `/admin/admins` | Admin Accounts | Kelola akun administrator |
 | `/admin/audit` | Audit Log | Jejak aktivitas administrator |
 
@@ -195,9 +195,10 @@ di halaman Audit Log utama — mengikuti akun secara tahan rename perlu kolom
 
 ### Gateway TLS
 
-Gateway GOWA memakai sertifikat self-signed di belakang nginx. `lib/gowa-tls.ts`
-menangani trust dengan CA-pinning via `undici.Agent`, scoped hanya ke gateway —
-verifikasi TLS untuk host lain (Supabase, webhook) tetap aktif.
+Gateway WhatsApp (OpenWA) bisa berada di belakang reverse proxy dengan sertifikat
+self-signed. `lib/gateway-tls.ts` menangani trust dengan CA-pinning via
+`undici.Agent`, scoped hanya ke gateway — verifikasi TLS untuk host lain
+(Supabase, webhook) tetap aktif.
 
 **Preflight Tailwind sengaja dimatikan di public portal.** Preflight mengeset
 `line-height: 1.5` pada `html`, sedangkan desain portal dibangun di atas default

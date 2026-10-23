@@ -84,8 +84,8 @@ vi.mock('@/db', () => ({
 
 // Deterministic gateway failure: no DNS/network involved.
 let gatewayShouldThrow = false;
-vi.mock('@/lib/gowa-tls', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/gowa-tls')>('@/lib/gowa-tls');
+vi.mock('@/lib/gateway-tls', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gateway-tls')>('@/lib/gateway-tls');
   return {
     ...actual,
     gatewayFetch: (...args: Parameters<typeof actual.gatewayFetch>) =>
@@ -229,7 +229,7 @@ describe('quota guard', () => {
     process.env.WHATSAPP_API_URL = 'https://gateway.invalid';
     const result = await lib.sendMessageGuarded('081234567890', 'hello', 'device-1', {
       baseUrl: 'https://gateway.invalid',
-      deviceId: 'device-1',
+      sessionId: 'device-1',
     });
 
     expect(result.ok).toBe(false);
@@ -255,7 +255,7 @@ describe('quota guard', () => {
     await expect(
       lib.sendMessageGuarded('081234567890', 'hello', 'device-1', {
         baseUrl: 'https://gateway.invalid',
-        deviceId: 'device-1',
+        sessionId: 'device-1',
       }),
     ).rejects.toThrow('gateway down');
     gatewayShouldThrow = false;

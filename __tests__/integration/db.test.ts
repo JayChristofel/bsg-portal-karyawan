@@ -14,15 +14,23 @@ const URL = process.env.TEST_DATABASE_URL;
 const run = URL ? describe : describe.skip;
 
 // The gateway is the only thing faked: every send "succeeds" instantly.
-vi.mock('@/lib/gowa-tls', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/gowa-tls')>('@/lib/gowa-tls');
+vi.mock('@/lib/gateway-tls', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gateway-tls')>('@/lib/gateway-tls');
   return {
     ...actual,
-    gatewayFetch: async () =>
-      new Response(JSON.stringify({ code: 'SUCCESS', results: { message_id: 'm-1' } }), {
+    gatewayFetch: async (url: string) => {
+      // Session-name lookup: report it as already existing so no create call is needed.
+      if (url.includes('/sessions?name=')) {
+        return new Response(JSON.stringify([{ id: 'it-session-uuid', name: 'dev-it', status: 'ready' }]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ messageId: 'm-1', timestamp: Date.now() }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
-      }),
+      });
+    },
   };
 });
 
@@ -33,7 +41,7 @@ beforeAll(async () => {
   if (!URL) return;
   process.env.DATABASE_URL = URL;
   process.env.ENCRYPTION_KEY = 'e'.repeat(40);
-  process.env.GOWA_ALLOWED_HOSTS = '';
+  process.env.WHATSAPP_GATEWAY_ALLOWED_HOSTS = '';
   ({ db } = await import('@/db'));
   ({ sql } = await import('drizzle-orm'));
 });
@@ -49,7 +57,7 @@ beforeEach(async () => {
   );
 });
 
-const GATEWAY = { baseUrl: 'https://gateway.example', deviceId: 'dev-it', username: 'u', password: 'p' };
+const GATEWAY = { baseUrl: 'https://gateway.example', sessionId: 'dev-it', apiKey: 'k' };
 
 run('warm-up quota under concurrency', () => {
   it('never lets more sends through than the daily limit', async () => {

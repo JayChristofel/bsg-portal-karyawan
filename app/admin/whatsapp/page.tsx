@@ -27,10 +27,11 @@ import { PageHeader, SectionCard, StatStrip } from '../components/ui';
 import { cn } from '@/lib/utils';
 
 interface DeviceStatusResult {
-  device_id?: string;
-  is_connected?: boolean;
-  is_logged_in?: boolean;
+  id?: string;
   name?: string;
+  status?: string;
+  phone?: string | null;
+  pushName?: string | null;
 }
 
 interface WebhookLogItem {
@@ -113,9 +114,8 @@ export default function WhatsAppGatewayPage() {
   const [sendResult, setSendResult] = React.useState<unknown>(null);
 
   const [gatewayUrl, setGatewayUrl] = React.useState('');
-  const [gatewayDeviceId, setGatewayDeviceId] = React.useState('');
-  const [gatewayUsername, setGatewayUsername] = React.useState('');
-  const [gatewayPassword, setGatewayPassword] = React.useState('');
+  const [gatewaySessionId, setGatewaySessionId] = React.useState('');
+  const [gatewayApiKey, setGatewayApiKey] = React.useState('');
   const [isSavingConfig, setIsSavingConfig] = React.useState(false);
   const [isTestingConfig, setIsTestingConfig] = React.useState(false);
   const [configTestResult, setConfigTestResult] = React.useState<unknown>(null);
@@ -128,7 +128,7 @@ export default function WhatsAppGatewayPage() {
       const res = await fetch('/api/whatsapp/status', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        setStatus(data.results ?? null);
+        setStatus(data ?? null);
       }
     } catch {
       setStatus(null);
@@ -163,9 +163,8 @@ export default function WhatsAppGatewayPage() {
       if (res.ok) {
         const data = await res.json();
         setGatewayUrl(data.config?.baseUrl || '');
-        setGatewayDeviceId(data.config?.deviceId || '');
-        setGatewayUsername(data.config?.username || '');
-        setGatewayPassword(data.config?.password || '');
+        setGatewaySessionId(data.config?.sessionId || '');
+        setGatewayApiKey(data.config?.apiKey || '');
       }
     } catch (err) {
       console.error('Fetch config error:', err);
@@ -213,7 +212,7 @@ export default function WhatsAppGatewayPage() {
     void fetchConfig();
   }, [fetchStatus, fetchWebhookData, fetchConfig]);
 
-  const isConnected = Boolean(status?.is_connected || status?.is_logged_in);
+  const isConnected = status?.status === 'ready';
 
   // QR auto-refresh countdown
   React.useEffect(() => {
@@ -281,7 +280,7 @@ export default function WhatsAppGatewayPage() {
       });
       const data = await res.json();
       if (data.code === 'SUCCESS' || res.ok) {
-        setNotice({ tone: 'ok', text: 'Webhook configuration saved to GOWA.' });
+        setNotice({ tone: 'ok', text: 'Webhook configuration saved to the gateway.' });
         void fetchWebhookData();
       } else {
         setNotice({
@@ -301,8 +300,8 @@ export default function WhatsAppGatewayPage() {
       setNotice({ tone: 'err', text: 'URL gateway wajib diisi.' });
       return;
     }
-    if (!gatewayDeviceId.trim()) {
-      setNotice({ tone: 'err', text: 'Device ID wajib diisi.' });
+    if (!gatewaySessionId.trim()) {
+      setNotice({ tone: 'err', text: 'Session name wajib diisi.' });
       return;
     }
     setIsSavingConfig(true);
@@ -314,9 +313,8 @@ export default function WhatsAppGatewayPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           baseUrl: gatewayUrl.trim(),
-          deviceId: gatewayDeviceId.trim(),
-          username: gatewayUsername.trim(),
-          password: gatewayPassword,
+          sessionId: gatewaySessionId.trim(),
+          apiKey: gatewayApiKey,
         }),
       });
       const data = await res.json();
@@ -345,9 +343,8 @@ export default function WhatsAppGatewayPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           baseUrl: gatewayUrl.trim(),
-          deviceId: gatewayDeviceId.trim(),
-          username: gatewayUsername.trim(),
-          password: gatewayPassword,
+          sessionId: gatewaySessionId.trim(),
+          apiKey: gatewayApiKey,
         }),
       });
 
@@ -369,7 +366,7 @@ export default function WhatsAppGatewayPage() {
         const msg = data?.message || data?.error || 'unrecognised response';
         setNotice({
           tone: 'err',
-          text: `Autentikasi gagal: ${msg}. Pastikan username/password Basic Auth benar.`,
+          text: `Autentikasi gagal: ${msg}. Pastikan API key benar.`,
         });
       }
     } catch (err) {
@@ -419,7 +416,7 @@ export default function WhatsAppGatewayPage() {
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="WhatsApp Gateway Management"
-        description="Automatic message delivery and WhatsApp webhook event reception for multi-device GOWA."
+        description="Automatic message delivery and WhatsApp webhook event reception via the OpenWA gateway."
         actions={
           <Button variant="outline" size="sm" onClick={refreshAll} disabled={isLoadingStatus}>
             {isLoadingStatus ? (
@@ -459,7 +456,7 @@ export default function WhatsAppGatewayPage() {
           {
             label: 'Session',
             value: status
-              ? status.is_logged_in
+              ? status.status === 'ready'
                 ? 'Signed in'
                 : 'Not signed in'
               : isLoadingStatus
@@ -467,7 +464,7 @@ export default function WhatsAppGatewayPage() {
                 : 'Unknown',
             icon: ShieldCheck,
           },
-          { label: 'Device', value: gatewayDeviceId || 'Not set', icon: Smartphone },
+          { label: 'Device', value: gatewaySessionId || 'Not set', icon: Smartphone },
           {
             label: 'Webhook events',
             value: webhookEventCount,
@@ -479,39 +476,31 @@ export default function WhatsAppGatewayPage() {
 
       {/* ── Gateway configuration ─────────────────────────────── */}
       <SectionCard
-        title="GOWA Gateway Connection Settings"
-        description="Set the endpoint URL, Device ID, and HTTP Basic Auth credentials. Stored in the database and used by every WhatsApp feature."
+        title="OpenWA Gateway Connection Settings"
+        description="Set the endpoint URL, session name, and API key. Stored in the database and used by every WhatsApp feature."
         className="mb-4"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label="Gateway Endpoint URL"
             htmlFor="gw-url"
-            placeholder="e.g. https://107.23.128.93"
+            placeholder="e.g. https://gateway.example.com"
             value={gatewayUrl}
             onChange={setGatewayUrl}
           />
           <Field
-            label="Device ID"
-            htmlFor="gw-device"
+            label="Session Name"
+            htmlFor="gw-session"
             placeholder="e.g. portal-pegawai"
-            value={gatewayDeviceId}
-            onChange={setGatewayDeviceId}
+            value={gatewaySessionId}
+            onChange={setGatewaySessionId}
           />
           <Field
-            label="Basic Auth Username (optional)"
-            htmlFor="gw-user"
-            placeholder="Leave blank if the gateway has no Basic Auth"
-            value={gatewayUsername}
-            onChange={setGatewayUsername}
-            autoComplete="off"
-          />
-          <Field
-            label="Basic Auth Password (optional)"
-            htmlFor="gw-pass"
-            placeholder="Leave blank if the gateway has no Basic Auth"
-            value={gatewayPassword}
-            onChange={setGatewayPassword}
+            label="API Key"
+            htmlFor="gw-key"
+            placeholder="X-API-Key value from the OpenWA dashboard"
+            value={gatewayApiKey}
+            onChange={setGatewayApiKey}
             type="password"
             autoComplete="new-password"
           />
@@ -568,16 +557,15 @@ export default function WhatsAppGatewayPage() {
         >
           <dl className="divide-y divide-border/50">
             {[
-              { label: 'Device ID', value: status?.device_id || 'portal-pegawai', mono: true },
+              { label: 'Session', value: status?.name || gatewaySessionId || 'portal-pegawai', mono: true },
               {
-                label: 'Login Status',
-                value: status?.is_logged_in ? 'Logged In' : 'Not Signed In',
-                tone: status?.is_logged_in ? 'ok' : 'err',
+                label: 'Status',
+                value: status?.status ?? 'unknown',
+                tone: status?.status === 'ready' ? 'ok' : 'err',
               },
               {
-                label: 'Socket Connection Status',
-                value: status?.is_connected ? 'Connected' : 'Disconnected',
-                tone: status?.is_connected ? 'ok' : 'err',
+                label: 'Phone',
+                value: status?.phone || '—',
               },
               { label: 'Gateway Endpoint', value: gatewayUrl || '—', mono: false },
             ].map((row) => (
@@ -630,7 +618,7 @@ export default function WhatsAppGatewayPage() {
               </span>
               <p className="text-base font-semibold text-foreground">WhatsApp Telah Terhubung!</p>
               <p className="mt-2 max-w-xs text-xs text-muted-foreground">
-                Perangkat <span className="tabular">portal-pegawai</span> aktif dan siap digunakan untuk
+                Perangkat <span className="tabular">{status?.name || gatewaySessionId}</span> aktif dan siap digunakan untuk
                 mengirim notifikasi atau tautan kampanye.
               </p>
             </div>
@@ -685,8 +673,8 @@ export default function WhatsAppGatewayPage() {
 
       {/* ── Webhook ──────────────────────────────────────────── */}
       <SectionCard
-        title="GOWA Webhook Settings"
-        description="GOWA sends WhatsApp events (connection status, incoming messages, etc.) to this endpoint via HTTP POST."
+        title="OpenWA Webhook Settings"
+        description="OpenWA sends WhatsApp events (message acknowledgements, etc.) to this endpoint via HTTP POST."
         className="mb-4"
         actions={
           <Button size="sm" variant="outline" onClick={handleUseCurrentHost}>
@@ -751,7 +739,7 @@ export default function WhatsAppGatewayPage() {
 
           {webhookLogs.length === 0 ? (
             <p className="rounded-lg bg-background/40 px-4 py-6 text-center text-xs text-muted-foreground">
-              No webhook events received yet. Events will appear here once GOWA sends data.
+              No webhook events received yet. Events will appear here once the gateway sends data.
             </p>
           ) : (
             <ul className="max-h-64 space-y-2 overflow-y-auto">

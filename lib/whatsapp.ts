@@ -1,26 +1,26 @@
 import crypto from 'node:crypto';
 import { asNetError } from '@/lib/utils';
-import { gatewayFetch, gatewayTlsMode } from './gowa-tls';
+import { gatewayFetch, gatewayTlsMode } from './gateway-tls';
 import { isPrivateHostname, readHostAllowlist } from './net-guard';
 import { rowsOf } from './db-util';
 
-export interface GowaConfig {
+export interface GatewayConfig {
   baseUrl: string;
-  deviceId: string;
-  username?: string;
-  password?: string;
+  /** Human-readable OpenWA session name, e.g. "portal-pegawai". */
+  sessionId: string;
+  apiKey?: string;
 }
 
 /**
- * Outbound URL guard for the GOWA gateway.
+ * Outbound URL guard for the WhatsApp gateway.
  *
  * The gateway URL is admin-configurable and persisted in the settings table,
  * which makes it an SSRF sink: without this check an attacker (or a hijacked
  * admin session) could point it at 127.0.0.1, the cloud metadata endpoint, or
  * any internal service.
  *
- * Set GOWA_ALLOWED_HOSTS (comma-separated) to lock this down further.
- * Loopback/private ranges are only permitted when GOWA_ALLOW_PRIVATE_HOSTS=1,
+ * Set WHATSAPP_GATEWAY_ALLOWED_HOSTS (comma-separated) to lock this down further.
+ * Loopback/private ranges are only permitted when WHATSAPP_GATEWAY_ALLOW_PRIVATE_HOSTS=1,
  * which is needed when the gateway runs on the same machine during development.
  */
 export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | { ok: false; error: string } {
@@ -39,25 +39,25 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
     return { ok: false, error: 'Gateway URL must not contain credentials.' };
   }
 
-  if (process.env.GOWA_ALLOW_PRIVATE_HOSTS !== '1' && isPrivateHostname(parsed.hostname)) {
+  if (process.env.WHATSAPP_GATEWAY_ALLOW_PRIVATE_HOSTS !== '1' && isPrivateHostname(parsed.hostname)) {
     return {
       ok: false,
       error:
         'Gateway hostname points to an internal/loopback network and was rejected. ' +
-        'Set GOWA_ALLOWED_HOSTS if you intentionally use a private gateway.',
+        'Set WHATSAPP_GATEWAY_ALLOWED_HOSTS if you intentionally use a private gateway.',
     };
   }
 
-  const allowlist = readHostAllowlist(process.env.GOWA_ALLOWED_HOSTS);
+  const allowlist = readHostAllowlist(process.env.WHATSAPP_GATEWAY_ALLOWED_HOSTS);
 
   if (allowlist.length > 0 && !allowlist.includes(parsed.hostname.toLowerCase())) {
     return { ok: false, error: `Gateway hostname is not allowed. Allow: ${allowlist.join(', ')}` };
   }
 
-  if (parsed.protocol === 'http:' && process.env.GOWA_ALLOW_INSECURE_HTTP !== '1') {
+  if (parsed.protocol === 'http:' && process.env.WHATSAPP_GATEWAY_ALLOW_INSECURE_HTTP !== '1') {
     return {
       ok: false,
-      error: 'Gateway URL must use HTTPS. Set GOWA_ALLOW_INSECURE_HTTP=1 for local development only.',
+      error: 'Gateway URL must use HTTPS. Set WHATSAPP_GATEWAY_ALLOW_INSECURE_HTTP=1 for local development only.',
     };
   }
 
@@ -65,16 +65,9 @@ export function validateGatewayUrl(rawUrl: string): { ok: true; url: string } | 
 }
 
 /**
- * Path segment for user-supplied device IDs. Without encoding, a value like
- * "../../api/x" would traverse the gateway's URL space.
- */
-function deviceSegment(deviceId: string): string {
-  return encodeURIComponent(deviceId);
-}
-
-/**
- * HMAC-SHA256 signature verification for inbound GOWA webhooks.
- * Set WHATSAPP_WEBHOOK_SECRET on both this app and the gateway.
+ * HMAC-SHA256 signature verification for inbound OpenWA webhooks.
+ * Set WHATSAPP_WEBHOOK_SECRET on both this app and the gateway (same value
+ * passed as the webhook `secret` when it is registered).
  */
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
   const secret = process.env.WHATSAPP_WEBHOOK_SECRET;
@@ -92,21 +85,19 @@ export function verifyWebhookSignature(rawBody: string, signatureHeader: string 
   return crypto.timingSafeEqual(a, b);
 }
 
-export const DEFAULT_GOWA_CONFIG: GowaConfig = {
-  baseUrl: (process.env.WHATSAPP_API_URL || 'https://107.23.128.93').replace(/\/+$/, ''),
-  deviceId: process.env.WHATSAPP_DEVICE_ID || 'portal-pegawai',
-  username: process.env.WHATSAPP_API_USERNAME || undefined,
-  password: process.env.WHATSAPP_API_PASSWORD || undefined,
+export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
+  baseUrl: (process.env.WHATSAPP_API_URL || '').replace(/\/+$/, ''),
+  sessionId: process.env.WHATSAPP_DEVICE_ID || 'portal-pegawai',
+  apiKey: process.env.WHATSAPP_API_KEY || undefined,
 };
 
-export const GOWA_CONFIG_KEYS = {
-  url: 'gowa_url',
-  deviceId: 'gowa_device_id',
-  username: 'gowa_username',
-  password: 'gowa_password',
+export const GATEWAY_CONFIG_KEYS = {
+  url: 'gateway_url',
+  sessionId: 'gateway_session_id',
+  apiKey: 'gateway_api_key',
 } as const;
 
-export async function getGowaConfig(): Promise<GowaConfig> {
+export async function getGatewayConfig(): Promise<GatewayConfig> {
   try {
     const { db } = await import('@/db');
     const { settings } = await import('@/db/schema');
@@ -114,21 +105,20 @@ export async function getGowaConfig(): Promise<GowaConfig> {
     const rows = await db.select().from(settings);
     const overrides = new Map<string, string>(rows.map((r) => [r.key, r.value] as [string, string]));
 
-    const storedPassword = overrides.get(GOWA_CONFIG_KEYS.password) || '';
-    const password = storedPassword ? decrypt(storedPassword) : undefined;
+    const storedApiKey = overrides.get(GATEWAY_CONFIG_KEYS.apiKey) || '';
+    const apiKey = storedApiKey ? decrypt(storedApiKey) : undefined;
 
     return {
-      baseUrl: (overrides.get(GOWA_CONFIG_KEYS.url) || DEFAULT_GOWA_CONFIG.baseUrl).replace(/\/+$/, ''),
-      deviceId: overrides.get(GOWA_CONFIG_KEYS.deviceId) || DEFAULT_GOWA_CONFIG.deviceId,
-      username: overrides.get(GOWA_CONFIG_KEYS.username) || DEFAULT_GOWA_CONFIG.username,
-      password: password || DEFAULT_GOWA_CONFIG.password,
+      baseUrl: (overrides.get(GATEWAY_CONFIG_KEYS.url) || DEFAULT_GATEWAY_CONFIG.baseUrl).replace(/\/+$/, ''),
+      sessionId: overrides.get(GATEWAY_CONFIG_KEYS.sessionId) || DEFAULT_GATEWAY_CONFIG.sessionId,
+      apiKey: apiKey || DEFAULT_GATEWAY_CONFIG.apiKey,
     };
   } catch {
-    return DEFAULT_GOWA_CONFIG;
+    return DEFAULT_GATEWAY_CONFIG;
   }
 }
 
-export async function saveGowaConfig(config: Partial<GowaConfig>) {
+export async function saveGatewayConfig(config: Partial<GatewayConfig>) {
   const { db } = await import('@/db');
   const { settings } = await import('@/db/schema');
   const { sql } = await import('drizzle-orm');
@@ -142,10 +132,9 @@ export async function saveGowaConfig(config: Partial<GowaConfig>) {
   `);
 
   const entries: Record<string, string> = {};
-  if (config.baseUrl !== undefined) entries[GOWA_CONFIG_KEYS.url] = config.baseUrl.trim();
-  if (config.deviceId !== undefined) entries[GOWA_CONFIG_KEYS.deviceId] = config.deviceId.trim();
-  if (config.username !== undefined) entries[GOWA_CONFIG_KEYS.username] = config.username.trim();
-  if (config.password !== undefined) entries[GOWA_CONFIG_KEYS.password] = config.password;
+  if (config.baseUrl !== undefined) entries[GATEWAY_CONFIG_KEYS.url] = config.baseUrl.trim();
+  if (config.sessionId !== undefined) entries[GATEWAY_CONFIG_KEYS.sessionId] = config.sessionId.trim();
+  if (config.apiKey !== undefined) entries[GATEWAY_CONFIG_KEYS.apiKey] = config.apiKey;
 
   for (const [key, value] of Object.entries(entries)) {
     await db
@@ -158,15 +147,12 @@ export async function saveGowaConfig(config: Partial<GowaConfig>) {
   }
 }
 
-function buildHeaders(config: GowaConfig, extra?: Record<string, string>): Record<string, string> {
+function buildHeaders(config: GatewayConfig, extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Device-Id': config.deviceId,
     ...(extra || {}),
   };
-  if (config.username || config.password) {
-    headers['Authorization'] = 'Basic ' + Buffer.from(`${config.username || ''}:${config.password || ''}`).toString('base64');
-  }
+  if (config.apiKey) headers['X-API-Key'] = config.apiKey;
   return headers;
 }
 
@@ -175,9 +161,9 @@ const MAX_GATEWAY_RESPONSE_BYTES = 1_000_000;
 let warnedOpenAllowlist = false;
 
 /**
- * Checked on every call, not only when the URL is saved: the credentials are
+ * Checked on every call, not only when the URL is saved: the API key is
  * attached to whatever host is stored, so a hijacked session that swapped the URL
- * must not get the gateway password sent to its server.
+ * must not get the gateway key sent to its server.
  */
 function assertGatewayHostAllowed(baseUrl: string): void {
   let host: string;
@@ -186,37 +172,46 @@ function assertGatewayHostAllowed(baseUrl: string): void {
   } catch {
     throw new Error('Gateway URL is invalid.');
   }
-  const allowlist = readHostAllowlist(process.env.GOWA_ALLOWED_HOSTS);
+  const allowlist = readHostAllowlist(process.env.WHATSAPP_GATEWAY_ALLOWED_HOSTS);
   if (allowlist.length > 0) {
     if (!allowlist.includes(host)) {
-      throw new Error('Gateway hostname is not in GOWA_ALLOWED_HOSTS; request blocked.');
+      throw new Error('Gateway hostname is not in WHATSAPP_GATEWAY_ALLOWED_HOSTS; request blocked.');
     }
   } else if (process.env.NODE_ENV === 'production' && !warnedOpenAllowlist) {
     warnedOpenAllowlist = true;
     console.warn(
-      '[gowa] GOWA_ALLOWED_HOSTS is not set: gateway credentials are sent to whichever ' +
-        'host is saved in the settings. Set it to the gateway hostname.',
+      '[gateway] WHATSAPP_GATEWAY_ALLOWED_HOSTS is not set: the gateway API key is sent to ' +
+        'whichever host is saved in the settings. Set it to the gateway hostname.',
     );
   }
 }
 
-async function gowaFetch(config: GowaConfig, path: string, options: RequestInit = {}) {
+/**
+ * Low-level JSON call to the gateway's REST API (paths are relative to `/api`).
+ * Returns the parsed body as-is (object, array, or a `{message}` fallback for
+ * a non-JSON response) alongside the HTTP status, so callers can distinguish
+ * "the gateway answered with an error" from "the request never reached it".
+ */
+async function gatewayFetchJson(
+  config: GatewayConfig,
+  path: string,
+  options: RequestInit = {},
+): Promise<{ status: number; body: unknown }> {
   assertGatewayHostAllowed(config.baseUrl);
-  const url = `${config.baseUrl}${path}`;
+  const url = `${config.baseUrl}/api${path}`;
   let res: Response;
   try {
-    // Routed through the scoped dispatcher so the self-signed gateway
+    // Routed through the scoped dispatcher so a self-signed gateway
     // certificate can be pinned without weakening TLS for other hosts.
     res = await gatewayFetch(url, {
       ...options,
       headers: buildHeaders(config, options.headers as Record<string, string> | undefined),
       cache: 'no-store',
-      // Never follow a redirect with the Basic Auth header attached, and never hang.
       redirect: 'manual',
       signal: options.signal ?? AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });
   } catch (err: unknown) {
-    console.error('GOWA FETCH ERROR:', asNetError(err).message, '| cause:', asNetError(err).cause?.code, asNetError(err).cause?.message);
+    console.error('GATEWAY FETCH ERROR:', asNetError(err).message, '| cause:', asNetError(err).cause?.code, asNetError(err).cause?.message);
     throw err;
   }
 
@@ -225,30 +220,113 @@ async function gowaFetch(config: GowaConfig, path: string, options: RequestInit 
   }
   const text = await res.text();
   try {
-    // Preserve the HTTP status so callers can distinguish an expected
-    // rejection (e.g. ALREADY_LOGGED_IN) from a transport failure.
-    return { ...JSON.parse(text), status: res.status };
+    return { status: res.status, body: JSON.parse(text) };
   } catch {
     // The gateway always answers JSON. Anything else -- an nginx error page, a
     // login form -- is a failure even when the HTTP status is 200, otherwise every
     // send would be reported as delivered.
-    return { code: 'ERROR', message: text.slice(0, 300), status: res.status };
+    return { status: res.status, body: { message: text.slice(0, 300) } };
   }
 }
 
-export async function getDeviceStatus(config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/status`);
+interface OpenWaSession {
+  id: string;
+  name: string;
+  status: 'created' | 'initializing' | 'qr_ready' | 'authenticating' | 'ready' | 'disconnected' | 'action_required' | 'failed';
+  phone?: string | null;
+  pushName?: string | null;
+  connectedAt?: string | null;
+  lastActive?: string | null;
+  lastError?: string | null;
 }
 
-export async function listDevices(config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, '/devices', { headers: {} });
+/** All sessions visible to this API key. */
+export async function listSessions(config?: GatewayConfig): Promise<OpenWaSession[]> {
+  const cfg = config || (await getGatewayConfig());
+  const { body } = await gatewayFetchJson(cfg, '/sessions');
+  return Array.isArray(body) ? (body as OpenWaSession[]) : [];
 }
 
-export async function getQRCode(config?: GowaConfig): Promise<{ code: string; results?: { qr_url?: string; qr_link?: string; code?: string; qr_duration?: number }; status?: number }> {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/login`);
+async function findSessionByName(cfg: GatewayConfig, name: string): Promise<OpenWaSession | null> {
+  const { body } = await gatewayFetchJson(cfg, `/sessions?name=${encodeURIComponent(name)}`);
+  return Array.isArray(body) && body.length > 0 ? (body[0] as OpenWaSession) : null;
+}
+
+async function createSession(cfg: GatewayConfig, name: string): Promise<OpenWaSession> {
+  const { status, body } = await gatewayFetchJson(cfg, '/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+  const session = body as Partial<OpenWaSession> & { message?: string };
+  if (status >= 400 || !session.id) {
+    throw new Error(session.message || `Gateway refused to create session '${name}' (HTTP ${status}).`);
+  }
+  return session as OpenWaSession;
+}
+
+const sessionUuidCache = new Map<string, string>();
+
+/**
+ * OpenWA addresses a session by UUID, but the admin configures a human-readable
+ * name (kept in GATEWAY_CONFIG_KEYS.sessionId, same role `deviceId` played for
+ * the previous gateway). Resolve the name to its UUID once per (baseUrl, name)
+ * and cache it for this instance's lifetime; a 404 from a session-scoped call
+ * means the gateway-side session is gone, so the cache is dropped and the name
+ * is re-resolved (creating it if needed) on the retry.
+ */
+async function resolveSessionUuid(cfg: GatewayConfig, opts: { invalidate?: boolean } = {}): Promise<string> {
+  const cacheKey = `${cfg.baseUrl}|${cfg.sessionId}`;
+  if (opts.invalidate) sessionUuidCache.delete(cacheKey);
+
+  const cached = sessionUuidCache.get(cacheKey);
+  if (cached) return cached;
+
+  const existing = await findSessionByName(cfg, cfg.sessionId);
+  const uuid = existing?.id ?? (await createSession(cfg, cfg.sessionId)).id;
+  sessionUuidCache.set(cacheKey, uuid);
+  return uuid;
+}
+
+/** Session-scoped call: resolves the configured name to a UUID and retries once if it's stale. */
+async function sessionFetch(
+  cfg: GatewayConfig,
+  pathAfterId: string,
+  options: RequestInit = {},
+): Promise<{ status: number; body: unknown }> {
+  let uuid = await resolveSessionUuid(cfg);
+  let res = await gatewayFetchJson(cfg, `/sessions/${encodeURIComponent(uuid)}${pathAfterId}`, options);
+  if (res.status === 404) {
+    uuid = await resolveSessionUuid(cfg, { invalidate: true });
+    res = await gatewayFetchJson(cfg, `/sessions/${encodeURIComponent(uuid)}${pathAfterId}`, options);
+  }
+  return res;
+}
+
+export async function getSessionStatus(config?: GatewayConfig): Promise<OpenWaSession> {
+  const cfg = config || (await getGatewayConfig());
+  const { body } = await sessionFetch(cfg, '');
+  return body as OpenWaSession;
+}
+
+export async function startSession(config?: GatewayConfig) {
+  const cfg = config || (await getGatewayConfig());
+  const { body } = await sessionFetch(cfg, '/start', { method: 'POST' });
+  return body as OpenWaSession;
+}
+
+export async function logoutSession(config?: GatewayConfig) {
+  const cfg = config || (await getGatewayConfig());
+  const { body } = await sessionFetch(cfg, '/logout', { method: 'POST' });
+  return body;
+}
+
+/** Connectivity + API key check for the admin "Test Connection" button. */
+export async function testGatewayConnection(
+  config?: GatewayConfig,
+): Promise<{ authOk: boolean; status: number; body: unknown }> {
+  const cfg = config || (await getGatewayConfig());
+  const { status, body } = await gatewayFetchJson(cfg, '/sessions');
+  return { authOk: status === 200, status, body };
 }
 
 export type QrResult =
@@ -262,18 +340,45 @@ export type QrResult =
     };
 
 /**
- * Requests a pairing QR and classifies the outcome.
+ * Ensures the session exists and is starting, then requests a pairing QR.
  *
- * A paired device answers 400 ALREADY_LOGGED_IN. That is a healthy gateway, so
- * it must not be reported as a connection failure — previously this surfaced as
- * "make sure the GOWA server is running", which sent admins down the wrong path.
+ * A session that is already `ready` is healthy and paired, so that must not be
+ * reported as a connection failure — it previously surfaced as "make sure the
+ * gateway is running", which sent admins down the wrong path.
  */
-export async function requestQr(config?: GowaConfig): Promise<QrResult> {
-  const cfg = config || (await getGowaConfig());
+export async function requestQr(config?: GatewayConfig): Promise<QrResult> {
+  const cfg = config || (await getGatewayConfig());
 
-  let raw: { code?: string; message?: string; status?: number; results?: { qr_link?: string; qr_url?: string; qr_duration?: number } };
   try {
-    raw = await getQRCode(cfg);
+    const status = await getSessionStatus(cfg);
+
+    if (status.status === 'ready') {
+      return {
+        ok: false,
+        reason: 'already-logged-in',
+        message: 'Device is already paired. Disconnect it first if you want to re-pair.',
+      };
+    }
+
+    if (status.status === 'created' || status.status === 'disconnected' || status.status === 'failed') {
+      await startSession(cfg);
+    }
+
+    const { status: httpStatus, body } = await sessionFetch(cfg, '/qr');
+    const qr = body as { qrCode?: string; status?: string; message?: string };
+
+    if (httpStatus >= 400 || !qr.qrCode) {
+      return {
+        ok: false,
+        reason: 'gateway-error',
+        status: httpStatus,
+        message: qr.message || 'Gateway did not return a QR code.',
+      };
+    }
+
+    // The data URI is rendered straight into an <img src>; no separate image
+    // fetch/proxy is needed (unlike a gateway that answers with a link).
+    return { ok: true, qrLink: qr.qrCode, qrDuration: 30 };
   } catch (err: unknown) {
     const cause = asNetError(err).cause?.code || '';
     const tls = cause.includes('CERT') || cause.includes('SELF_SIGNED') || cause.includes('UNABLE_TO_VERIFY');
@@ -286,53 +391,11 @@ export async function requestQr(config?: GowaConfig): Promise<QrResult> {
         ? `TLS verification failed for the gateway certificate (${cause || 'certificate rejected'}). ` +
           `Current trust mode: ${mode}. ` +
           (mode === 'system'
-            ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
+            ? 'Set WHATSAPP_GATEWAY_CA_CERT to the gateway CA certificate.'
             : 'The configured CA did not match the certificate the gateway presented — it may have been rotated.')
         : `Could not reach the gateway: ${asNetError(err).message ?? 'unknown network error'} (trust mode: ${mode})`,
     };
   }
-
-  if (raw?.code === 'ALREADY_LOGGED_IN') {
-    return {
-      ok: false,
-      reason: 'already-logged-in',
-      status: raw.status,
-      code: raw.code,
-      message: 'Device is already paired. Disconnect it first if you want to re-pair.',
-    };
-  }
-
-  const link = raw?.results?.qr_link || raw?.results?.qr_url;
-  if (!link) {
-    return {
-      ok: false,
-      reason: 'gateway-error',
-      status: raw?.status,
-      code: raw?.code,
-      message: raw?.message || 'Gateway did not return a QR code.',
-    };
-  }
-
-  return {
-    ok: true,
-    qrLink: link,
-    qrDuration: raw?.results?.qr_duration || 30,
-  };
-}
-
-export async function reconnectDevice(config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/reconnect`, { method: 'POST' });
-}
-
-export async function logoutDevice(config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/logout`, { method: 'POST' });
-}
-
-export interface SendMessagePayload {
-  phone: string;
-  message: string;
 }
 
 /**
@@ -350,15 +413,26 @@ export function normalizeWaPhone(phone: string): string | null {
   return /^\d{8,15}$/.test(normalized) ? normalized : null;
 }
 
-export async function sendMessage(phone: string, message: string, config?: GowaConfig) {
+/** OpenWA addresses individual chats as `<digits>@c.us`. */
+export function toChatId(phone: string): string | null {
   const normalized = normalizeWaPhone(phone);
-  if (!normalized) throw new Error('Invalid phone number.');
-  const cfg = config || (await getGowaConfig());
+  return normalized ? `${normalized}@c.us` : null;
+}
 
-  return gowaFetch(cfg, '/send/message', {
+export async function sendMessage(phone: string, message: string, config?: GatewayConfig) {
+  const chatId = toChatId(phone);
+  if (!chatId) throw new Error('Invalid phone number.');
+  const cfg = config || (await getGatewayConfig());
+
+  const { status, body } = await sessionFetch(cfg, '/messages/send-text', {
     method: 'POST',
-    body: JSON.stringify({ phone: normalized, message }),
+    body: JSON.stringify({ chatId, text: message }),
   });
+  const result = body as { messageId?: string; timestamp?: number; message?: string };
+  if (status >= 400 || !result.messageId) {
+    throw new Error(result.message || `Gateway refused the message (HTTP ${status}).`);
+  }
+  return result;
 }
 
 /**
@@ -374,7 +448,7 @@ export async function sendMessageGuarded(
   phone: string,
   message: string,
   numberId: string,
-  config?: GowaConfig,
+  config?: GatewayConfig,
 ): Promise<{ ok: true; result: unknown } | { ok: false; reason: 'quota'; state: WarmUpState }> {
   // Reject a bad number before it costs a unit of today's quota.
   if (!normalizeWaPhone(phone)) throw new Error('Invalid phone number.');
@@ -591,20 +665,79 @@ export async function checkDailyLimit(
   };
 }
 
-export async function getDeviceWebhook(config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/webhook`);
+export interface WebhookSubscription {
+  id: string;
+  url: string;
+  events: string[];
+  secret?: string;
+  active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export async function setDeviceWebhook(webhook_url: string, webhook_secret?: string, webhook_events?: string, config?: GowaConfig) {
-  const cfg = config || (await getGowaConfig());
-  return gowaFetch(cfg, `/devices/${deviceSegment(cfg.deviceId)}/webhook`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      webhook_url,
-      ...(webhook_secret !== undefined ? { webhook_secret } : {}),
-      ...(webhook_events !== undefined ? { webhook_events } : {}),
-    }),
-  });
+export async function listSessionWebhooks(config?: GatewayConfig): Promise<WebhookSubscription[]> {
+  const cfg = config || (await getGatewayConfig());
+  const { body } = await sessionFetch(cfg, '/webhooks');
+  return Array.isArray(body) ? (body as WebhookSubscription[]) : [];
 }
 
+/**
+ * The admin UI manages a single webhook endpoint per session; OpenWA itself
+ * supports several per session, so the first one registered is treated as
+ * "the" managed webhook.
+ */
+export async function getManagedWebhook(config?: GatewayConfig): Promise<WebhookSubscription | null> {
+  const list = await listSessionWebhooks(config);
+  return list[0] ?? null;
+}
+
+export async function setManagedWebhook(
+  webhookUrl: string,
+  webhookSecret: string | undefined,
+  webhookEvents: string[],
+  config?: GatewayConfig,
+): Promise<WebhookSubscription> {
+  const cfg = config || (await getGatewayConfig());
+  const existing = await getManagedWebhook(cfg);
+
+  const payload: Record<string, unknown> = {
+    url: webhookUrl,
+    events: webhookEvents.length ? webhookEvents : ['message.ack'],
+  };
+  // An empty secret means "leave as is": sending '' would clear a secret already
+  // set on the gateway, and every later event would then fail signature verification.
+  if (webhookSecret) payload.secret = webhookSecret;
+
+  const { status, body } = existing
+    ? await sessionFetch(cfg, `/webhooks/${encodeURIComponent(existing.id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+    : await sessionFetch(cfg, '/webhooks', { method: 'POST', body: JSON.stringify(payload) });
+
+  if (status >= 400) {
+    throw new Error((body as { message?: string })?.message || `Could not save the webhook (HTTP ${status}).`);
+  }
+  return body as WebhookSubscription;
+}
+
+/**
+ * Registers the app's webhook on a session other than the default one — e.g. a
+ * warmer pair's session, which the single-session webhook admin UI never touches.
+ * Best-effort: callers should not fail their own operation if this throws (APP_URL
+ * or WHATSAPP_WEBHOOK_SECRET may not be set, or the session may not exist yet).
+ */
+export async function ensureSessionWebhook(sessionId: string): Promise<void> {
+  const appUrl = process.env.APP_URL;
+  if (!appUrl) throw new Error('APP_URL is not set; cannot register a webhook URL.');
+
+  const defaultConfig = await getGatewayConfig();
+  const config: GatewayConfig = { ...defaultConfig, sessionId };
+
+  await setManagedWebhook(
+    `${appUrl.replace(/\/$/, '')}/api/webhook/whatsapp`,
+    process.env.WHATSAPP_WEBHOOK_SECRET,
+    ['message.ack'],
+    config,
+  );
+}

@@ -6,20 +6,16 @@ vi.mock('@/db/schema', () => ({ recipients: {} }));
 const { parseSendResult, renderMessage, portalLinkFrom } = await import('@/lib/recipient-queue');
 
 describe('parseSendResult', () => {
-  it('accepts SUCCESS/OK codes and any message id', () => {
-    expect(parseSendResult({ code: 'SUCCESS' }).isSuccess).toBe(true);
-    expect(parseSendResult({ code: 'OK' }).isSuccess).toBe(true);
-    expect(parseSendResult({ results: { message_id: 'abc' } })).toEqual({
+  it('succeeds whenever a messageId is present', () => {
+    expect(parseSendResult({ messageId: 'abc' })).toEqual({
       messageId: 'abc',
       isSuccess: true,
     });
-    expect(parseSendResult({ results: { id: 'x' } }).messageId).toBe('x');
-    expect(parseSendResult({ message_id: 'y' }).messageId).toBe('y');
   });
 
-  it('does not treat free-text "success" as success', () => {
-    expect(parseSendResult({ code: 'ERROR', message: 'no success today' }).isSuccess).toBe(false);
-    expect(parseSendResult({ message: 'success' }).isSuccess).toBe(false);
+  it('treats a missing messageId as failure', () => {
+    expect(parseSendResult({ message: 'no success today' }).isSuccess).toBe(false);
+    expect(parseSendResult({ messageId: '' }).isSuccess).toBe(false);
   });
 
   it('survives null / non-object results', () => {

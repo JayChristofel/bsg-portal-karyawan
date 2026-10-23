@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import { requestQr } from '@/lib/whatsapp';
-import { gatewayTlsMode } from '@/lib/gowa-tls';
+import { gatewayTlsMode } from '@/lib/gateway-tls';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
 
@@ -22,9 +22,9 @@ export async function GET(req: NextRequest) {
     if (result.ok) {
       return NextResponse.json({
         code: 'SUCCESS',
-        // The image is served through /api/whatsapp/qr/image so the browser
-        // never needs to reach the gateway (which requires Basic Auth).
-        qrLink: `/api/whatsapp/qr/image?src=${encodeURIComponent(result.qrLink)}`,
+        // The gateway already returns the QR as a data: URI, so the browser
+        // can render it directly — no proxy fetch needed.
+        qrLink: result.qrLink,
         qrDuration: result.qrDuration,
         tlsMode: gatewayTlsMode(),
       });

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { getGowaConfig, saveGowaConfig, listDevices, validateGatewayUrl, GOWA_CONFIG_KEYS, DEFAULT_GOWA_CONFIG } from '@/lib/whatsapp';
+import { getGatewayConfig, saveGatewayConfig, testGatewayConnection, validateGatewayUrl, GATEWAY_CONFIG_KEYS, DEFAULT_GATEWAY_CONFIG } from '@/lib/whatsapp';
 import { db } from '@/db';
 import { settings } from '@/db/schema';
 import { encrypt } from '@/lib/crypto';
-import { gatewayTlsMode } from '@/lib/gowa-tls';
+import { gatewayTlsMode } from '@/lib/gateway-tls';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest } from '@/lib/audit';
 
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const config = await getGowaConfig();
+    const config = await getGatewayConfig();
 
     const readActor = await getAdminUsername(req);
     if (readActor) {
@@ -24,22 +24,21 @@ export async function GET(req: NextRequest) {
         req,
         readActor,
         'view_gateway_config',
-        `Membaca konfigurasi gateway (${config.baseUrl}, device: ${config.deviceId})`,
+        `Membaca konfigurasi gateway (${config.baseUrl}, session: ${config.sessionId})`,
       );
     }
 
-    // Never return the gateway password in plaintext — only whether one is set.
+    // Never return the gateway API key in plaintext — only whether one is set.
     return NextResponse.json({
       config: {
         baseUrl: config.baseUrl,
-        deviceId: config.deviceId,
-        username: config.username || '',
-        hasPassword: Boolean(config.password),
-        password: '',
+        sessionId: config.sessionId,
+        hasApiKey: Boolean(config.apiKey),
+        apiKey: '',
       },
       defaults: {
-        baseUrl: DEFAULT_GOWA_CONFIG.baseUrl,
-        deviceId: DEFAULT_GOWA_CONFIG.deviceId,
+        baseUrl: DEFAULT_GATEWAY_CONFIG.baseUrl,
+        sessionId: DEFAULT_GATEWAY_CONFIG.sessionId,
       },
       tlsMode: gatewayTlsMode(),
     });
@@ -60,10 +59,14 @@ export async function POST(req: NextRequest) {
 
     if (body.action === 'test') {
       try {
-        const config = await getGowaConfig();
-        const result = await listDevices(config);
-        const authOk = result?.code === 'SUCCESS' || result?.code === 'OK';
-        return NextResponse.json({ ...result, authOk, tlsMode: gatewayTlsMode() });
+        const config = await getGatewayConfig();
+        const result = await testGatewayConnection(config);
+        return NextResponse.json({
+          authOk: result.authOk,
+          status: result.status,
+          sessions: result.body,
+          tlsMode: gatewayTlsMode(),
+        });
       } catch (testErr: unknown) {
         console.error('WA config TEST error:', asNetError(testErr).message, '| cause:', asNetError(testErr).cause?.code, asNetError(testErr).cause?.message);
         const cause = asNetError(testErr).cause?.code || asNetError(testErr).cause?.message || '';
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest) {
               ? `TLS verification failed for the gateway certificate (${cause}). ` +
                 `Trust mode: ${gatewayTlsMode()}. ` +
                 (gatewayTlsMode() === 'system'
-                  ? 'Set GOWA_CA_CERT to the gateway CA certificate.'
+                  ? 'Set WHATSAPP_GATEWAY_CA_CERT to the gateway CA certificate.'
                   : 'The configured CA does not match the certificate being served — it may have been rotated.')
               : 'Could not reach the gateway.',
             detail: asNetError(testErr).message,
@@ -88,18 +91,17 @@ export async function POST(req: NextRequest) {
     }
 
     const baseUrl = (body.baseUrl || '').trim();
-    const deviceId = (body.deviceId || '').trim();
-    const username = (body.username || '').trim();
-    const password = body.password !== undefined ? String(body.password) : '';
+    const sessionId = (body.sessionId || '').trim();
+    const apiKey = body.apiKey !== undefined ? String(body.apiKey) : '';
 
     if (!baseUrl) {
       return NextResponse.json({ error: 'Gateway URL is required.' }, { status: 400 });
     }
-    if (!deviceId) {
-      return NextResponse.json({ error: 'Device ID is required.' }, { status: 400 });
+    if (!sessionId) {
+      return NextResponse.json({ error: 'Session name is required.' }, { status: 400 });
     }
-    if (/[\s/\\]/.test(deviceId)) {
-      return NextResponse.json({ error: 'Device ID must not contain spaces, "/" or "\\".' }, { status: 400 });
+    if (/[\s/\\]/.test(sessionId)) {
+      return NextResponse.json({ error: 'Session name must not contain spaces, "/" or "\\".' }, { status: 400 });
     }
 
     // SSRF guard: the gateway URL is a server-side fetch target.
@@ -108,17 +110,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validated.error }, { status: 400 });
     }
 
-    await saveGowaConfig({ baseUrl: validated.url, deviceId, username });
+    await saveGatewayConfig({ baseUrl: validated.url, sessionId });
 
-    // Simpan password terenkripsi agar tidak disimpan plaintext.
-    // Kosongkan field password bila tidak dikirim, agar tidak menimpa nilai lama.
-    if (password) {
+    // Simpan API key terenkripsi agar tidak disimpan plaintext.
+    // Kosongkan field apiKey bila tidak dikirim, agar tidak menimpa nilai lama.
+    if (apiKey) {
       await db
         .insert(settings)
-        .values({ key: GOWA_CONFIG_KEYS.password, value: encrypt(password) })
+        .values({ key: GATEWAY_CONFIG_KEYS.apiKey, value: encrypt(apiKey) })
         .onConflictDoUpdate({
           target: settings.key,
-          set: { value: encrypt(password), updatedAt: new Date() },
+          set: { value: encrypt(apiKey), updatedAt: new Date() },
         });
     }
 
@@ -128,8 +130,8 @@ export async function POST(req: NextRequest) {
         req,
         writeActor,
         'update_gateway_config',
-        `Konfigurasi gateway diubah — url: ${validated.url}, device: ${deviceId}, ` +
-          `auth: ${username ? 'diperbarui' : 'tidak berubah'}`,
+        `Konfigurasi gateway diubah — url: ${validated.url}, session: ${sessionId}, ` +
+          `api key: ${apiKey ? 'diperbarui' : 'tidak berubah'}`,
       );
     }
 

@@ -65,8 +65,8 @@ ENCRYPTION_KEY=""
 JWT_SECRET=""
 ```
 Variabel integrasi WhatsApp/email dan opsi lain (lihat `.env.example`):
-`WHATSAPP_API_URL`, `WHATSAPP_DEVICE_ID`, `WHATSAPP_API_USERNAME`, `WHATSAPP_API_PASSWORD`,
-`WHATSAPP_WEBHOOK_SECRET`, `GOWA_ALLOWED_HOSTS` (sebaiknya diisi di produksi), `TRUST_PROXY_HEADERS`, `APP_URL`, `CRON_SECRET`
+`WHATSAPP_API_URL`, `WHATSAPP_DEVICE_ID`, `WHATSAPP_API_KEY`,
+`WHATSAPP_WEBHOOK_SECRET`, `WHATSAPP_GATEWAY_ALLOWED_HOSTS` (sebaiknya diisi di produksi), `TRUST_PROXY_HEADERS`, `APP_URL`, `CRON_SECRET`
 (dipakai untuk `{link}` di pesan otomatis). Konfigurasi SMTP hanya diisi dari halaman admin
 (`/admin/email/config`) dan disimpan terenkripsi di tabel `settings`; variabel `SMTP_*` tidak dibaca aplikasi.
 

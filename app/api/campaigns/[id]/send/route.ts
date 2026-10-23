@@ -5,7 +5,7 @@ import { campaigns, recipients, messageTemplates } from '@/db/schema';
 import { eq, and, or, isNull, asc, lt, sql } from 'drizzle-orm';
 import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
-import { getGowaConfig, sendMessageGuarded, getWarmUpState } from '@/lib/whatsapp';
+import { getGatewayConfig, sendMessageGuarded, getWarmUpState } from '@/lib/whatsapp';
 import {
   claimRecipient,
   markRecipientSent,
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const targets = queue.slice(0, MAX_PER_REQUEST);
 
-    const config = await getGowaConfig();
+    const config = await getGatewayConfig();
     const link = portalLinkFrom(req.headers.get('origin'));
 
     let successCount = 0;
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
 
       try {
-        const guarded = await sendMessageGuarded(target.phone, message, config.deviceId, config);
+        const guarded = await sendMessageGuarded(target.phone, message, config.sessionId, config);
 
         // Quota exhausted: stop the loop rather than burning through the
         // remaining recipients as failures.
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
       .where(eq(campaigns.id, campaignId));
 
-    const warmUp = await getWarmUpState(config.deviceId);
+    const warmUp = await getWarmUpState(config.sessionId);
     const username = await getAdminUsername(req);
     await logAuditForRequest(
       req,

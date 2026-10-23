@@ -79,10 +79,10 @@ export async function applyEarlyAcks(recipientId: number, messageId: string): Pr
   let best: 'delivered' | 'read' | null = null;
   for (const { payload } of logs) {
     try {
-      const p = JSON.parse(payload)?.payload;
-      if (!Array.isArray(p?.ids) || !p.ids.map(String).includes(messageId)) continue;
-      if (p.receipt_type === 'read') best = 'read';
-      else if (p.receipt_type === 'delivered' && best === null) best = 'delivered';
+      const d = JSON.parse(payload)?.data;
+      if (d?.messageId !== messageId) continue;
+      if (d.status === 'read') best = 'read';
+      else if (d.status === 'delivered' && best === null) best = 'delivered';
     } catch {
       /* not JSON: not an ack we can use */
     }
@@ -127,16 +127,10 @@ export async function sweepStaleSending(): Promise<number> {
   return rows.length;
 }
 
-/** Normalises the several shapes GOWA answers with. Strict on purpose: no substring guessing. */
+/** `sendMessage()` throws on failure, so reaching here with a messageId means it succeeded. */
 export function parseSendResult(result: unknown): { messageId: string | null; isSuccess: boolean } {
-  const r = (result ?? {}) as {
-    code?: string;
-    message_id?: string;
-    results?: { message_id?: string; id?: string };
-  };
-  const messageId = r.results?.message_id || r.results?.id || r.message_id || null;
-  const isSuccess = r.code === 'SUCCESS' || r.code === 'OK' || Boolean(messageId);
-  return { messageId, isSuccess };
+  const messageId = (result as { messageId?: string } | null)?.messageId || null;
+  return { messageId, isSuccess: Boolean(messageId) };
 }
 
 /** Function replacer so `$&`, `$1` etc. inside a name are inserted literally. */

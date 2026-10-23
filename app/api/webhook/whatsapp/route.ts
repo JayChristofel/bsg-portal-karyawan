@@ -2,22 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { asNetError } from '@/lib/utils';
 import { db } from '@/db';
 import { recipients, webhookLogs, recipientStatusHistory } from '@/db/schema';
-import { and, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { verifyWebhookSignature } from '@/lib/whatsapp';
 import { logAudit } from '@/lib/audit';
 import { getClientIp, checkIpRateLimit } from '@/lib/proxy';
 
 // Cap inbound webhook body so a spoofed sender cannot bloat the database.
 const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
-// Cap the number of message ids accepted in a single ack event.
-const MAX_ACK_IDS = 100;
 
 // Health check / verification
 export async function GET() {
   return NextResponse.json({ status: 'OK', service: 'portal-pegawai-whatsapp-webhook' });
 }
 
-// Receive webhook events from GOWA
+// Receive webhook events from the WhatsApp gateway (OpenWA)
 export async function POST(req: NextRequest) {
   try {
     // Throttle before doing any work: unauthenticated callers must not be able to
@@ -35,10 +33,7 @@ export async function POST(req: NextRequest) {
 
     // Authenticate the sender. Without this, anyone who learns the URL can forge
     // delivery/read receipts and flood the webhook_logs table.
-    const signature =
-      req.headers.get('x-webhook-signature') ||
-      req.headers.get('x-hub-signature-256') ||
-      req.headers.get('x-gowa-signature');
+    const signature = req.headers.get('x-openwa-signature');
 
     if (!verifyWebhookSignature(rawBody, signature)) {
       // A forged signature is a security event. The audit write is fire-and-
@@ -60,8 +55,9 @@ export async function POST(req: NextRequest) {
       body = { raw: rawBody };
     }
 
-    const event = body.event || body.type || 'unknown';
-    const deviceId = String(body.device_id || body.deviceId || 'portal-pegawai').slice(0, 100);
+    // Envelope is flat: { event, timestamp, sessionId, idempotencyKey, deliveryId, data }.
+    const event = body.event || 'unknown';
+    const deviceId = String(body.sessionId || 'portal-pegawai').slice(0, 100);
 
     // Store all events in webhook_logs
     await db.insert(webhookLogs).values({
@@ -71,21 +67,15 @@ export async function POST(req: NextRequest) {
     });
 
     // ── message.ack → update broadcast status ──────────────────────────
-    if (event === 'message.ack' && body.payload) {
-      const p = body.payload;
-      const messageIds: string[] = Array.isArray(p.ids)
-        ? p.ids.slice(0, MAX_ACK_IDS).map((id: unknown) => String(id))
-        : [];
-      const receiptType: string = p.receipt_type || '';
-
-      // Map GOWA receipt_type to our wa_status
+    if (event === 'message.ack' && body.data?.messageId) {
+      const messageId: string = String(body.data.messageId);
+      // Canonical status from the gateway: pending | sent | delivered | read | failed.
       // 'delivered' = message reached device (ceklis 2 abu-abu)
       // 'read'      = message was read (ceklis 2 biru)
-      let newStatus: string | null = null;
-      if (receiptType === 'delivered') newStatus = 'delivered';
-      if (receiptType === 'read') newStatus = 'read';
+      const newStatus: string | null =
+        body.data.status === 'delivered' || body.data.status === 'read' ? body.data.status : null;
 
-      if (newStatus && messageIds.length > 0) {
+      if (newStatus) {
         // Status only moves forward (sent < delivered < read). The guard lives in the
         // UPDATE itself so two acks arriving together cannot move it backwards, and a
         // late ack still upgrades a row we parked as 'failed' after a timeout (the
@@ -100,7 +90,7 @@ export async function POST(req: NextRequest) {
           .set({ waStatus: newStatus })
           .where(
             and(
-              inArray(recipients.waMessageId, messageIds),
+              eq(recipients.waMessageId, messageId),
               or(isNull(recipients.waStatus), inArray(recipients.waStatus, upgradeFrom)),
             ),
           )
@@ -120,7 +110,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     // Do not leak internal error messages to an unauthenticated caller.
     console.error('Error processing WhatsApp webhook:', asNetError(error).message);
-    // 5xx so GOWA retries; replying 200 here would silently drop the event.
+    // 5xx so the gateway retries; replying 200 here would silently drop the event.
     return NextResponse.json({ status: 'ERROR' }, { status: 500 });
   }
 }

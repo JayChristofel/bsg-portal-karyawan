@@ -11,8 +11,9 @@ const csp = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   // 'unsafe-inline' is still needed for the Next.js inline bootstrap script.
-  // 'unsafe-eval' is deliberately omitted.
-  "script-src 'self' 'unsafe-inline'",
+  // 'unsafe-eval' is only allowed in dev: React/Turbopack use eval() for
+  // debugging features there and never in production builds.
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   "connect-src 'self'",
   "upgrade-insecure-requests",
@@ -35,16 +36,6 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-
-  /**
-   * The gateway CA is read at runtime via readFileSync with a dynamic path, so
-   * Next's output file tracing cannot detect it. Without this the file is
-   * missing from the Vercel serverless bundle and gateway TLS falls back to
-   * system trust, which rejects the self-signed certificate.
-   */
-  outputFileTracingIncludes: {
-    '*': ['./certs/**/*.pem'],
-  },
 
   async headers() {
     return [

@@ -1,8 +1,8 @@
 import {
   sendMessageGuarded,
-  getGowaConfig,
+  getGatewayConfig,
   getWarmUpState,
-  getDeviceStatus,
+  getSessionStatus,
 } from '@/lib/whatsapp';
 import { db } from '@/db';
 import { recipients, campaigns, messageTemplates, autoResumeRuns } from '@/db/schema';
@@ -94,16 +94,14 @@ export async function drainPendingQueue(opts: { requireConnected?: boolean } = {
 
     await sweepStaleSending();
 
-    const config = await getGowaConfig();
-    const numberId = config.deviceId;
+    const config = await getGatewayConfig();
+    const numberId = config.sessionId;
 
     // A scheduled trigger must not push messages into a disconnected device: each
     // attempt would fail a real recipient. Reconnect-triggered drains skip this check.
     if (opts.requireConnected) {
-      const status = (await getDeviceStatus(config).catch(() => null)) as
-        | { results?: { is_connected?: boolean; is_logged_in?: boolean } }
-        | null;
-      if (!status?.results?.is_connected || !status.results.is_logged_in) {
+      const status = await getSessionStatus(config).catch(() => null);
+      if (status?.status !== 'ready') {
         console.log('Auto-resume skipped: WhatsApp device is not connected.');
         return;
       }

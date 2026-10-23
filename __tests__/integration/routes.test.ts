@@ -10,15 +10,23 @@ import { NextRequest } from 'next/server';
 const URL = process.env.TEST_DATABASE_URL;
 const run = URL ? describe : describe.skip;
 
-vi.mock('@/lib/gowa-tls', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/gowa-tls')>('@/lib/gowa-tls');
+vi.mock('@/lib/gateway-tls', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gateway-tls')>('@/lib/gateway-tls');
   return {
     ...actual,
-    gatewayFetch: async () =>
-      new Response(JSON.stringify({ code: 'SUCCESS', results: { message_id: 'wa-1' } }), {
+    gatewayFetch: async (url: string) => {
+      // Session-name lookup: report it as already existing so no create call is needed.
+      if (url.includes('/sessions?name=')) {
+        return new Response(JSON.stringify([{ id: 'it-session-uuid', name: 'dev-it', status: 'ready' }]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ messageId: 'wa-1', timestamp: Date.now() }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
-      }),
+      });
+    },
   };
 });
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { recipients, pegawai } from '@/db/schema';
 import { desc, lt, inArray, sql } from 'drizzle-orm';
-import { sendMessageGuarded, getGowaConfig, normalizeWaPhone } from '@/lib/whatsapp';
+import { sendMessageGuarded, getGatewayConfig, normalizeWaPhone } from '@/lib/whatsapp';
 import { markRecipientSent, markRecipientFailed, releaseRecipient, parseSendResult } from '@/lib/recipient-queue';
 import { getAdminUsername } from '@/lib/auth-helper';
 import { logAuditForRequest, logAuditThrottled } from '@/lib/audit';
@@ -233,10 +233,10 @@ export async function POST(req: NextRequest) {
       .returning();
 
     // Same guarded path as every other sender, so the warm-up quota applies.
-    const config = await getGowaConfig();
+    const config = await getGatewayConfig();
     let guarded: Awaited<ReturnType<typeof sendMessageGuarded>>;
     try {
-      guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
+      guarded = await sendMessageGuarded(phone, message, config.sessionId, config);
     } catch (err) {
       await markRecipientFailed(newRecipient.id);
       throw err;

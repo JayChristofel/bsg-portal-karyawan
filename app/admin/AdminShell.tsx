@@ -24,6 +24,7 @@ import {
   Smartphone,
   Sun,
   Moon,
+  Thermometer,
   UserCog,
   Users,
   X,
@@ -162,6 +163,13 @@ const NAV_SECTIONS: NavSection[] = [
         description: 'Configure the gateway connection',
       },
       {
+        label: 'Number Warmer',
+        short: 'Warmer',
+        href: '/admin/warmer',
+        icon: Thermometer,
+        description: 'Warm up fresh numbers before bulk sending',
+      },
+      {
         label: 'Admin Accounts',
         short: 'Admins',
         href: '/admin/admins',
@@ -271,8 +279,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       const res = await fetch('/api/whatsapp/status', { cache: 'no-store' });
       if (!res.ok) throw new Error('status request failed');
       const data = await res.json();
-      const connected = Boolean(data?.results?.is_connected || data?.results?.is_logged_in);
-      setGateway(connected ? 'connected' : 'disconnected');
+      setGateway(data?.status === 'ready' ? 'connected' : 'disconnected');
     } catch {
       setGateway('disconnected');
     } finally {

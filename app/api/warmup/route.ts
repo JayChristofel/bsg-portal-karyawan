@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
-import { getGowaConfig, getWarmUpState } from '@/lib/whatsapp';
+import { getGatewayConfig, getWarmUpState } from '@/lib/whatsapp';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const config = await getGowaConfig();
-    const state = await getWarmUpState(config.deviceId);
+    const config = await getGatewayConfig();
+    const state = await getWarmUpState(config.sessionId);
     return NextResponse.json({ state });
   } catch (error: unknown) {
     console.error('Warm-up GET error:', error);

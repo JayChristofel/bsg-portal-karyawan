@@ -28,17 +28,25 @@ const MIN_SEND_PER_SEC = 50;
 const sentToGateway = new Map<string, number>();
 let messageSeq = 0;
 
-vi.mock('@/lib/gowa-tls', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/gowa-tls')>('@/lib/gowa-tls');
+vi.mock('@/lib/gateway-tls', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gateway-tls')>('@/lib/gateway-tls');
   return {
     ...actual,
-    gatewayFetch: async (_url: string, init: RequestInit = {}) => {
-      const phone = (JSON.parse(String(init.body ?? '{}')) as { phone?: string }).phone ?? '?';
+    gatewayFetch: async (url: string, init: RequestInit = {}) => {
+      // Session-name lookup: report it as already existing so no create call is needed.
+      if (url.includes('/sessions?name=')) {
+        return new Response(
+          JSON.stringify([{ id: 'stress-session-uuid', name: 'dev-stress', status: 'ready' }]),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      const chatId = (JSON.parse(String(init.body ?? '{}')) as { chatId?: string }).chatId ?? '?';
+      const phone = chatId.split('@')[0];
       sentToGateway.set(phone, (sentToGateway.get(phone) ?? 0) + 1);
       // A little latency so workers genuinely interleave instead of finishing in one tick.
       await new Promise((r) => setTimeout(r, 2));
       return new Response(
-        JSON.stringify({ code: 'SUCCESS', results: { message_id: `m-${++messageSeq}` } }),
+        JSON.stringify({ messageId: `m-${++messageSeq}`, timestamp: Date.now() }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     },
@@ -77,7 +85,7 @@ beforeAll(async () => {
   process.env.WHATSAPP_DEVICE_ID = 'dev-stress';
   process.env.WHATSAPP_WEBHOOK_SECRET = 'w'.repeat(32);
   process.env.TRUST_PROXY_HEADERS = '1';
-  process.env.GOWA_ALLOWED_HOSTS = '';
+  process.env.WHATSAPP_GATEWAY_ALLOWED_HOSTS = '';
   ({ db } = await import('@/db'));
   ({ sql } = await import('drizzle-orm'));
   const { createSessionToken, COOKIE_NAME } = await import('@/lib/auth');
@@ -104,7 +112,7 @@ run('1. mass send: many workers, one number, capped quota', () => {
       INSERT INTO recipients (label, phone, wa_status)
       SELECT 'R' || g, '0812' || lpad(g::text, 8, '0'), 'pending' FROM generate_series(1, ${N}) g`);
 
-    const cfg = { baseUrl: 'https://gateway.example', deviceId: 'dev-stress', username: 'u', password: 'p' };
+    const cfg = { baseUrl: 'https://gateway.example', sessionId: 'dev-stress', apiKey: 'k' };
     const t0 = performance.now();
     const outcome = { sent: 0, quota: 0, failed: 0 };
     await pool(N, 25, async (i) => {
@@ -163,12 +171,16 @@ run('2. webhook ack storm: duplicates and out-of-order receipts', () => {
     );
 
     const post = (ip: string, messageId: string, receipt: 'delivered' | 'read') => {
-      const body = JSON.stringify({ event: 'message.ack', payload: { ids: [messageId], receipt_type: receipt } });
+      const body = JSON.stringify({
+        event: 'message.ack',
+        sessionId: 'dev-stress',
+        data: { id: messageId, messageId, status: receipt },
+      });
       const sig = crypto.createHmac('sha256', process.env.WHATSAPP_WEBHOOK_SECRET as string).update(body).digest('hex');
       return POST(
         new NextRequest('http://localhost/api/webhook/whatsapp', {
           method: 'POST',
-          headers: { 'x-webhook-signature': sig, 'x-real-ip': ip },
+          headers: { 'x-openwa-signature': `sha256=${sig}`, 'x-real-ip': ip },
           body,
         }),
       );

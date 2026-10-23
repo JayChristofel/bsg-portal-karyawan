@@ -74,7 +74,7 @@ export const recipients = pgTable('recipients', {
   phone: text('phone'),                                                   // Nomor WhatsApp
   cabang: text('cabang'),                                                 // Kantor Cabang / Unit Kerja
   message: text('message'),                                               // Pesan yang dikirim
-  waMessageId: text('wa_message_id'),                                     // ID pesan dari GOWA
+  waMessageId: text('wa_message_id'),                                     // ID pesan dari gateway WhatsApp
   waStatus: text('wa_status').default('pending'),                        // 'pending' | 'sent' | 'delivered' | 'read'
   waSentAt: timestamp('wa_sent_at', { withTimezone: true }),             // Waktu kirim
   campaignId: integer('campaign_id'),                                    // FK ke campaigns (null = broadcast ad-hoc)
@@ -89,7 +89,7 @@ export const webhookLogs = pgTable('webhook_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Key-value settings store (e.g. GOWA gateway connection config, editable from admin UI)
+// Key-value settings store (e.g. WhatsApp gateway connection config, editable from admin UI)
 export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull().default(''),
@@ -268,4 +268,25 @@ export const rateLimits = pgTable('rate_limits', {
   key: text('key').primaryKey(),
   windowStart: timestamp('window_start', { withTimezone: true }).defaultNow().notNull(),
   count: integer('count').notNull().default(0),
+});
+
+// Warmer pairs — two gateway sessions that chat with each other on a random
+// schedule, to build organic-looking activity on a fresh number before it is
+// used for bulk sending. One row per pair; `nextDueAt` drives the cron tick.
+export const warmerPairs = pgTable('warmer_pairs', {
+  id: serial('id').primaryKey(),
+  sessionA: text('session_a').notNull(),
+  sessionB: text('session_b').notNull(),
+  intervalMinMinutes: integer('interval_min_minutes').notNull().default(30),
+  intervalMaxMinutes: integer('interval_max_minutes').notNull().default(180),
+  activeHourStart: integer('active_hour_start').notNull().default(8),
+  activeHourEnd: integer('active_hour_end').notNull().default(21),
+  enabled: boolean('enabled').notNull().default(true),
+  nextTurn: text('next_turn').notNull().default('a'), // 'a' | 'b' — who sends next
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
+  nextDueAt: timestamp('next_due_at', { withTimezone: true }).defaultNow().notNull(),
+  messagesSent: integer('messages_sent').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

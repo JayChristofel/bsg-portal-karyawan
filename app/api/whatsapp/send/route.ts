@@ -3,9 +3,9 @@ import { asNetError } from '@/lib/utils';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
 import {
   sendMessageGuarded,
-  getGowaConfig,
-  reconnectDevice,
-  logoutDevice,
+  getGatewayConfig,
+  startSession,
+  logoutSession,
 } from '@/lib/whatsapp';
 import { logAuditForRequest } from '@/lib/audit';
 import { getAdminUsername } from '@/lib/auth-helper';
@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
     const action = (body.action || '').trim();
 
     if (action === 'reconnect') {
-      const result = await reconnectDevice();
-      if (result?.code === 'SUCCESS' || result?.results?.success) {
+      const result = await startSession();
+      if (result?.status !== 'failed') {
         // after() keeps the serverless invocation alive until the drain finishes.
         after(() => drainPendingQueue());
       }
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'logout') {
-      const result = await logoutDevice();
+      const result = await logoutSession();
       return NextResponse.json(result);
     }
 
@@ -69,10 +69,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const config = await getGowaConfig();
+    const config = await getGatewayConfig();
     let guarded: Awaited<ReturnType<typeof sendMessageGuarded>>;
     try {
-      guarded = await sendMessageGuarded(phone, message, config.deviceId, config);
+      guarded = await sendMessageGuarded(phone, message, config.sessionId, config);
     } catch (err) {
       if (recipientId !== null) await markRecipientFailed(recipientId);
       throw err;
